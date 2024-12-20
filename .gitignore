@@ -169,3 +169,9 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Imgui output from the options subwindow
+imgui.ini
+
+package-lock.json
+package.json
