@@ -257,13 +257,14 @@ class ThermodynamicModel:
                 self.face_mass_y[y_base + offset] += y_weight * self.p_mass[p]
 
                 # Rasterize velocity to grid faces.
-                # x_velocity = self.p_mass[p] * (self.p_velocity[p][0] + self.cp_x[p] @ x_dpos)
-                # y_velocity = self.p_mass[p] * (self.p_velocity[p][1] + self.cp_y[p] @ y_dpos)
-                velocity = self.p_mass[p] * (self.p_velocity[p] + affine @ c_dpos)
-                # x_velocity = self.p_mass[p] * (self.p_velocity[p][0] + x_affine @ x_dpos)
-                # y_velocity = self.p_mass[p] * (self.p_velocity[p][1] + y_affine @ y_dpos)
-                self.face_velocity_x[x_base + offset] += x_weight * velocity[0]
-                self.face_velocity_y[y_base + offset] += y_weight * velocity[1]
+                # x_velocity = self.p_mass[p] * self.p_velocity[p][0] + self.cp_x[p] @ x_dpos
+                # y_velocity = self.p_mass[p] * self.p_velocity[p][1] + self.cp_y[p] @ y_dpos
+                x_velocity = self.p_mass[p] * self.p_velocity[p][0] + x_affine @ x_dpos
+                y_velocity = self.p_mass[p] * self.p_velocity[p][1] + y_affine @ y_dpos
+                # velocity = self.p_mass[p] * self.p_velocity[p][0] + affine @ c_dpos
+                # x_velocity, y_velocity = velocity[0], velocity[1]
+                self.face_velocity_x[x_base + offset] += x_weight * x_velocity
+                self.face_velocity_y[y_base + offset] += y_weight * y_velocity
 
                 # Rasterize conductivity to grid faces.
                 self.face_conductivity_x[x_base + offset] += x_weight * self.p_mass[p] * self.p_conductivity[p]
@@ -418,17 +419,13 @@ class ThermodynamicModel:
                 bx += x_weight * x_velocity * c_dpos
                 by += y_weight * y_velocity * c_dpos
                 nt += c_weight * self.cell_temperature[c_base + offset]
-                n_C += 4 * self.inv_dx * c_weight * nv.outer_product(c_dpos)
+                # n_C += 4 * self.inv_dx * c_weight * nv.outer_product(c_dpos)
 
             # NOTE: inv_dx is not squared here, as the dpos computations cancels out one inv_dx.
             cx = 4 * self.inv_dx * bx  # C = B @ (D^(-1))
             cy = 4 * self.inv_dx * by  # C = B @ (D^(-1))
-            # print("-" * 200)
-            # print(cx)
-            # print(cy)
             self.cp_x[p], self.cp_y[p] = cx, cy
-            # self.C[p] = ti.Matrix([[cx[0], cy[0]], [cx[1], cy[1]]])  # pyright: ignore
-            self.C[p] = n_C
+            self.C[p] = ti.Matrix([[cx[0], cy[0]], [cx[1], cy[1]]])  # pyright: ignore
             self.p_color[p] = Color.Water if self.p_phase[p] == Phase.Water else Color.Ice
             self.p_position[p] += self.dt * nv
             self.p_temperature[p] = nt
