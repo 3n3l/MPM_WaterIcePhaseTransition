@@ -4,8 +4,6 @@ Testing a thermodynamic model, roughly based on
 """
 
 from datetime import datetime
-from taichi.lang.matrix_ops import determinant
-import taichi.math as tm
 import taichi as ti
 import os
 
@@ -45,61 +43,6 @@ class ThermodynamicModel:
         E=1.4e5,  # Young's modulus (1.4e5)
         nu=0.2,  # Poisson's ratio (0.2)
     ):
-        # MPM Parameters that are configuration independent
-        self.quality = quality
-        self.n_particles = n_particles
-        self.n_grid = 128 * quality
-        self.dx = 1 / self.n_grid
-        self.inv_dx = float(self.n_grid)
-        self.dt = 1e-4 / self.quality
-        self.rho_0 = 4e2
-        self.p_vol = (self.dx * 0.1) ** 2
-
-        ### New parameters ====================================================
-        # Number of dimensions
-        self.n_dim = 2
-
-        # Parameters to control melting/freezing
-        # TODO: these are variables and need to be put into fields
-        # TODO: these depend not only on phase, but also on temperature,
-        #       so ideally they are functions of these two variables
-        # self.heat_conductivity = 0.55 # Water: 0.55, Ice: 2.33
-        # self.heat_capacity = 4.186 # Water: 4.186, Ice: 2.093 (j/dC)
-        # self.latent_heat = 0.334 # in J/kg
-
-        # Properties on MAC-faces.
-        self.face_mass_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
-        self.face_mass_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
-        self.face_velocity_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
-        self.face_velocity_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
-        self.face_conductivity_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
-        self.face_conductivity_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
-
-        # Properties on MAC-cells.
-        self.cell_mass = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.cell_lambda = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
-        self.cell_capacity = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.cell_divergence = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
-        self.cell_temperature = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.cell_classification = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-
-        # Properties on particles.
-        self.p_mass = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.p_phase = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.p_capacity = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.p_lambda = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.p_temperature = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.p_conductivity = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.cp_x = ti.Vector.field(2, dtype=ti.float32, shape=self.n_particles)
-        self.cp_y = ti.Vector.field(2, dtype=ti.float32, shape=self.n_particles)
-
-        # Track elastic and plastic parts of the deformation gradient
-        # NOTE: This might not be needed, as all of the computations might be done in p2g
-        # self.FE = ti.Matrix.field(2, 2, dtype=float, shape=self.n_particles)
-        # self.FP = ti.Matrix.field(2, 2, dtype=float, shape=self.n_particles)
-        ### ===================================================================
-
         # Parameters to control the simulation
         self.window = ti.ui.Window(name="Thermodynamic Model", res=(720, 720), fps_limit=60)
         self.gui = self.window.get_gui()
@@ -113,31 +56,71 @@ class ThermodynamicModel:
         if not os.path.exists(self.parent_dir):
             os.makedirs(self.parent_dir)
 
-        # Create fields
-        self.p_position = ti.Vector.field(2, dtype=float, shape=self.n_particles)
-        self.p_velocity = ti.Vector.field(2, dtype=float, shape=self.n_particles)
-        self.p_color = ti.Vector.field(3, dtype=float, shape=self.n_particles)
-        self.C = ti.Matrix.field(2, 2, dtype=float, shape=self.n_particles)  # affine velocity field
-        self.F = ti.Matrix.field(2, 2, dtype=float, shape=self.n_particles)  # deformation gradient
-        # TODO: not all of the Js need to be saved
-        self.J = ti.field(dtype=float, shape=self.n_particles)
-        self.JP = ti.field(dtype=float, shape=self.n_particles)
-        self.JE = ti.field(dtype=float, shape=self.n_particles)
-        self.gravity = ti.Vector.field(2, dtype=float, shape=())
+        # MPM Parameters that are configuration independent
+        self.quality = quality
+        self.n_particles = n_particles
+        self.n_grid = 128 * quality
+        self.dx = 1 / self.n_grid
+        self.inv_dx = float(self.n_grid)
+        self.dt = 1e-4 / self.quality
+        self.rho_0 = 4e2
+        self.particle_vol = (self.dx * 0.1) ** 2
+
+        # Number of dimensions
+        self.n_dimensions = 2
+
+        # Parameters to control melting/freezing
+        # TODO: these are variables and need to be put into fields
+        # TODO: these depend not only on phase, but also on temperature,
+        #       so ideally they are functions of these two variables
+        # self.heat_conductivity = 0.55 # Water: 0.55, Ice: 2.33
+        # self.heat_capacity = 4.186 # Water: 4.186, Ice: 2.093 (j/dC)
+        # self.latent_heat = 0.334 # in J/kg
+
+        # Properties on MAC-faces.
+        self.face_conductivity_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
+        self.face_conductivity_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
+        self.face_velocity_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
+        self.face_velocity_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
+        self.face_mass_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
+        self.face_mass_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
+
+        # Properties on MAC-cells.
+        self.cell_classification = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.cell_temperature = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.cell_divergence = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
+        self.cell_capacity = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
+        self.cell_lambda = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.cell_mass = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+
+        # Properties on particles.
+        self.particle_conductivity = ti.field(dtype=ti.float32, shape=self.n_particles)
+        self.particle_temperature = ti.field(dtype=ti.float32, shape=self.n_particles)
+        self.particle_position = ti.Vector.field(2, dtype=float, shape=self.n_particles)
+        self.particle_velocity = ti.Vector.field(2, dtype=float, shape=self.n_particles)
+        self.particle_capacity = ti.field(dtype=ti.float32, shape=self.n_particles)
+        self.particle_lambda = ti.field(dtype=ti.float32, shape=self.n_particles)
+        self.particle_color = ti.Vector.field(3, dtype=float, shape=self.n_particles)
+        self.particle_phase = ti.field(dtype=ti.float32, shape=self.n_particles)
+        self.particle_mass = ti.field(dtype=ti.float32, shape=self.n_particles)
+        self.particle_FE = ti.Matrix.field(2, 2, dtype=float, shape=self.n_particles)
+        self.particle_C = ti.Matrix.field(2, 2, dtype=float, shape=self.n_particles)
+
+        # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
         self.stickiness = ti.field(dtype=float, shape=())
         self.friction = ti.field(dtype=float, shape=())
+        self.lambda_0 = ti.field(dtype=float, shape=())
         self.theta_c = ti.field(dtype=float, shape=())
         self.theta_s = ti.field(dtype=float, shape=())
+        self.mu_0 = ti.field(dtype=float, shape=())
         self.zeta = ti.field(dtype=int, shape=())
         self.nu = ti.field(dtype=float, shape=())
         self.E = ti.field(dtype=float, shape=())
-        self.lambda_0 = ti.field(dtype=float, shape=())
-        self.mu_0 = ti.field(dtype=float, shape=())
 
         # Initialize fields
         self.lambda_0[None] = E * nu / ((1 + nu) * (1 - 2 * nu))
         self.mu_0[None] = E / (2 * (1 + nu))
-        self.gravity[None] = [0, -9.8]
         self.theta_c[None] = theta_c
         self.theta_s[None] = theta_s
         self.zeta[None] = zeta
@@ -155,40 +138,38 @@ class ThermodynamicModel:
 
     @ti.kernel
     def particle_to_grid(self):
-        for p in self.p_position:
-            # Deformation gradient update
-            self.F[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C[p]) @ self.F[p]
-            U, sigma, V = ti.svd(self.F[p])
-            JE, JP = 1.0, 1.0
-            for d in ti.static(range(self.n_dim)):  # Clamp singular values to [1 - theta_c, 1 + theta_s]
-                singular_value = float(sigma[d, d])
-                singular_value = max(singular_value, 1 - self.theta_c[None])
-                singular_value = min(singular_value, 1 + self.theta_s[None])
-                JP *= sigma[d, d] / singular_value
-                sigma[d, d] = singular_value
-                JE *= singular_value
+        for p in self.particle_position:
+            # Deformation gradient update.
+            self.particle_FE[p] = (ti.Matrix.identity(float, 2) + self.dt * self.particle_C[p]) @ self.particle_FE[p]
 
-            ### New ============================================================
+            # Clamp singular values to simulate plasticity and elasticity.
+            U, sigma, V = ti.svd(self.particle_FE[p])
+            JE, JP = 1.0, 1.0
+            for d in ti.static(range(self.n_dimensions)):
+                # Clamp singular values to [1 - theta_c, 1 + theta_s]
+                singular_value = float(sigma[d, d])
+                clamped = max(singular_value, 1 - self.theta_c[None])
+                clamped = min(clamped, 1 + self.theta_s[None])
+                sigma[d, d] = clamped
+                JP *= singular_value / clamped
+                JE *= clamped
+
             # Apply ice hardening by adjusting Lame parameters.
-            h = ti.max(0.1, ti.min(5, ti.exp(self.zeta[None] * (1.0 - self.JP[p]))))
+            h = ti.max(0.1, ti.min(5, ti.exp(self.zeta[None] * (1.0 - JP))))
             la = self.lambda_0[None] * h
             mu = self.mu_0[None] * h
 
-            if self.p_phase[p] == Phase.Water:  # Apply correction for dilational/deviatoric stresses
+            if self.particle_phase[p] == Phase.Water:  # Apply correction for dilational/deviatoric stresses
                 # Reset elastic deformation gradient to avoid numerical instability
-                self.F[p] = ti.Matrix.identity(float, self.n_dim) * JE ** (1 / self.n_dim)
+                self.particle_FE[p] = ti.Matrix.identity(float, self.n_dimensions) * JE ** (1 / self.n_dimensions)
                 # Set mu to zero
                 mu = 0
-            elif self.p_phase[p] == Phase.Ice:
+            elif self.particle_phase[p] == Phase.Ice:
                 # Reconstruct elastic deformation gradient after plasticity
-                self.F[p] = U @ sigma @ V.transpose()
-
-            ### ================================================================
-            # TODO: Compute pressure, correct pressure, apply pressure.
-            # pressure = (-1 / self.JP[p]) * self.lambda_0 * (self.JE[p] - 1)
+                self.particle_FE[p] = U @ sigma @ V.transpose()
 
             # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
-            stress = 2 * mu * (self.F[p] - U @ V.transpose()) @ self.F[p].transpose()
+            stress = 2 * mu * (self.particle_FE[p] - U @ V.transpose()) @ self.particle_FE[p].transpose()
             stress += ti.Matrix.identity(float, 2) * la * JE * (JE - 1)
 
             # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
@@ -196,22 +177,22 @@ class ThermodynamicModel:
             # D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
 
             # TODO: What happens here exactly? Something with Cauchy-stress?
-            stress *= -self.dt * self.p_vol * D_inv
+            stress *= -self.dt * self.particle_vol * D_inv
 
             # APIC momentum + MLS-MPM stress contribution [Hu et al. 2018, Eqn. 29].
-            affine = stress + self.p_mass[p] * self.C[p]
+            affine = stress + self.particle_mass[p] * self.particle_C[p]
             x_affine = affine @ ti.Vector([1, 0])
             y_affine = affine @ ti.Vector([0, 1])
 
             # We use an additional offset of 0.5 for element-wise flooring.
             x_stagger = ti.Vector([self.dx / 2, 0])
             y_stagger = ti.Vector([0, self.dx / 2])
-            c_base = (self.p_position[p] * self.inv_dx - 0.5).cast(int)
-            x_base = (self.p_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)
-            y_base = (self.p_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)
-            c_fx = self.p_position[p] * self.inv_dx - c_base.cast(float)
-            x_fx = self.p_position[p] * self.inv_dx - x_base.cast(float)
-            y_fx = self.p_position[p] * self.inv_dx - y_base.cast(float)
+            c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)
+            x_base = (self.particle_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)
+            y_base = (self.particle_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)
+            c_fx = self.particle_position[p] * self.inv_dx - c_base.cast(float)
+            x_fx = self.particle_position[p] * self.inv_dx - x_base.cast(float)
+            y_fx = self.particle_position[p] * self.inv_dx - y_base.cast(float)
             # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1,fx-2)
             c_w = [0.5 * (1.5 - c_fx) ** 2, 0.75 - (c_fx - 1) ** 2, 0.5 * (c_fx - 0.5) ** 2]
             x_w = [0.5 * (1.5 - x_fx) ** 2, 0.75 - (x_fx - 1) ** 2, 0.5 * (x_fx - 0.5) ** 2]
@@ -245,24 +226,28 @@ class ThermodynamicModel:
                 y_dpos = (offset.cast(float) - y_fx) * self.dx
 
                 # Rasterize mass to grid faces.
-                self.face_mass_x[x_base + offset] += x_weight * self.p_mass[p]
-                self.face_mass_y[y_base + offset] += y_weight * self.p_mass[p]
+                self.face_mass_x[x_base + offset] += x_weight * self.particle_mass[p]
+                self.face_mass_y[y_base + offset] += y_weight * self.particle_mass[p]
 
                 # Rasterize velocity to grid faces.
-                x_velocity = self.p_mass[p] * self.p_velocity[p][0] + x_affine @ x_dpos
-                y_velocity = self.p_mass[p] * self.p_velocity[p][1] + y_affine @ y_dpos
+                x_velocity = self.particle_mass[p] * self.particle_velocity[p][0] + x_affine @ x_dpos
+                y_velocity = self.particle_mass[p] * self.particle_velocity[p][1] + y_affine @ y_dpos
                 self.face_velocity_x[x_base + offset] += x_weight * x_velocity
                 self.face_velocity_y[y_base + offset] += y_weight * y_velocity
 
                 # Rasterize conductivity to grid faces.
-                self.face_conductivity_x[x_base + offset] += x_weight * self.p_mass[p] * self.p_conductivity[p]
-                self.face_conductivity_y[y_base + offset] += y_weight * self.p_mass[p] * self.p_conductivity[p]
+                self.face_conductivity_x[x_base + offset] += (
+                    x_weight * self.particle_mass[p] * self.particle_conductivity[p]
+                )
+                self.face_conductivity_y[y_base + offset] += (
+                    y_weight * self.particle_mass[p] * self.particle_conductivity[p]
+                )
 
                 # Rasterize to cell centers.
-                self.cell_mass[c_base + offset] += c_weight * self.p_mass[p]
-                self.cell_capacity[c_base + offset] += c_weight * self.p_capacity[p]
-                self.cell_temperature[c_base + offset] += c_weight * self.p_temperature[p]
-                self.cell_lambda[c_base + offset] += 1 / (c_weight * self.p_lambda[p])
+                self.cell_mass[c_base + offset] += c_weight * self.particle_mass[p]
+                self.cell_capacity[c_base + offset] += c_weight * self.particle_capacity[p]
+                self.cell_temperature[c_base + offset] += c_weight * self.particle_temperature[p]
+                self.cell_lambda[c_base + offset] += 1 / (c_weight * self.particle_lambda[p])
 
     @ti.kernel
     def momentum_to_velocity(self):
@@ -348,6 +333,9 @@ class ThermodynamicModel:
 
     @ti.kernel
     def apply_pressure(self):
+        # TODO: Compute pressure, correct pressure, apply pressure.
+        # pressure = (-1 / self.JP[p]) * self.lambda_0 * (self.JE[p] - 1)
+
         # TODO: only respect interior cells
         for i, j in self.face_mass_x:
             pressure = self._sample(self.cell_pressure, i, j)
@@ -370,15 +358,15 @@ class ThermodynamicModel:
 
     @ti.kernel
     def grid_to_particle(self):
-        for p in self.p_position:
+        for p in self.particle_position:
             x_stagger = ti.Vector([self.dx / 2, 0])
             y_stagger = ti.Vector([0, self.dx / 2])
-            c_base = (self.p_position[p] * self.inv_dx - 0.5).cast(int)
-            x_base = (self.p_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)
-            y_base = (self.p_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)
-            c_fx = self.p_position[p] * self.inv_dx - c_base.cast(float)
-            x_fx = self.p_position[p] * self.inv_dx - x_base.cast(float)
-            y_fx = self.p_position[p] * self.inv_dx - y_base.cast(float)
+            c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)
+            x_base = (self.particle_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)
+            y_base = (self.particle_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)
+            c_fx = self.particle_position[p] * self.inv_dx - c_base.cast(float)
+            x_fx = self.particle_position[p] * self.inv_dx - x_base.cast(float)
+            y_fx = self.particle_position[p] * self.inv_dx - y_base.cast(float)
             # TODO: use the tighter quadratic weights?
             c_w = [0.5 * (1.5 - c_fx) ** 2, 0.75 - (c_fx - 1) ** 2, 0.5 * (c_fx - 0.5) ** 2]
             x_w = [0.5 * (1.5 - x_fx) ** 2, 0.75 - (x_fx - 1) ** 2, 0.5 * (x_fx - 0.5) ** 2]
@@ -395,7 +383,6 @@ class ThermodynamicModel:
                 c_weight = c_w[i][0] * c_w[j][1]
                 x_weight = x_w[i][0] * x_w[j][1]
                 y_weight = y_w[i][0] * y_w[j][1]
-                c_dpos = offset.cast(float) - c_fx
                 x_dpos = offset.cast(float) - x_fx
                 y_dpos = offset.cast(float) - y_fx
                 x_velocity = x_weight * self.face_velocity_x[x_base + offset]
@@ -408,32 +395,24 @@ class ThermodynamicModel:
             # NOTE: inv_dx is not squared here, as the dpos computations cancels out one inv_dx.
             cx = 4 * self.inv_dx * bx  # C = B @ (D^(-1))
             cy = 4 * self.inv_dx * by  # C = B @ (D^(-1))
-            self.cp_x[p], self.cp_y[p] = cx, cy
-            self.C[p] = ti.Matrix([[cx[0], cy[0]], [cx[1], cy[1]]])  # pyright: ignore
-            self.p_color[p] = Color.Water if self.p_phase[p] == Phase.Water else Color.Ice
-            self.p_position[p] += self.dt * nv
-            self.p_temperature[p] = nt
-            self.p_velocity[p] = nv
+            self.particle_C[p] = ti.Matrix([[cx[0], cy[0]], [cx[1], cy[1]]])  # pyright: ignore
+            self.particle_color[p] = Color.Water if self.particle_phase[p] == Phase.Water else Color.Ice
+            self.particle_position[p] += self.dt * nv
+            self.particle_temperature[p] = nt
+            self.particle_velocity[p] = nv
 
     @ti.kernel
     def reset(self):
         for i in range(self.n_particles):
-            # self.p_position[i] = [(ti.random() * 0.1) + 0.45, (ti.random() * 0.1) + 0.001]
-            self.p_position[i] = [(ti.random() * 0.1) + 0.45, (ti.random() * 0.1) + 0.1]
-            self.F[i] = ti.Matrix([[1, 0], [0, 1]])
-            self.C[i] = ti.Matrix.zero(float, 2, 2)
-            ### New ============================================================
-            self.p_mass[i] = self.p_vol * self.rho_0
-            self.p_lambda[i] = self.lambda_0[None]
-            self.p_phase[i] = Phase.Water
-            self.p_color[i] = Color.Water
-            self.cp_x[i] = [0, 0]
-            self.cp_y[i] = [0, 0]
-            ### ================================================================
-            self.p_velocity[i] = [0, 0]
-            self.JP[i] = 1
-            self.JE[i] = 1
-            self.J[i] = 1
+            # self.particle_position[i] = [(ti.random() * 0.1) + 0.45, (ti.random() * 0.1) + 0.001]
+            self.particle_position[i] = [(ti.random() * 0.1) + 0.45, (ti.random() * 0.1) + 0.1]
+            self.particle_mass[i] = self.particle_vol * self.rho_0
+            self.particle_FE[i] = ti.Matrix([[1, 0], [0, 1]])
+            self.particle_C[i] = ti.Matrix.zero(float, 2, 2)
+            self.particle_lambda[i] = self.lambda_0[None]
+            self.particle_phase[i] = Phase.Water
+            self.particle_color[i] = Color.Water
+            self.particle_velocity[i] = [0, 0]
 
     def handle_events(self):
         if self.window.get_event(ti.ui.PRESS):
@@ -452,10 +431,10 @@ class ThermodynamicModel:
                 self.reset_grids()
                 self.particle_to_grid()
                 self.momentum_to_velocity()
-                self.classify_cells()
-                self.compute_divergence()
-                self.solve_pressure()
-                self.apply_pressure()
+                # self.classify_cells()
+                # self.compute_divergence()
+                # self.solve_pressure()
+                # self.apply_pressure()
                 self.grid_to_particle()
 
     def show_parameters(self, subwindow):
@@ -502,7 +481,7 @@ class ThermodynamicModel:
 
     def render(self):
         self.canvas.set_background_color((0.054, 0.06, 0.09))
-        self.canvas.circles(centers=self.p_position, radius=0.001, per_vertex_color=self.p_color)
+        self.canvas.circles(centers=self.particle_position, radius=0.001, per_vertex_color=self.particle_color)
         if self.should_write_to_disk and not self.is_paused and not self.is_showing_settings:
             self.video_manager.write_frame(self.window.get_image_buffer_as_numpy())
         self.window.show()
