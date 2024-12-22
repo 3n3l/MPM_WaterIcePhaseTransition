@@ -204,21 +204,20 @@ class ThermodynamicModel:
             # TODO: What happens here exactly? Something with Cauchy-stress?
             stress *= -self.dt * self.p_vol * D_inv
 
-            # APIC momentum + MLS-MPM stress contribution ([Hu et al. 2018, Eqn. 29).
+            # APIC momentum + MLS-MPM stress contribution [Hu et al. 2018, Eqn. 29].
             affine = stress + self.p_mass[p] * self.C[p]
             x_affine = affine @ ti.Vector([1, 0])
             y_affine = affine @ ti.Vector([0, 1])
 
             # We use an additional offset of 0.5 for element-wise flooring.
-            c_stagger = ti.Vector([0, 0])  # = [0, 0]   + 0.5
-            x_stagger = ti.Vector([self.dx / 2, 0])  # = [0, 0.5] + 0.5
-            y_stagger = ti.Vector([0, self.dx / 2])  # = [0.5, 0] + 0.5
-            c_base = (self.p_position[p] * self.inv_dx - (c_stagger + 0.5)).cast(int)
+            x_stagger = ti.Vector([self.dx / 2, 0])
+            y_stagger = ti.Vector([0, self.dx / 2])
+            c_base = (self.p_position[p] * self.inv_dx - 0.5).cast(int)
             x_base = (self.p_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)
             y_base = (self.p_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)
             c_fx = self.p_position[p] * self.inv_dx - c_base.cast(float)
-            x_fx = self.p_position[p] * self.inv_dx - x_base.cast(float) # + x_stagger)
-            y_fx = self.p_position[p] * self.inv_dx - y_base.cast(float) # + y_stagger)
+            x_fx = self.p_position[p] * self.inv_dx - x_base.cast(float)
+            y_fx = self.p_position[p] * self.inv_dx - y_base.cast(float)
             # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1,fx-2)
             c_w = [0.5 * (1.5 - c_fx) ** 2, 0.75 - (c_fx - 1) ** 2, 0.5 * (c_fx - 0.5) ** 2]
             x_w = [0.5 * (1.5 - x_fx) ** 2, 0.75 - (x_fx - 1) ** 2, 0.5 * (x_fx - 0.5) ** 2]
@@ -256,12 +255,8 @@ class ThermodynamicModel:
                 self.face_mass_y[y_base + offset] += y_weight * self.p_mass[p]
 
                 # Rasterize velocity to grid faces.
-                # x_velocity = self.p_mass[p] * self.p_velocity[p][0] + self.cp_x[p] @ x_dpos
-                # y_velocity = self.p_mass[p] * self.p_velocity[p][1] + self.cp_y[p] @ y_dpos
                 x_velocity = self.p_mass[p] * self.p_velocity[p][0] + x_affine @ x_dpos
                 y_velocity = self.p_mass[p] * self.p_velocity[p][1] + y_affine @ y_dpos
-                # velocity = self.p_mass[p] * self.p_velocity[p][0] + affine @ c_dpos
-                # x_velocity, y_velocity = velocity[0], velocity[1]
                 self.face_velocity_x[x_base + offset] += x_weight * x_velocity
                 self.face_velocity_y[y_base + offset] += y_weight * y_velocity
 
@@ -383,15 +378,14 @@ class ThermodynamicModel:
     @ti.kernel
     def grid_to_particle(self):
         for p in self.p_position:
-            c_stagger = ti.Vector([0, 0])  # = [0, 0]   + 0.5
-            x_stagger = ti.Vector([self.dx / 2, 0])  # = [0, 0.5] + 0.5
-            y_stagger = ti.Vector([0, self.dx / 2])  # = [0.5, 0] + 0.5
-            c_base = (self.p_position[p] * self.inv_dx - (c_stagger + 0.5)).cast(int)
+            x_stagger = ti.Vector([self.dx / 2, 0])
+            y_stagger = ti.Vector([0, self.dx / 2])
+            c_base = (self.p_position[p] * self.inv_dx - 0.5).cast(int)
             x_base = (self.p_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)
             y_base = (self.p_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)
             c_fx = self.p_position[p] * self.inv_dx - c_base.cast(float)
-            x_fx = self.p_position[p] * self.inv_dx - x_base.cast(float) # + x_stagger)
-            y_fx = self.p_position[p] * self.inv_dx - y_base.cast(float) # + y_stagger)
+            x_fx = self.p_position[p] * self.inv_dx - x_base.cast(float)
+            y_fx = self.p_position[p] * self.inv_dx - y_base.cast(float)
             # TODO: use the tighter quadratic weights?
             c_w = [0.5 * (1.5 - c_fx) ** 2, 0.75 - (c_fx - 1) ** 2, 0.5 * (c_fx - 0.5) ** 2]
             x_w = [0.5 * (1.5 - x_fx) ** 2, 0.75 - (x_fx - 1) ** 2, 0.5 * (x_fx - 0.5) ** 2]
@@ -402,7 +396,6 @@ class ThermodynamicModel:
             bx = ti.Vector.zero(float, 2)
             by = ti.Vector.zero(float, 2)
             nv = ti.Vector.zero(float, 2)
-            n_C = ti.Matrix.zero(float, 2, 2)
             nt = 0.0
             for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
                 offset = ti.Vector([i, j])
@@ -418,7 +411,6 @@ class ThermodynamicModel:
                 bx += x_weight * x_velocity * c_dpos
                 by += y_weight * y_velocity * c_dpos
                 nt += c_weight * self.cell_temperature[c_base + offset]
-                # n_C += 4 * self.inv_dx * c_weight * nv.outer_product(c_dpos)
 
             # NOTE: inv_dx is not squared here, as the dpos computations cancels out one inv_dx.
             cx = 4 * self.inv_dx * bx  # C = B @ (D^(-1))
