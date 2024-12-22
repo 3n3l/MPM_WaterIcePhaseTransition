@@ -100,8 +100,7 @@ class ThermodynamicModel:
         ### ===================================================================
 
         # Parameters to control the simulation
-        # self.window = ti.ui.Window(name="MLS-MPM", res=((self.nx + 1), (self.ny + 1)), fps_limit=60)
-        self.window = ti.ui.Window(name="MLS-MPM", res=(720, 720), fps_limit=60)
+        self.window = ti.ui.Window(name="Thermodynamic Model", res=(720, 720), fps_limit=60)
         self.gui = self.window.get_gui()
         self.canvas = self.window.get_canvas()
         self.is_paused = True
