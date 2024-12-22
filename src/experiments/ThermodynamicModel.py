@@ -14,6 +14,7 @@ ICE_CONDUCTIVITY = 2.33
 WATER_HEAT_CAPACITY = 4.186  # j/dC
 ICE_HEAT_CAPACITY = 2.093  # j/dC
 LATENT_HEAT = 0.334  # J/kg
+GRAVITY = -9.81
 
 
 class Classification:
@@ -52,11 +53,11 @@ class ThermodynamicModel:
         self.inv_dx = float(self.n_grid)
         self.dt = 1e-4 / self.quality
         self.rho_0 = 4e2
-        self.p_vol = (self.dx * 0.5) ** 2
+        self.p_vol = (self.dx * 0.1) ** 2
 
         ### New parameters ====================================================
         # Number of dimensions
-        self.n_dimensions = 2
+        self.n_dim = 2
 
         # Parameters to control melting/freezing
         # TODO: these are variables and need to be put into fields
@@ -158,44 +159,37 @@ class ThermodynamicModel:
             # Deformation gradient update
             self.F[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C[p]) @ self.F[p]
             U, sigma, V = ti.svd(self.F[p])
-            J = 1.0
-            for d in ti.static(range(self.n_dimensions)):  # Clamp singular values to [1 - theta_c, 1 + theta_s]
+            JE, JP = 1.0, 1.0
+            for d in ti.static(range(self.n_dim)):  # Clamp singular values to [1 - theta_c, 1 + theta_s]
                 singular_value = float(sigma[d, d])
                 singular_value = max(singular_value, 1 - self.theta_c[None])
                 singular_value = min(singular_value, 1 + self.theta_s[None])
-                self.J[p] *= sigma[d, d] / singular_value
+                JP *= sigma[d, d] / singular_value
                 sigma[d, d] = singular_value
-                J *= singular_value
+                JE *= singular_value
 
             ### New ============================================================
-            FE = U @ sigma @ V.transpose()
-            FP = tm.inverse(self.F[p]) @ FE
-            self.JE[p] = determinant(FE)
-            self.JP[p] = determinant(FP)
             # Apply ice hardening by adjusting Lame parameters.
             h = ti.max(0.1, ti.min(5, ti.exp(self.zeta[None] * (1.0 - self.JP[p]))))
             la = self.lambda_0[None] * h
             mu = self.mu_0[None] * h
 
             if self.p_phase[p] == Phase.Water:  # Apply correction for dilational/deviatoric stresses
-                FE *= J ** (1 / self.n_dimensions)
-                FP *= J ** -(1 / self.n_dimensions)
-                self.F[p] = FE @ FP
-                mu = 0  # We set mu = 0 in the water phase
-            elif self.p_phase[p] == Phase.Ice:  # Reconstruct elastic deformation gradient after plasticity
-                self.F[p] = FE
+                # Reset elastic deformation gradient to avoid numerical instability
+                self.F[p] = ti.Matrix.identity(float, self.n_dim) * JE ** (1 / self.n_dim)
+                # Set mu to zero
+                mu = 0
+            elif self.p_phase[p] == Phase.Ice:
+                # Reconstruct elastic deformation gradient after plasticity
+                self.F[p] = U @ sigma @ V.transpose()
 
             ### ================================================================
             # TODO: Compute pressure, correct pressure, apply pressure.
             # pressure = (-1 / self.JP[p]) * self.lambda_0 * (self.JE[p] - 1)
 
-            # TODO: This might only need the elastic part? Or something else?
-            # stress = 2 * mu * (FE - U @ V.transpose()) @ FE.transpose()  # pyright: ignore
-            # stress += ti.Matrix.identity(float, 2) * la * self.JE[p] * (self.JE[p] - 1)
-
             # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
             stress = 2 * mu * (self.F[p] - U @ V.transpose()) @ self.F[p].transpose()
-            stress += ti.Matrix.identity(float, 2) * la * J * (J - 1)
+            stress += ti.Matrix.identity(float, 2) * la * JE * (JE - 1)
 
             # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
             D_inv = 4 * self.inv_dx * self.inv_dx  # Quadratic interpolation
@@ -275,7 +269,6 @@ class ThermodynamicModel:
         for i, j in self.face_mass_x:
             if self.face_mass_x[i, j] > 0:  # No need for epsilon here
                 self.face_velocity_x[i, j] *= 1 / self.face_mass_x[i, j]
-                self.face_velocity_x[i, j] += self.dt * self.gravity[None][0]
                 collision_left = i < 3 and self.face_velocity_x[i, j] < 0
                 collision_right = i > (self.n_grid - 3) and self.face_velocity_x[i, j] > 0
                 if collision_left or collision_right:
@@ -283,7 +276,7 @@ class ThermodynamicModel:
         for i, j in self.face_mass_y:
             if self.face_mass_y[i, j] > 0:  # No need for epsilon here
                 self.face_velocity_y[i, j] *= 1 / self.face_mass_y[i, j]
-                self.face_velocity_y[i, j] += self.dt * self.gravity[None][1]
+                self.face_velocity_y[i, j] += self.dt * GRAVITY
                 collision_top = j > (self.n_grid - 3) and self.face_velocity_y[i, j] > 0
                 collision_bottom = j < 3 and self.face_velocity_y[i, j] < 0
                 if collision_top or collision_bottom:
@@ -426,7 +419,7 @@ class ThermodynamicModel:
     def reset(self):
         for i in range(self.n_particles):
             # self.p_position[i] = [(ti.random() * 0.1) + 0.45, (ti.random() * 0.1) + 0.001]
-            self.p_position[i] = [(ti.random() * 0.1) + 0.45, (ti.random() * 0.1) + 0.25]
+            self.p_position[i] = [(ti.random() * 0.1) + 0.45, (ti.random() * 0.1) + 0.1]
             self.F[i] = ti.Matrix([[1, 0], [0, 1]])
             self.C[i] = ti.Matrix.zero(float, 2, 2)
             ### New ============================================================
@@ -468,7 +461,7 @@ class ThermodynamicModel:
     def show_parameters(self, subwindow):
         self.theta_c[None] = subwindow.slider_float("theta_c", self.theta_c[None], 1e-2, 3.5e-2)
         self.theta_s[None] = subwindow.slider_float("theta_s", self.theta_s[None], 5.0e-3, 10e-3)
-        self.zeta[None] = subwindow.slider_int("zeta", self.zeta[None], 3, 10)
+        self.zeta[None] = subwindow.slider_int("zeta", self.zeta[None], 3, 20)
         self.nu[None] = subwindow.slider_float("nu", self.nu[None], 0.1, 0.4)
         self.E[None] = subwindow.slider_float("E", self.E[None], 4.8e4, 2.8e5)
         self.lambda_0[None] = self.E[None] * self.nu[None] / ((1 + self.nu[None]) * (1 - 2 * self.nu[None]))
@@ -527,8 +520,8 @@ def main():
     # ti.init(arch=ti.cpu, debug=True)
     ti.init(arch=ti.gpu)
 
-    quality = 1
-    n_particles = 3_000 * (quality**2)
+    quality = 3
+    n_particles = 1_000 * (quality**2)
 
     print("-" * 150)
     print("[Hint] Press R to [R]eset, P|SPACE to [P]ause/un[P]ause and S|BACKSPACE to [S]tart recording!")
