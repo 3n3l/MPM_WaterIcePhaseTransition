@@ -408,8 +408,8 @@ class ThermodynamicModel:
                 x_velocity = x_weight * self.face_velocity_x[x_base + offset]
                 y_velocity = y_weight * self.face_velocity_y[y_base + offset]
                 nv += [x_velocity, y_velocity]
-                bx += x_weight * x_velocity * c_dpos
-                by += y_weight * y_velocity * c_dpos
+                bx += x_velocity * x_dpos
+                by += y_velocity * y_dpos
                 nt += c_weight * self.cell_temperature[c_base + offset]
 
             # NOTE: inv_dx is not squared here, as the dpos computations cancels out one inv_dx.
