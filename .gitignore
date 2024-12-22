@@ -175,3 +175,9 @@ imgui.ini
 
 package-lock.json
 package.json
+
+# Frames/Videos/GIFs
+.output
+
+# Apple
+.DS_Store
