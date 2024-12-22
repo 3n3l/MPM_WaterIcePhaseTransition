@@ -198,8 +198,8 @@ class ThermodynamicModel:
             stress += ti.Matrix.identity(float, 2) * la * J * (J - 1)
 
             # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
-            # D_inv = 4 * self.inv_dx * self.inv_dx  # Quadratic interpolation
-            D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
+            D_inv = 4 * self.inv_dx * self.inv_dx  # Quadratic interpolation
+            # D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
 
             # TODO: What happens here exactly? Something with Cauchy-stress?
             stress *= -self.dt * self.p_vol * D_inv
