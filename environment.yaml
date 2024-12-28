@@ -6,4 +6,4 @@ dependencies:
   - numpy
   - pip
   - pip:
-    - taichi==1.6.0
+    - taichi==1.7.3
