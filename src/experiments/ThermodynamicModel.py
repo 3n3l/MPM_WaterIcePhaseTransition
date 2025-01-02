@@ -3,10 +3,14 @@ Testing a thermodynamic model, roughly based on
 'Augmented MPM for phase-change and varied materials'
 """
 
+from taichi.linalg import MatrixFreeCG, LinearOperator
 from datetime import datetime
 import numpy as np
 import taichi as ti
 import os
+
+# ti.init(arch=ti.cpu, debug=True)
+ti.init(arch=ti.vulkan)
 
 WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
 ICE_CONDUCTIVITY = 2.33
@@ -96,24 +100,41 @@ class ThermodynamicModel:
         # Properties on MAC-cells.
         self.cell_classification = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.cell_temperature = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.cell_divergence = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
+        self.cell_divergence = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.cell_capacity = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
-        self.cell_lambda = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.cell_mass = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+
+        # TODO: are these all needed?
+        self.cell_inv_lambda = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.cell_JE = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
+        self.cell_JP = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
+
+        # These fields will be used to solve for pressure, where Ap = b
+        # TODO: Better names for Ap and b?
+        self.face_volume_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
+        self.face_volume_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
+        # self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
+        self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        # self.cell_corrected_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
+        # self.cell_Ap = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
+        self.b = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.Ax = LinearOperator(self.compute_Ap)
 
         # Properties on particles.
         self.particle_conductivity = ti.field(dtype=ti.float32, shape=self.n_particles)
         self.particle_temperature = ti.field(dtype=ti.float32, shape=self.n_particles)
+        self.particle_inv_lambda = ti.field(dtype=ti.float32, shape=self.n_particles)
         self.particle_position = ti.Vector.field(2, dtype=float, shape=self.n_particles)
         self.particle_velocity = ti.Vector.field(2, dtype=float, shape=self.n_particles)
         self.particle_capacity = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.particle_lambda = ti.field(dtype=ti.float32, shape=self.n_particles)
         self.particle_color = ti.Vector.field(3, dtype=float, shape=self.n_particles)
         self.particle_phase = ti.field(dtype=ti.float32, shape=self.n_particles)
         self.particle_mass = ti.field(dtype=ti.float32, shape=self.n_particles)
         self.particle_FE = ti.Matrix.field(2, 2, dtype=float, shape=self.n_particles)
         self.particle_C = ti.Matrix.field(2, 2, dtype=float, shape=self.n_particles)
+
+        self.particle_JE = ti.field(dtype=float, shape=self.n_particles)
+        self.particle_JP = ti.field(dtype=float, shape=self.n_particles)
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
         self.stickiness = ti.field(dtype=float, shape=())
@@ -140,9 +161,19 @@ class ThermodynamicModel:
         self.cell_classification.fill(0)
         self.face_velocity_x.fill(0)
         self.face_velocity_y.fill(0)
+        self.cell_pressure.fill(0)
         self.face_mass_x.fill(0)
         self.face_mass_y.fill(0)
         self.cell_mass.fill(0)
+
+        self.cell_JE.fill(1)
+        self.cell_JP.fill(1)
+        self.particle_JE.fill(1)
+        self.particle_JP.fill(1)
+
+        # TODO: implemented volume computation
+        self.face_volume_x.fill(self.rho_0)
+        self.face_volume_y.fill(self.rho_0)
 
     @ti.kernel
     def particle_to_grid(self):
@@ -162,19 +193,21 @@ class ThermodynamicModel:
                 JP *= singular_value / clamped
                 JE *= clamped
 
-            # Apply ice hardening by adjusting Lame parameters.
-            h = ti.max(0.1, ti.min(5, ti.exp(self.zeta[None] * (1.0 - JP))))
-            la = self.lambda_0[None] * h
-            mu = self.mu_0[None] * h
-
-            if self.particle_phase[p] == Phase.Water:  # Apply correction for dilational/deviatoric stresses
-                # Reset elastic deformation gradient to avoid numerical instability
+            la = self.lambda_0[None]
+            mu = self.mu_0[None]
+            if self.particle_phase[p] == Phase.Water:
+                # TODO: Apply correction for dilational/deviatoric stresses?
+                # Reset elastic deformation gradient to avoid numerical instability.
                 self.particle_FE[p] = ti.Matrix.identity(float, self.n_dimensions) * JE ** (1 / self.n_dimensions)
-                # Set mu to zero
+                # Set the viscosity to zero.
                 mu = 0
             elif self.particle_phase[p] == Phase.Ice:
                 # Reconstruct elastic deformation gradient after plasticity
                 self.particle_FE[p] = U @ sigma @ V.transpose()
+                # Apply ice hardening by adjusting Lame parameters
+                hardening = ti.max(0.1, ti.min(20, ti.exp(self.zeta[None] * (1.0 - JP))))
+                la *= hardening
+                mu *= hardening
 
             # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
             stress = 2 * mu * (self.particle_FE[p] - U @ V.transpose()) @ self.particle_FE[p].transpose()
@@ -229,7 +262,7 @@ class ThermodynamicModel:
                 c_weight = c_w[i][0] * c_w[j][1]
                 x_weight = x_w[i][0] * x_w[j][1]
                 y_weight = y_w[i][0] * y_w[j][1]
-                c_dpos = (offset.cast(float) - c_fx) * self.dx
+                # c_dpos = (offset.cast(float) - c_fx) * self.dx
                 x_dpos = (offset.cast(float) - x_fx) * self.dx
                 y_dpos = (offset.cast(float) - y_fx) * self.dx
 
@@ -244,18 +277,35 @@ class ThermodynamicModel:
                 self.face_velocity_y[y_base + offset] += y_weight * y_velocity
 
                 # Rasterize conductivity to grid faces.
-                self.face_conductivity_x[x_base + offset] += (
-                    x_weight * self.particle_mass[p] * self.particle_conductivity[p]
-                )
-                self.face_conductivity_y[y_base + offset] += (
-                    y_weight * self.particle_mass[p] * self.particle_conductivity[p]
-                )
+                conductivity = self.particle_mass[p] * self.particle_conductivity[p]
+                self.face_conductivity_x[x_base + offset] += x_weight * conductivity
+                self.face_conductivity_y[y_base + offset] += y_weight * conductivity
 
                 # Rasterize to cell centers.
                 self.cell_mass[c_base + offset] += c_weight * self.particle_mass[p]
                 self.cell_capacity[c_base + offset] += c_weight * self.particle_capacity[p]
                 self.cell_temperature[c_base + offset] += c_weight * self.particle_temperature[p]
-                self.cell_lambda[c_base + offset] += 1 / (c_weight * self.particle_lambda[p])
+
+                # self.cell_inv_lambda[c_base + offset] += c_weight * self.particle_inv_lambda[p]
+                self.cell_inv_lambda[c_base + offset] += c_weight * self.lambda_0[None]
+
+                # NOTE: the old JE, JP values are used here to compute the cell values.
+                # print("WEIGHT", c_weight)
+                # print("WEIGHT", x_weight)
+                # print("WEIGHT", y_weight)
+                # print("CELLJE", self.cell_JE[i, j])
+                # print("PARTJE", self.particle_JE[p])
+                # print("RESULT", c_weight * self.particle_JE[p])
+
+                self.cell_JE[c_base + offset] += c_weight * self.particle_JE[p]
+                self.cell_JP[c_base + offset] += c_weight * self.particle_JP[p]
+                # self.cell_JE[c_base + offset] += c_weight * JE
+                # self.cell_JP[c_base + offset] += c_weight * JP
+
+            self.particle_JE[p] = JE
+            self.particle_JP[p] = JP
+        # for i, j in self.cell_pressure:
+        #     self.cell_pressure[i, j] = (-1 / self.cell_JP[i, j]) * self.lambda_0[None] * (self.cell_JE[i, j] - 1)
 
     @ti.kernel
     def momentum_to_velocity(self):
@@ -277,8 +327,8 @@ class ThermodynamicModel:
         for i, j in self.cell_mass:
             if self.cell_mass[i, j] > 0:  # No need for epsilon here
                 self.cell_temperature[i, j] *= 1 / self.cell_mass[i, j]
+                self.cell_inv_lambda[i, j] *= self.cell_mass[i, j]
                 self.cell_capacity[i, j] *= 1 / self.cell_mass[i, j]
-                self.cell_lambda[i, j] *= self.cell_mass[i, j]
 
     @ti.kernel
     def classify_cells(self):
@@ -310,59 +360,81 @@ class ThermodynamicModel:
                 self.cell_classification[i, j] = Classification.Empty
 
     @ti.func
-    def _sample(self, x, i, j):
+    def sample(self, x, i, j):
         indices = ti.Vector([int(i), int(j)])
-        indices = ti.max(0, ti.min(self.dx - 1, indices))
+        indices = ti.max(0, ti.min(self.n_grid - 1, indices))
         return x[indices]
 
     @ti.kernel
     def compute_divergence(self):
         for i, j in self.cell_divergence:
-            vl = self._sample(self.face_velocity_x, i - 1, j)
-            vr = self._sample(self.face_velocity_x, i + 1, j)
-            vb = self._sample(self.face_velocity_y, i, j - 1)
-            vt = self._sample(self.face_velocity_y, i, j + 1)
-            self.cell_divergence[i, j] = (vr - vl + vt - vb) * 0.5
+            self.cell_divergence[i, j] = 0
+            self.cell_divergence[i, j] += self.face_velocity_x[i + 1, j]
+            self.cell_divergence[i, j] += self.face_velocity_y[i, j + 1]
+            self.cell_divergence[i, j] -= self.face_velocity_x[i, j]
+            self.cell_divergence[i, j] -= self.face_velocity_y[i, j]
 
     @ti.kernel
-    def pressure_iteration(self):
-        for i, j in self.cell_pressure:
-            divergence = self.cell_divergence[i, j]
-            pl = self._sample(self.cell_pressure, i - 1, j)
-            pr = self._sample(self.cell_pressure, i + 1, j)
-            pb = self._sample(self.cell_pressure, i, j - 1)
-            pt = self._sample(self.cell_pressure, i, j + 1)
-            self.cell_pressure[i, j] = (pl + pr + pb + pt - divergence) * 0.25
+    def compute_Ap(self, p: ti.template(), Ap: ti.template()):  # pyright: ignore
+        inv_rho = 1 / self.rho_0 # TODO: compute rho per cell
+        z = self.dt * self.inv_dx * self.inv_dx * inv_rho
+        for i, j in ti.ndrange((1, self.n_grid), (1, self.n_grid)):
+            if self.cell_classification[i, j] == Classification.Interior:
+                l = p[i - 1, j]
+                r = p[i + 1, j]
+                t = p[i, j + 1]
+                b = p[i, j - 1]
+                Ap[i, j] = p[i, j] * self.cell_inv_lambda[i, j]
+                Ap[i, j] *= self.cell_JP[i, j] * (1 / (self.cell_JE[i, j] * self.dt))
+                Ap[i, j] += z * (4.0 * p[i, j] - l - r - t - b)
+
+    @ti.kernel
+    def compute_b(self):
+        z = self.inv_dx * self.inv_dx
+        # for i, j in self.cell_pressure:
+        for i, j in ti.ndrange((1, self.n_grid), (1, self.n_grid)):
+            if self.cell_classification[i, j] == Classification.Interior:
+                self.b[i, j] = -1 * (self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j])
+                self.b[i, j] -= z * (self.face_velocity_x[i + 1, j] - self.face_velocity_x[i, j])
+                self.b[i, j] -= z * (self.face_velocity_y[i, j + 1] - self.face_velocity_y[i, j])
+
+            if self.cell_classification[i, j] == Classification.Interior:
+                print("-" * 100)
+                print("UNDERP ->", self.cell_pressure[i, j])
+                print("CELLJE ->", self.cell_JE[i, j])
+                print("CELLJP ->", self.cell_JP[i, j])
+                print("X_VELO ->", self.face_velocity_x[i, j])
+                print("Y_VELO ->", self.face_velocity_y[i, j])
+                print("DTTTTT ->", self.dt)
+                print("LAMBDA ->", self.cell_inv_lambda[i, j])
+                print("BBBBBB ->", self.b[i, j])
 
     def solve_pressure(self):
-        # TODO: only respect interior cells
-        for _ in range(50):  # TODO: set max iterations somewhere
-            self.pressure_iteration()
+        self.compute_b()
+        MatrixFreeCG(A=self.Ax, b=self.b, x=self.cell_pressure, maxiter=1000, tol=1e-5, quiet=False)
 
     @ti.kernel
     def apply_pressure(self):
-        # TODO: Compute pressure, correct pressure, apply pressure.
-        # pressure = (-1 / self.JP[p]) * self.lambda_0 * (self.JE[p] - 1)
-
-        # TODO: only respect interior cells
+        inv_rho = 1 / self.rho_0  # TODO: compute inv_rho from face volumes per cell
+        z = self.dt * inv_rho * self.inv_dx * self.inv_dx
         for i, j in self.face_mass_x:
-            pressure = self._sample(self.cell_pressure, i, j)
-            pressure -= self._sample(self.cell_pressure, i + 1, j)
-            # TODO: this is not the correct rho
-            self.face_velocity_x[i, j] -= self.dt * (1 / self.rho_0) * pressure
-            # collision_left = i < 3 and self.face_velocity_x[i, j] < 0
-            # collision_right = i > (self.n_grid - 3) and self.face_velocity_x[i, j] > 0
-            # if collision_left or collision_right:
-            #     self.face_velocity_x[i, j] = 0
+            # if self.cell_classification[i - 1, j] == Classification.Interior:
+            self.face_velocity_x[i, j] -= z * self.sample(self.cell_pressure, i - 1, j)
+            # if self.cell_classification[i, j] == Classification.Interior:
+            self.face_velocity_x[i, j] -= z * self.sample(self.cell_pressure, i, j)
+            # self.face_velocity_x[i, j] -= z * self.sample(self.cell_pressure, i, j + 1)
+            # self.face_velocity_x[i, j] -= z * self.sample(self.cell_pressure, i, j - 1)
+            # self.face_velocity_x[i, j] -= 4 * z * self.cell_pressure[i, j]
+            # self.face_velocity_x[i, j] -= 4 * z * self.cell_pressure[i, j]
         for i, j in self.face_mass_y:
-            pressure = self._sample(self.cell_pressure, i, j)
-            pressure -= self._sample(self.cell_pressure, i, j + 1)
-            # TODO: this is not the correct rho
-            self.face_velocity_y[i, j] -= self.dt * (1 / self.rho_0) * pressure
-            # collision_top = j > (self.n_grid - 3) and self.face_velocity_y[i, j] > 0
-            # collision_bottom = j < 3 and self.face_velocity_y[i, j] < 0
-            # if collision_top or collision_bottom:
-            #     self.face_velocity_y[i, j] = 0
+            # self.face_velocity_y[i, j] -= z * self.sample(self.cell_pressure, i - 1, j)
+            # self.face_velocity_y[i, j] -= z * self.sample(self.cell_pressure, i + 1, j)
+            # if self.cell_classification[i, j - 1] == Classification.Interior:
+            self.face_velocity_y[i, j] -= z * self.sample(self.cell_pressure, i, j - 1)
+            # if self.cell_classification[i, j] == Classification.Interior:
+            self.face_velocity_y[i, j] -= z * self.sample(self.cell_pressure, i, j)
+            # self.face_velocity_y[i, j] -= 4 * z * self.cell_pressure[i, j]
+            # self.face_velocity_y[i, j] -= 4 * z * self.cell_pressure[i, j]
 
     @ti.kernel
     def grid_to_particle(self):
@@ -379,8 +451,6 @@ class ThermodynamicModel:
             c_w = [0.5 * (1.5 - c_fx) ** 2, 0.75 - (c_fx - 1) ** 2, 0.5 * (c_fx - 0.5) ** 2]
             x_w = [0.5 * (1.5 - x_fx) ** 2, 0.75 - (x_fx - 1) ** 2, 0.5 * (x_fx - 0.5) ** 2]
             y_w = [0.5 * (1.5 - y_fx) ** 2, 0.75 - (y_fx - 1) ** 2, 0.5 * (y_fx - 0.5) ** 2]
-
-            # TODO: the cell values must be transferred back to the particles?!
 
             bx = ti.Vector.zero(float, 2)
             by = ti.Vector.zero(float, 2)
@@ -400,9 +470,8 @@ class ThermodynamicModel:
                 by += y_velocity * y_dpos
                 nt += c_weight * self.cell_temperature[c_base + offset]
 
-            # NOTE: inv_dx is not squared here, as the dpos computations cancels out one inv_dx.
-            cx = 4 * self.inv_dx * bx  # C = B @ (D^(-1))
-            cy = 4 * self.inv_dx * by  # C = B @ (D^(-1))
+            cx = 4 * self.inv_dx * bx  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos.
+            cy = 4 * self.inv_dx * by  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos.
             self.particle_C[p] = ti.Matrix([[cx[0], cy[0]], [cx[1], cy[1]]])  # pyright: ignore
             self.particle_color[p] = Color.Water if self.particle_phase[p] == Phase.Water else Color.Ice
             self.particle_position[p] += self.dt * nv
@@ -420,12 +489,14 @@ class ThermodynamicModel:
             # self.particle_position[i] = [(ti.random() * 0.1) + 0.45, (ti.random() * 0.1) + 0.001]
             # self.particle_position[i] = [(ti.random() * 0.1) + 0.45, (ti.random() * 0.1) + 0.1]
             self.particle_mass[i] = self.particle_vol * self.rho_0
+            self.particle_inv_lambda[i] = 1 / self.lambda_0[None]
             self.particle_FE[i] = ti.Matrix([[1, 0], [0, 1]])
             self.particle_C[i] = ti.Matrix.zero(float, 2, 2)
-            self.particle_lambda[i] = self.lambda_0[None]
             self.particle_phase[i] = Phase.Water
             self.particle_color[i] = Color.Water
             self.particle_velocity[i] = [0, 0]
+            self.particle_JE[i] = 1
+            self.particle_JP[i] = 1
 
     def handle_events(self):
         if self.window.get_event(ti.ui.PRESS):
@@ -444,10 +515,13 @@ class ThermodynamicModel:
                 self.reset_grids()
                 self.particle_to_grid()
                 self.momentum_to_velocity()
-                # self.classify_cells()
-                # self.compute_divergence()
-                # self.solve_pressure()
+                self.classify_cells()
+                self.solve_pressure()
+                # print(self.b)
+                # print(self.Ax)
                 # self.apply_pressure()
+                # self.compute_divergence()
+                # print(self.cell_divergence)
                 self.grid_to_particle()
 
     def show_parameters(self, subwindow):
