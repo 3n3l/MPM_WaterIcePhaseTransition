@@ -4,6 +4,7 @@ Testing a thermodynamic model, roughly based on
 """
 
 from datetime import datetime
+import numpy as np
 import taichi as ti
 import os
 
@@ -13,6 +14,13 @@ WATER_HEAT_CAPACITY = 4.186  # j/dC
 ICE_HEAT_CAPACITY = 2.093  # j/dC
 LATENT_HEAT = 0.334  # J/kg
 GRAVITY = -9.81
+
+R = 0.2
+QUALITY = 1
+N_PARTICLES = 1_000 * (QUALITY**2)
+T = np.linspace(0, 2 * np.pi, N_PARTICLES + 2, dtype=np.float32)[1:-1]
+THETAS = ti.field(ti.f32, shape=(N_PARTICLES))
+THETAS.from_numpy(T)
 
 
 class Classification:
@@ -404,8 +412,13 @@ class ThermodynamicModel:
     @ti.kernel
     def reset(self):
         for i in range(self.n_particles):
+            radius = R * ti.sqrt(ti.random())
+            self.particle_position[i] = [
+                radius * (ti.sin(THETAS[i]) * 0.5) + 0.5,
+                radius * (ti.cos(THETAS[i]) * 0.5) + 0.15,
+            ]
             # self.particle_position[i] = [(ti.random() * 0.1) + 0.45, (ti.random() * 0.1) + 0.001]
-            self.particle_position[i] = [(ti.random() * 0.1) + 0.45, (ti.random() * 0.1) + 0.1]
+            # self.particle_position[i] = [(ti.random() * 0.1) + 0.45, (ti.random() * 0.1) + 0.1]
             self.particle_mass[i] = self.particle_vol * self.rho_0
             self.particle_FE[i] = ti.Matrix([[1, 0], [0, 1]])
             self.particle_C[i] = ti.Matrix.zero(float, 2, 2)
@@ -481,7 +494,7 @@ class ThermodynamicModel:
 
     def render(self):
         self.canvas.set_background_color((0.054, 0.06, 0.09))
-        self.canvas.circles(centers=self.particle_position, radius=0.001, per_vertex_color=self.particle_color)
+        self.canvas.circles(centers=self.particle_position, radius=0.0015, per_vertex_color=self.particle_color)
         if self.should_write_to_disk and not self.is_paused and not self.is_showing_settings:
             self.video_manager.write_frame(self.window.get_image_buffer_as_numpy())
         self.window.show()
@@ -496,17 +509,11 @@ class ThermodynamicModel:
 
 
 def main():
-    # ti.init(arch=ti.cpu, debug=True)
-    ti.init(arch=ti.gpu)
-
-    quality = 3
-    n_particles = 1_000 * (quality**2)
-
     print("-" * 150)
     print("[Hint] Press R to [R]eset, P|SPACE to [P]ause/un[P]ause and S|BACKSPACE to [S]tart recording!")
     print("-" * 150)
 
-    simulation = ThermodynamicModel(quality=quality, n_particles=n_particles)
+    simulation = ThermodynamicModel(quality=QUALITY, n_particles=N_PARTICLES)
     simulation.run()
 
 
