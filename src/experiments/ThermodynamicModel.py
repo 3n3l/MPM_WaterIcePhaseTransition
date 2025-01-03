@@ -109,16 +109,15 @@ class ThermodynamicModel:
         self.cell_JE = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
         self.cell_JP = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
 
-        # These fields will be used to solve for pressure, where Ap = b
-        # TODO: Better names for Ap and b?
+        # These fields will be used to solve for pressure, where Ax = b
         self.face_volume_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
         self.face_volume_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
-        # self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
         self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        # self.cell_corrected_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
-        # self.cell_Ap = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
-        self.b = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.Ax = LinearOperator(self.compute_Ap)
+        self.right_hand_side = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.left_hand_side = LinearOperator(self.fill_left_hand_side)
+
+        # FIXME: just for testing
+        self.Ap = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
 
         # Properties on particles.
         self.particle_conductivity = ti.field(dtype=ti.float32, shape=self.n_particles)
@@ -158,7 +157,7 @@ class ThermodynamicModel:
 
     @ti.kernel
     def reset_grids(self):
-        self.cell_classification.fill(0)
+        self.cell_classification.fill(Classification.Empty)
         self.face_velocity_x.fill(0)
         self.face_velocity_y.fill(0)
         self.cell_pressure.fill(0)
@@ -172,8 +171,8 @@ class ThermodynamicModel:
         self.particle_JP.fill(1)
 
         # TODO: implemented volume computation
-        self.face_volume_x.fill(self.rho_0)
-        self.face_volume_y.fill(self.rho_0)
+        self.face_volume_x.fill(0)
+        self.face_volume_y.fill(0)
 
     @ti.kernel
     def particle_to_grid(self):
@@ -270,6 +269,10 @@ class ThermodynamicModel:
                 self.face_mass_x[x_base + offset] += x_weight * self.particle_mass[p]
                 self.face_mass_y[y_base + offset] += y_weight * self.particle_mass[p]
 
+                # TODO: implement proper volume computation
+                self.face_volume_x[x_base + offset] += x_weight * self.particle_vol
+                self.face_volume_y[x_base + offset] += y_weight * self.particle_vol
+
                 # Rasterize velocity to grid faces.
                 x_velocity = self.particle_mass[p] * self.particle_velocity[p][0] + x_affine @ x_dpos
                 y_velocity = self.particle_mass[p] * self.particle_velocity[p][1] + y_affine @ y_dpos
@@ -347,7 +350,8 @@ class ThermodynamicModel:
             is_colliding = False
 
             # A cell is interior if the cell and all of its surrounding faces have mass.
-            is_interior = self.face_mass_x[i, j] > 0
+            is_interior = self.cell_mass[i, j] > 0
+            is_interior &= self.face_mass_x[i, j] > 0
             is_interior &= self.face_mass_y[i, j] > 0
             is_interior &= self.face_mass_x[i + 1, j] > 0
             is_interior &= self.face_mass_y[i, j + 1] > 0
@@ -375,43 +379,63 @@ class ThermodynamicModel:
             self.cell_divergence[i, j] -= self.face_velocity_y[i, j]
 
     @ti.kernel
-    def compute_Ap(self, p: ti.template(), Ap: ti.template()):  # pyright: ignore
-        inv_rho = 1 / self.rho_0 # TODO: compute rho per cell
+    def fill_left_hand_side(self, p: ti.template(), Ap: ti.template()):  # pyright: ignore
+        delta = 0.00032  # relaxation
+        inv_rho = 1 / self.rho_0  # TODO: compute rho per cell
         z = self.dt * self.inv_dx * self.inv_dx * inv_rho
-        for i, j in ti.ndrange((1, self.n_grid), (1, self.n_grid)):
+        for i, j in ti.ndrange((1, self.n_grid - 1), (1, self.n_grid - 1)):
+            # for i, j in self.cell_pressure:
+            Ap[i, j] = 0
             if self.cell_classification[i, j] == Classification.Interior:
                 l = p[i - 1, j]
                 r = p[i + 1, j]
                 t = p[i, j + 1]
                 b = p[i, j - 1]
-                Ap[i, j] = p[i, j] * self.cell_inv_lambda[i, j]
-                Ap[i, j] *= self.cell_JP[i, j] * (1 / (self.cell_JE[i, j] * self.dt))
-                Ap[i, j] += z * (4.0 * p[i, j] - l - r - t - b)
+
+                # FIXME: the error is somewhere here:
+                # Ap[i, j] = delta * p[i, j] * self.cell_inv_lambda[i, j]
+                # Ap[i, j] *= self.cell_JP[i, j] * (1 / (self.cell_JE[i, j] * self.dt))
+
+                Ap[i, j] += z * delta * (4.0 * p[i, j] - l - r - t - b)
+                self.Ap[i, j] = Ap[i, j]  # FIXME: for testing only
 
     @ti.kernel
-    def compute_b(self):
-        z = self.inv_dx * self.inv_dx
-        # for i, j in self.cell_pressure:
+    def fill_right_hand_side(self):
+        z = self.inv_dx
         for i, j in ti.ndrange((1, self.n_grid), (1, self.n_grid)):
+            # for i, j in self.cell_pressure:
+            self.right_hand_side[i, j] = 0
             if self.cell_classification[i, j] == Classification.Interior:
-                self.b[i, j] = -1 * (self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j])
-                self.b[i, j] -= z * (self.face_velocity_x[i + 1, j] - self.face_velocity_x[i, j])
-                self.b[i, j] -= z * (self.face_velocity_y[i, j + 1] - self.face_velocity_y[i, j])
+
+                # FIXME: the error is somewhere here:
+                # self.right_hand_side[i, j] = -1 * (self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j])
+
+                self.right_hand_side[i, j] += z * (self.face_velocity_x[i + 1, j] - self.face_velocity_x[i, j])
+                self.right_hand_side[i, j] += z * (self.face_velocity_y[i, j + 1] - self.face_velocity_y[i, j])
 
             if self.cell_classification[i, j] == Classification.Interior:
                 print("-" * 100)
-                print("UNDERP ->", self.cell_pressure[i, j])
+                print("PRESSU ->", self.cell_pressure[i, j])
                 print("CELLJE ->", self.cell_JE[i, j])
                 print("CELLJP ->", self.cell_JP[i, j])
                 print("X_VELO ->", self.face_velocity_x[i, j])
                 print("Y_VELO ->", self.face_velocity_y[i, j])
                 print("DTTTTT ->", self.dt)
                 print("LAMBDA ->", self.cell_inv_lambda[i, j])
-                print("BBBBBB ->", self.b[i, j])
+                print("BBBBBB ->", self.right_hand_side[i, j])
+                print("AAAAAA ->", self.Ap[i, j])
 
     def solve_pressure(self):
-        self.compute_b()
-        MatrixFreeCG(A=self.Ax, b=self.b, x=self.cell_pressure, maxiter=1000, tol=1e-5, quiet=False)
+        self.fill_right_hand_side()
+        self.cell_pressure.fill(0)
+        MatrixFreeCG(
+            A=self.left_hand_side,
+            b=self.right_hand_side,
+            x=self.cell_pressure,
+            maxiter=100,
+            tol=1e-5,
+            quiet=False,
+        )
 
     @ti.kernel
     def apply_pressure(self):
