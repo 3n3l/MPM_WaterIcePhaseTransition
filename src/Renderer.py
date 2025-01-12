@@ -37,11 +37,12 @@ class Renderer:
         self.frame = 0
         self.directory = datetime.now().strftime("%d%m%Y_%H%M")
         os.makedirs(f".output/{self.directory}")
-        self.solver.reset()
+        self.solver.reset(self.model.n_particles)
 
     def load_configuration(self):
-        self.solver.initial_position.from_numpy(self.model.position)
-        self.solver.initial_velocity.from_numpy(self.model.velocity)
+        self.solver.initial_position = self.model.position
+        self.solver.initial_velocity = self.model.velocity
+        self.solver.initial_phase = self.model.phase
         self.solver.stickiness[None] = self.model.stickiness
         self.solver.friction[None] = self.model.friction
         self.solver.lambda_0[None] = self.model.lambda_0
@@ -55,7 +56,7 @@ class Renderer:
     def handle_events(self):
         if self.window.get_event(ti.ui.PRESS):
             if self.window.event.key == "r":
-                self.solver.reset()
+                self.solver.reset(self.model.n_particles)
             elif self.window.event.key in [ti.GUI.BACKSPACE, "s"]:
                 self.should_write_to_disk = not self.should_write_to_disk
             elif self.window.event.key in [ti.GUI.SPACE, "p"]:
@@ -74,7 +75,7 @@ class Renderer:
             self.model = self.configurations[_id]
             self.load_configuration()
             self.is_paused = True
-            self.solver.reset()
+            self.solver.reset(self.model.n_particles)
 
     def show_parameters(self, subwindow):
         self.solver.stickiness[None] = subwindow.slider_float("stickiness", self.solver.stickiness[None], 1.0, 5.0)
@@ -132,7 +133,7 @@ class Renderer:
         self.window.show()
 
     def run(self):
-        self.solver.reset()
+        self.solver.reset(self.model.n_particles)
         while self.window.running:
             self.handle_events()
             self.show_settings()

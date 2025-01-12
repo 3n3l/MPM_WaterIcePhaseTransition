@@ -33,7 +33,7 @@ class Solver:
     def __init__(
         self,
         quality: int,
-        n_particles: int,
+        max_particles: int,
         theta_c=2.5e-2,  # Critical compression (2.5e-2)
         theta_s=7.5e-3,  # Critical stretch (7.5e-3)
         zeta=10,  # Hardening coefficient (10)
@@ -42,7 +42,9 @@ class Solver:
     ):
         # MPM Parameters that are configuration independent
         self.quality = quality
-        self.n_particles = n_particles
+        # self.n_particles = max_particles
+        # TODO: move somewhere else
+        self.n_particles = ti.field(dtype=ti.int32, shape=())
         self.n_grid = 128 * quality
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
@@ -92,24 +94,26 @@ class Solver:
         self.Ap = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
 
         # Properties on particles.
-        self.particle_conductivity = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.particle_temperature = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.particle_inv_lambda = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.particle_position = ti.Vector.field(2, dtype=float, shape=self.n_particles)
-        self.particle_velocity = ti.Vector.field(2, dtype=float, shape=self.n_particles)
-        self.particle_capacity = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.particle_color = ti.Vector.field(3, dtype=float, shape=self.n_particles)
-        self.particle_phase = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.particle_mass = ti.field(dtype=ti.float32, shape=self.n_particles)
-        self.particle_FE = ti.Matrix.field(2, 2, dtype=float, shape=self.n_particles)
-        self.particle_C = ti.Matrix.field(2, 2, dtype=float, shape=self.n_particles)
+        self.particle_conductivity = ti.field(dtype=ti.float32, shape=max_particles)
+        self.particle_temperature = ti.field(dtype=ti.float32, shape=max_particles)
+        self.particle_inv_lambda = ti.field(dtype=ti.float32, shape=max_particles)
+        self.particle_position = ti.Vector.field(2, dtype=float, shape=max_particles)
+        self.particle_velocity = ti.Vector.field(2, dtype=float, shape=max_particles)
+        self.particle_capacity = ti.field(dtype=ti.float32, shape=max_particles)
+        self.particle_color = ti.Vector.field(3, dtype=float, shape=max_particles)
+        self.particle_phase = ti.field(dtype=ti.float32, shape=max_particles)
+        self.particle_mass = ti.field(dtype=ti.float32, shape=max_particles)
+        self.particle_FE = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
+        self.particle_C = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
 
-        self.particle_JE = ti.field(dtype=float, shape=self.n_particles)
-        self.particle_JP = ti.field(dtype=float, shape=self.n_particles)
+        self.particle_JE = ti.field(dtype=float, shape=max_particles)
+        self.particle_JP = ti.field(dtype=float, shape=max_particles)
 
         # Initial properties to reset to.
-        self.initial_position = ti.Vector.field(2, dtype=float, shape=self.n_particles)
-        self.initial_velocity = ti.Vector.field(2, dtype=float, shape=self.n_particles)
+        # TODO: these can be replaced with the fields from the configuration
+        self.initial_position = ti.Vector.field(2, dtype=float, shape=max_particles)
+        self.initial_velocity = ti.Vector.field(2, dtype=float, shape=max_particles)
+        self.initial_phase = ti.field(dtype=float, shape=max_particles)
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
         self.stickiness = ti.field(dtype=float, shape=())
@@ -152,7 +156,8 @@ class Solver:
 
     @ti.kernel
     def particle_to_grid(self):
-        for p in self.particle_position:
+        # for p in self.particle_position:
+        for p in ti.ndrange(self.n_particles[None]):
             # Deformation gradient update.
             self.particle_FE[p] = (ti.Matrix.identity(float, 2) + self.dt * self.particle_C[p]) @ self.particle_FE[p]
 
@@ -440,7 +445,8 @@ class Solver:
 
     @ti.kernel
     def grid_to_particle(self):
-        for p in self.particle_position:
+        # for p in self.particle_position:
+        for p in ti.ndrange(self.n_particles[None]):
             x_stagger = ti.Vector([self.dx / 2, 0])
             y_stagger = ti.Vector([0, self.dx / 2])
             c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)
@@ -482,8 +488,9 @@ class Solver:
             self.particle_velocity[p] = nv
 
     @ti.kernel
-    def reset(self):
-        for i in range(self.n_particles):
+    def reset(self, n_particles: ti.template()):
+        self.n_particles[None] = n_particles
+        for i in range(self.n_particles[None]):
             self.particle_position[i] = self.initial_position[i]
             self.particle_velocity[i] = self.initial_velocity[i]
             self.particle_mass[i] = self.particle_vol * self.rho_0
