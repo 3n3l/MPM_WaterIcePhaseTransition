@@ -29,7 +29,7 @@ class Color:
 
 
 @ti.data_oriented
-class MPM_Solver:
+class Solver:
     def __init__(
         self,
         quality: int,

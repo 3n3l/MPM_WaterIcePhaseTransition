@@ -1,14 +1,14 @@
 from Configuration import Configuration
-from solvers.MPM_Solver import MPM_Solver
+from Solver import Solver
 from datetime import datetime
 import taichi as ti
 import os
 
 
-class GGUI_Renderer:
+class Renderer:
     def __init__(
         self,
-        solver: MPM_Solver,
+        solver: Solver,
         configurations: list[Configuration],
     ) -> None:
         # TODO: make a list of solvers?!

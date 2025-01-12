@@ -1,6 +1,6 @@
-from solvers.MPM_Solver import MPM_Solver
+from Solver import Solver
 from Configuration import Configuration
-from renderer.GGUI import GGUI_Renderer
+from Renderer import Renderer
 import numpy as np
 
 
@@ -49,8 +49,8 @@ def main():
     print("[Hint] Press R to [R]eset, P|SPACE to [P]ause/un[P]ause and S|BACKSPACE to [S]tart recording!")
     print("-" * 150)
 
-    solver = MPM_Solver(quality=quality, n_particles=n_particles)
-    renderer = GGUI_Renderer(solver=solver, configurations=configurations)
+    solver = Solver(quality=quality, n_particles=n_particles)
+    renderer = Renderer(solver=solver, configurations=configurations)
     renderer.run()
 
 
