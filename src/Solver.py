@@ -491,14 +491,14 @@ class Solver:
     def reset(self, n_particles: ti.template()):
         self.n_particles[None] = n_particles
         for i in range(self.n_particles[None]):
+            self.particle_color[i] = Color.Water if self.initial_phase[i] == Phase.Water else Color.Ice
             self.particle_position[i] = self.initial_position[i]
             self.particle_velocity[i] = self.initial_velocity[i]
             self.particle_mass[i] = self.particle_vol * self.rho_0
             self.particle_inv_lambda[i] = 1 / self.lambda_0[None]
             self.particle_FE[i] = ti.Matrix([[1, 0], [0, 1]])
             self.particle_C[i] = ti.Matrix.zero(float, 2, 2)
-            self.particle_phase[i] = Phase.Water
-            self.particle_color[i] = Color.Water
+            self.particle_phase[i] = self.initial_phase[i]
             self.particle_JE[i] = 1
             self.particle_JP[i] = 1
 
