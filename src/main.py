@@ -4,6 +4,11 @@ from geometries import Circle
 from solver import Solver
 from enums import Phase
 
+import taichi as ti
+
+# ti.init(arch=ti.cpu, debug=True)
+ti.init(arch=ti.gpu)
+
 
 def main():
     configurations = [
@@ -48,7 +53,7 @@ def main():
     print("-" * 150)
 
     quality = 1
-    max_particles = 100_000 # TODO: find reasonable amount
+    max_particles = 100_000  # TODO: find reasonable amount
     solver = Solver(quality=quality, max_particles=max_particles)
     renderer = Renderer(solver=solver, configurations=configurations)
     renderer.run()

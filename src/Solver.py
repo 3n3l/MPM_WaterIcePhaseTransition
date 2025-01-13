@@ -2,9 +2,6 @@ from taichi.linalg import MatrixFreeCG, LinearOperator
 from enums import Classification, Color, Phase
 import taichi as ti
 
-# ti.init(arch=ti.cpu, debug=True)
-ti.init(arch=ti.gpu)
-
 WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
 ICE_CONDUCTIVITY = 2.33
 WATER_HEAT_CAPACITY = 4.186  # j/dC
