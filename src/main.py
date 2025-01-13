@@ -50,11 +50,9 @@ def main():
             name="Circle and Squares (Water + Ice)",
             geometries=[
                 Circle(Phase.Water, 0.1, 15_000, (0, -3), (0.5, 0.5)),
-                Square(Phase.Ice, 0.05, 500, (0, 0), (0.10, 0.05)),
                 Square(Phase.Ice, 0.05, 500, (0, 0), (0.25, 0.05)),
-                Square(Phase.Ice, 0.05, 500, (0, 0), (0.475, 0.05)),
-                Square(Phase.Ice, 0.05, 500, (0, 0), (0.70, 0.05)),
-                Square(Phase.Ice, 0.05, 500, (0, 0), (0.85, 0.05)),
+                Square(Phase.Ice, 0.05, 500, (0, 0), (0.5, 0.05)),
+                Square(Phase.Ice, 0.05, 500, (0, 0), (0.75, 0.05)),
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.2,  # Poisson's ratio (0.2)
