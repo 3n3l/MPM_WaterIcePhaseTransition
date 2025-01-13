@@ -11,7 +11,7 @@ class Renderer:
         solver: Solver,
         configurations: list[Configuration],
     ) -> None:
-        # TODO: make a list of solvers?!
+        # The MPM solver.
         self.solver = solver
 
         # Parameters to control the simulation
@@ -30,31 +30,14 @@ class Renderer:
         # Load the initial configuration
         self.configuration_id = 0
         self.configurations = configurations
-        self.model = configurations[self.configuration_id]
-        self.load_configuration()
+        self.configuration = configurations[self.configuration_id]
+        self.solver.load(self.configuration)
 
     def reset(self):
         self.frame = 0
         self.directory = datetime.now().strftime("%d%m%Y_%H%M")
         os.makedirs(f".output/{self.directory}")
         self.solver.reset()
-
-    def load_configuration(self):
-        self.solver.load(
-            self.model.n_particles,
-            self.model.position,
-            self.model.velocity,
-            self.model.phase,
-        )
-        self.solver.stickiness[None] = self.model.stickiness
-        self.solver.friction[None] = self.model.friction
-        self.solver.lambda_0[None] = self.model.lambda_0
-        self.solver.theta_c[None] = self.model.theta_c
-        self.solver.theta_s[None] = self.model.theta_s
-        self.solver.zeta[None] = self.model.zeta
-        self.solver.mu_0[None] = self.model.mu_0
-        self.solver.nu[None] = self.model.nu
-        self.solver.E[None] = self.model.E
 
     def handle_events(self):
         if self.window.get_event(ti.ui.PRESS):
@@ -75,8 +58,8 @@ class Renderer:
                 self.configuration_id = i
         if self.configuration_id != prev_configuration_id:
             _id = self.configuration_id
-            self.model = self.configurations[_id]
-            self.load_configuration()
+            self.configuration = self.configurations[_id]
+            self.solver.load(self.configuration)
             self.is_paused = True
             self.solver.reset()
 

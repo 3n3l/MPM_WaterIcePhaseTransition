@@ -488,14 +488,25 @@ class Solver:
             self.particle_velocity[p] = nv
 
     @ti.kernel
-    def load(self, n_particles: int, position: ti.template(), velocity: ti.template(), phase: ti.template()):
-        self.n_particles[None] = n_particles
+    def load(self, configuration: ti.template()):  # pyright: ignore
+        # Load the properties from the given configuration.
+        self.n_particles[None] = configuration.n_particles
+        self.stickiness[None] = configuration.stickiness
+        self.friction[None] = configuration.friction
+        self.lambda_0[None] = configuration.lambda_0
+        self.theta_c[None] = configuration.theta_c
+        self.theta_s[None] = configuration.theta_s
+        self.zeta[None] = configuration.zeta
+        self.mu_0[None] = configuration.mu_0
+        self.nu[None] = configuration.nu
+        self.E[None] = configuration.E
+
+        # Set the first n_particles to the given values, all others are reset.
         for p in self.initial_position:
-            # We set the first n_particles to the given values, all other are reset.
-            if p < n_particles:
-                self.initial_position[p] = position[p]
-                self.initial_velocity[p] = velocity[p]
-                self.initial_phase[p] = phase[p]
+            if p < configuration.n_particles:
+                self.initial_position[p] = configuration.position[p]
+                self.initial_velocity[p] = configuration.velocity[p]
+                self.initial_phase[p] = configuration.phase[p]
             else:
                 self.initial_position[p] = 0
                 self.initial_velocity[p] = 0
