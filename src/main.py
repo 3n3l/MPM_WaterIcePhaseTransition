@@ -1,6 +1,6 @@
-from Configuration import Configuration
-from Solver import Solver, Phase
-from Renderer import Renderer
+from configurations import Configuration
+from solver import Solver, Phase
+from renderer import Renderer
 from geometries import Circle
 
 

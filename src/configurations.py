@@ -1,8 +1,8 @@
 from functools import reduce
+from geometries import Geometry
+
 import taichi as ti
 import numpy as np
-
-from geometries import Geometry
 
 
 @ti.data_oriented

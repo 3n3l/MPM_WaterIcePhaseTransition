@@ -1,6 +1,7 @@
-from Configuration import Configuration
-from Solver import Solver
+from configurations import Configuration
 from datetime import datetime
+from solver import Solver
+
 import taichi as ti
 import os
 
