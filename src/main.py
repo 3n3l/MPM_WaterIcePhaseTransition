@@ -6,18 +6,41 @@ from geometries import Circle
 
 def main():
     quality = 1
-    max_particles = 3_000 * (quality**2)
+    max_particles = 100_000 # TODO: find reasonable amount
     configurations = [
         Configuration(
-            name="Spherefall (slippery)",
-            geometries=[Circle(Phase.Water, 0.1, 3000, (0, 0), (0.5, 0.5))],
+            name="Spherefall (Water)",
+            geometries=[
+                Circle(Phase.Water, 0.08, 3000, (0, 0), (0.5, 0.25)),
+            ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.2,  # Poisson's ratio (0.2)
             zeta=10,  # Hardening coefficient (10)
             theta_c=2.5e-2,  # Critical compression (2.5e-2)
             theta_s=5.0e-3,  # Critical stretch (7.5e-3)
-            stickiness=2,  # Higher value means a stickier border
-            friction=2,  # Higher value means the border has more friction
+        ),
+        Configuration(
+            name="Spherefall (Ice)",
+            geometries=[
+                Circle(Phase.Ice, 0.08, 3000, (0, 0), (0.5, 0.25)),
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ),
+        Configuration(
+            name="Spherefall (Water + Ice)",
+            geometries=[
+                Circle(Phase.Water, 0.08, 3000, (0, 0), (0.5, 0.5)),
+                Circle(Phase.Ice, 0.08, 3000, (0, 0), (0.5, 0.25)),
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
         ),
     ]
 
