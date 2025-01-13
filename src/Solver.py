@@ -2,7 +2,7 @@ from taichi.linalg import MatrixFreeCG, LinearOperator
 import taichi as ti
 
 # ti.init(arch=ti.cpu, debug=True)
-ti.init(arch=ti.vulkan)
+ti.init(arch=ti.gpu)
 
 WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
 ICE_CONDUCTIVITY = 2.33
@@ -488,19 +488,32 @@ class Solver:
             self.particle_velocity[p] = nv
 
     @ti.kernel
-    def reset(self, n_particles: ti.template()):
+    def load(self, n_particles: int, position: ti.template(), velocity: ti.template(), phase: ti.template()):
         self.n_particles[None] = n_particles
-        for i in range(self.n_particles[None]):
-            self.particle_color[i] = Color.Water if self.initial_phase[i] == Phase.Water else Color.Ice
-            self.particle_position[i] = self.initial_position[i]
-            self.particle_velocity[i] = self.initial_velocity[i]
-            self.particle_mass[i] = self.particle_vol * self.rho_0
-            self.particle_inv_lambda[i] = 1 / self.lambda_0[None]
-            self.particle_FE[i] = ti.Matrix([[1, 0], [0, 1]])
-            self.particle_C[i] = ti.Matrix.zero(float, 2, 2)
-            self.particle_phase[i] = self.initial_phase[i]
-            self.particle_JE[i] = 1
-            self.particle_JP[i] = 1
+        for p in self.initial_position:
+            # We set the first n_particles to the given values, all other are reset.
+            if p < n_particles:
+                self.initial_position[p] = position[p]
+                self.initial_velocity[p] = velocity[p]
+                self.initial_phase[p] = phase[p]
+            else:
+                self.initial_position[p] = 0
+                self.initial_velocity[p] = 0
+                self.initial_phase[p] = 0
+
+    @ti.kernel
+    def reset(self):
+        for p in self.particle_position:
+            self.particle_color[p] = Color.Water if self.initial_phase[p] == Phase.Water else Color.Ice
+            self.particle_mass[p] = self.particle_vol * self.rho_0
+            self.particle_inv_lambda[p] = 1 / self.lambda_0[None]
+            self.particle_position[p] = self.initial_position[p]
+            self.particle_velocity[p] = self.initial_velocity[p]
+            self.particle_FE[p] = ti.Matrix([[1, 0], [0, 1]])
+            self.particle_C[p] = ti.Matrix.zero(float, 2, 2)
+            self.particle_phase[p] = self.initial_phase[p]
+            self.particle_JE[p] = 1
+            self.particle_JP[p] = 1
 
     def substep(self):
         for _ in range(int(2e-3 // self.dt)):

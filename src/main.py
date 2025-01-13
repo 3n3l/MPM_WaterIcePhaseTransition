@@ -5,8 +5,6 @@ from geometries import Circle
 
 
 def main():
-    quality = 1
-    max_particles = 100_000 # TODO: find reasonable amount
     configurations = [
         Configuration(
             name="Spherefall (Water)",
@@ -48,6 +46,8 @@ def main():
     print("[Hint] Press R to [R]eset, P|SPACE to [P]ause/un[P]ause and S|BACKSPACE to [S]tart recording!")
     print("-" * 150)
 
+    quality = 1
+    max_particles = 100_000 # TODO: find reasonable amount
     solver = Solver(quality=quality, max_particles=max_particles)
     renderer = Renderer(solver=solver, configurations=configurations)
     renderer.run()

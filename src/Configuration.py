@@ -5,7 +5,7 @@ import numpy as np
 from geometries import Geometry
 
 
-# @ti.data_oriented
+@ti.data_oriented
 class Configuration:
     """This class represents a starting configuration for the MLS-MPM algorithm."""
 
@@ -21,13 +21,6 @@ class Configuration:
         theta_c=2.5e-2,  # Critical compression (2.5e-2)
         theta_s=7.5e-3,  # Critical stretch (7.5e-3)
     ):
-        # n = position.shape[0]
-        # m = velocity.shape[0]
-        # assert n == m, "Positions and velocities shape not matching!"
-
-        # self.group_size = position.shape[0]
-        # self.velocity = velocity
-        # self.position = position
         self.E = E
         self.nu = nu
         self.name = name

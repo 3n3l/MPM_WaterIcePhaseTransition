@@ -24,7 +24,7 @@ class Circle(Geometry):
         self.n_particles = n_particles
         self.position = np.zeros(shape=(n_particles, 2), dtype=np.float32)
         self.velocity = np.zeros(shape=(n_particles, 2), dtype=np.float32)
-        self.phase = np.full(shape=n_particles, fill_value=phase, dtype=np.float32)
+        self.phase = np.full(shape=n_particles, fill_value=phase, dtype=np.int32)
 
         # Create the circle
         for i in range(n_particles):
@@ -34,4 +34,3 @@ class Circle(Geometry):
             y = (r * np.cos(t)) + coordinates[1]
             self.velocity[i] = velocity
             self.position[i] = [x, y]
-        print("Geometry", self.position)
