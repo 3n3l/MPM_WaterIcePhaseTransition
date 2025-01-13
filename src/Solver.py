@@ -1,4 +1,5 @@
 from taichi.linalg import MatrixFreeCG, LinearOperator
+from enums import Classification, Color, Phase
 import taichi as ti
 
 # ti.init(arch=ti.cpu, debug=True)
@@ -10,22 +11,6 @@ WATER_HEAT_CAPACITY = 4.186  # j/dC
 ICE_HEAT_CAPACITY = 2.093  # j/dC
 LATENT_HEAT = 0.334  # J/kg
 GRAVITY = -9.81
-
-
-class Classification:
-    Empty = 0
-    Colliding = 1
-    Interior = 2
-
-
-class Phase:
-    Ice = 0
-    Water = 1
-
-
-class Color:
-    Ice = [0.8, 0.8, 1]
-    Water = [0.4, 0.4, 1]
 
 
 @ti.data_oriented

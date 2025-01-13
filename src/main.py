@@ -1,7 +1,8 @@
 from configurations import Configuration
-from solver import Solver, Phase
 from renderer import Renderer
 from geometries import Circle
+from solver import Solver
+from enums import Phase
 
 
 def main():
