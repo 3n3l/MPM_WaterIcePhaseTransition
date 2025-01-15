@@ -508,6 +508,23 @@ class Solver:
             self.particle_JE[p] = 1
             self.particle_JP[p] = 1
 
+    @ti.kernel
+    # def add(self, n: int, p: int, x: ti.template(), v: ti.template()):  # pyright: ignore
+    def add_geometry(self, g: ti.template()):  # pyright: ignore
+        for i in range(self.n_particles[None], self.n_particles[None] + g.n_particles):
+            self.particle_color[i] = Color.Water
+            self.particle_mass[i] = self.particle_vol * self.rho_0
+            self.particle_inv_lambda[i] = 1 / self.lambda_0[None]
+            self.particle_position[i][0] = ti.sin(2 * ti.math.pi * ti.random()) * 0.02 * ti.sqrt(ti.random()) + 0.5
+            self.particle_position[i][1] = ti.cos(2 * ti.math.pi * ti.random()) * 0.02 * ti.sqrt(ti.random()) + 0.8
+            self.particle_velocity[i] = ti.Vector([0, -1])
+            self.particle_FE[i] = ti.Matrix([[1, 0], [0, 1]])
+            self.particle_C[i] = ti.Matrix.zero(float, 2, 2)
+            self.particle_phase[i] = Phase.Water
+            self.particle_JE[i] = 1
+            self.particle_JP[i] = 1
+        self.n_particles[None] += g.n_particles
+
     def substep(self):
         for _ in range(int(2e-3 // self.dt)):
             self.reset_grids()

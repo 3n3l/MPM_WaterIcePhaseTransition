@@ -15,7 +15,10 @@ def main():
         Configuration(
             name="Spherefall (Water)",
             geometries=[
-                Circle(Phase.Water, 0.08, 3000, (0, 0), (0.5, 0.25)),
+                # Circle(Phase.Water, 0.01, 1000, (0, 0), (0.5, 0.25)),
+                Square(Phase.Ice, 0.05, 500, (0, 0), (0.25, 0.05)),
+                Square(Phase.Ice, 0.05, 500, (0, 0), (0.5, 0.05)),
+                Square(Phase.Ice, 0.05, 500, (0, 0), (0.75, 0.05)),
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.2,  # Poisson's ratio (0.2)
@@ -67,7 +70,7 @@ def main():
     print("-" * 150)
 
     quality = 1
-    max_particles = 100_000  # TODO: find reasonable amount
+    max_particles = 300_000  # TODO: find reasonable amount
     solver = Solver(quality=quality, max_particles=max_particles)
     renderer = Renderer(solver=solver, configurations=configurations)
     renderer.run()

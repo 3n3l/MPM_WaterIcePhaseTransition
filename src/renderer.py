@@ -1,5 +1,7 @@
 from configurations import Configuration
 from datetime import datetime
+from enums import Phase
+from geometries import Circle, Square
 from solver import Solver
 
 import taichi as ti
@@ -113,17 +115,28 @@ class Renderer:
     def render(self):
         self.canvas.set_background_color((0.054, 0.06, 0.09))
         self.canvas.circles(
-            centers=self.solver.particle_position, radius=0.0015, per_vertex_color=self.solver.particle_color
+            per_vertex_color=self.solver.particle_color,
+            centers=self.solver.particle_position,
+            radius=0.0015,
         )
         if self.should_write_to_disk and not self.is_paused and not self.is_showing_settings:
             self.video_manager.write_frame(self.window.get_image_buffer_as_numpy())
         self.window.show()
 
     def run(self):
+        frame = 0
+        c = Configuration(
+            name="aaaaa",
+            geometries=[Circle(Phase.Water, 0.25, 100, (0, -1), (0.5, 0.5))],
+        )
+
         self.solver.reset()
         while self.window.running:
             self.handle_events()
             self.show_settings()
             if not self.is_paused:
                 self.solver.substep()
+                if 10 < frame < 200:
+                    self.solver.add_geometry(c)
+                frame += 1
             self.render()
