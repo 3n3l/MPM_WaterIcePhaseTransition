@@ -18,7 +18,7 @@ class Renderer:
         self.solver = solver
 
         # Parameters to control the simulation
-        self.window = ti.ui.Window(name="~TBD~", res=(720, 720), fps_limit=60)
+        self.window = ti.ui.Window(name="MPM - Water and Ice with Phase Transition", res=(720, 720), fps_limit=60)
         self.gui = self.window.get_gui()
         self.canvas = self.window.get_canvas()
         self.is_paused = True
