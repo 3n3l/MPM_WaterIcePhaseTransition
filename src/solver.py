@@ -147,13 +147,18 @@ class Solver:
             U, sigma, V = ti.svd(self.particle_FE[p])
             JE, JP = 1.0, 1.0
             for d in ti.static(range(self.n_dimensions)):
-                # Clamp singular values to [1 - theta_c, 1 + theta_s]
                 singular_value = float(sigma[d, d])
-                clamped = max(singular_value, 1 - self.theta_c[None])
-                clamped = min(clamped, 1 + self.theta_s[None])
-                sigma[d, d] = clamped
-                JP *= singular_value / clamped
-                JE *= clamped
+                # Clamp singular values to [1 - theta_c, 1 + theta_s]
+                if self.particle_phase[p] == Phase.Ice:
+                    clamped = singular_value
+                    clamped = max(singular_value, 1 - self.theta_c[None])
+                    clamped = min(clamped, 1 + self.theta_s[None])
+                    sigma[d, d] = clamped
+                    JP *= singular_value / clamped
+                    JE *= clamped
+                else:
+                    JP *= singular_value
+                    JE *= singular_value
 
             la = self.lambda_0[None]
             mu = self.mu_0[None]
