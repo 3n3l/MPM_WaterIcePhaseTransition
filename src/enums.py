@@ -15,5 +15,5 @@ class Color:
 
 
 class State:
+    Disabled = 0
     Enabled = 1
-    Disabled = 1

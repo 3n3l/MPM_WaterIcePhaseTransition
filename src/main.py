@@ -20,7 +20,7 @@ def main():
             name="Spherefall (Water)",
             geometries=[
                 # Circle(Phase.Water, 0.01, 1000, (0, 0), (0.5, 0.25)),
-                *[Square(Phase.Water, 0.05, 10, (0, -2), (0.5, 0.8), i) for i in range(10, 1000)],
+                *[Square(Phase.Water, 0.05, 10, (0, -2), (0.5, 0.8), i) for i in range(10, 100)],
                 Square(Phase.Ice, 0.05, 500, (0, 0), (0.25, 0.25)),
                 Square(Phase.Ice, 0.05, 500, (0, 0), (0.5, 0.05)),
                 Square(Phase.Ice, 0.05, 500, (0, 0), (0.75, 0.05)),

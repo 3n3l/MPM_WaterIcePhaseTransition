@@ -99,7 +99,6 @@ class Solver:
 
         ### NEW: fields to enable sources and sinks
         self.particle_state = ti.field(dtype=int, shape=max_particles)
-        self.particle_is_not_active = ti.field(dtype=bool, shape=max_particles)
         self.particle_frame_threshold = ti.field(dtype=int, shape=max_particles)
         self.initial_particle_state = ti.field(dtype=int, shape=max_particles)
         self.initial_frame_threshold = ti.field(dtype=int, shape=max_particles)
@@ -150,20 +149,10 @@ class Solver:
         for p in ti.ndrange(self.n_particles[None]):
             # Check whether the particle can be enabled.
             if self.particle_frame_threshold[p] == frame:
-                # self.particle_state[p] = State.Enabled
-                self.particle_is_not_active[p] = False
+                self.particle_state[p] = State.Enabled
 
             # We only update enabled particles.
-            # print(self.particle_state[p] == State.Disabled)
-            # print(self.particle_state[p] != State.Disabled)
-            # print(self.particle_state[p] == State.Enabled)
-            # print(self.particle_state[p] != State.Enabled)
-            # print("-" * 100)
-            if self.particle_is_not_active[p]:
-            # if self.particle_state[p] == State.Disabled:
-                # print("HELLO??")
-                # print(self.particle_state[p], State.Disabled)
-                # print("-" * 100)
+            if self.particle_state[p] == State.Disabled:
                 continue
 
             # Deformation gradient update.
@@ -461,8 +450,7 @@ class Solver:
     def grid_to_particle(self):
         for p in ti.ndrange(self.n_particles[None]):
             # We only update enabled particles.
-            # if self.particle_state[p] == State.Disabled:
-            if self.particle_is_not_active[p]:
+            if self.particle_state[p] == State.Disabled:
                 continue
 
             x_stagger = ti.Vector([self.dx / 2, 0])
@@ -541,8 +529,6 @@ class Solver:
         for p in self.particle_position:
             self.particle_color[p] = Color.Water if self.initial_phase[p] == Phase.Water else Color.Ice
             self.particle_mass[p] = self.particle_vol * self.rho_0
-
-            self.particle_is_not_active[p] = True
 
             self.particle_state[p] = self.initial_particle_state[p]
             self.particle_frame_threshold[p] = self.initial_frame_threshold[p]

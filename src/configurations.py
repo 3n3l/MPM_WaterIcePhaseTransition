@@ -32,8 +32,6 @@ class Configuration:
         self.mu_0 = self.E / (2 * (1 + self.nu))
         self.lambda_0 = self.E * self.nu / ((1 + self.nu) * (1 - 2 * self.nu))
 
-        print(geometries)
-
         # Properties.
         self.n_particles = reduce(lambda sum, g: sum + g.n_particles, geometries, 0)
 
