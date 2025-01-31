@@ -69,7 +69,6 @@ class Renderer:
                 self.solver.particle_state[p] = State.Disabled
                 self.solver.particle_phase[p] = Phase.Water
 
-            self.solver.particle_to_be_drawn[p] = [999, 999]  # TODO: we might not need this
             self.solver.particle_mass[p] = self.solver.particle_vol * self.solver.rho_0
             self.solver.particle_inv_lambda[p] = 1 / self.solver.lambda_0[None]
             self.solver.particle_FE[p] = ti.Matrix([[1, 0], [0, 1]])
@@ -150,7 +149,7 @@ class Renderer:
         self.canvas.set_background_color(Color.Background)
         self.canvas.circles(
             per_vertex_color=self.solver.particle_color,
-            centers=self.solver.particle_position,
+            centers=self.solver.shown_particles,
             radius=0.0015,
         )
         if self.should_write_to_disk and not self.is_paused and not self.is_showing_settings:

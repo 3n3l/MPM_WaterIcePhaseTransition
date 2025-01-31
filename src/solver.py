@@ -38,7 +38,7 @@ class Solver:
         self.n_dimensions = 2
 
         # Parameters to control melting/freezing
-        # TODO: these are variables and need to be put into fields
+        # TODO: these are variables and need toof the particle, be put into fields
         # TODO: these depend not only on phase, but also on temperature,
         #       so ideally they are functions of these two variables
         # self.heat_conductivity = 0.55 # Water: 0.55, Ice: 2.33
@@ -87,16 +87,17 @@ class Solver:
         self.particle_mass = ti.field(dtype=ti.float32, shape=max_particles)
         self.particle_FE = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
         self.particle_C = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
-
         self.particle_JE = ti.field(dtype=float, shape=max_particles)
         self.particle_JP = ti.field(dtype=float, shape=max_particles)
 
         ### NEW: fields to enable sources and sinks
+        ### TODO: move them somewhere else
+        ### TODO: rename this
         self.particle_state = ti.field(dtype=int, shape=max_particles)
         self.particle_frame_threshold = ti.field(dtype=int, shape=max_particles)
-        self.initial_particle_state = ti.field(dtype=int, shape=max_particles)
-        self.initial_frame_threshold = ti.field(dtype=int, shape=max_particles)
-        self.particle_to_be_drawn = ti.Vector.field(2, dtype=ti.float32, shape=max_particles)
+        # shown_particles holds the particles which will be displayed in the scene
+        # TODO: rename this
+        self.shown_particles = ti.Vector.field(2, dtype=ti.float32, shape=max_particles)
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
         self.stickiness = ti.field(dtype=float, shape=())
@@ -485,6 +486,10 @@ class Solver:
             self.particle_position[p] += self.dt * nv
             self.particle_temperature[p] = nt
             self.particle_velocity[p] = nv
+
+            # The particle_position holds the positions for all particles,
+            # pushing the position into shown_particles will draw the particle.
+            self.shown_particles[p] = self.particle_position[p]
 
     def substep(self, frame: int) -> None:
         for _ in range(int(2e-3 // self.dt)):
