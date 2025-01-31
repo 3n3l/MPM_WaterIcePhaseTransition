@@ -10,8 +10,9 @@ class Phase:
 
 
 class Color:
-    Ice = [0.8, 0.8, 1]
-    Water = [0.4, 0.4, 1]
+    Ice = (0.8, 0.8, 1)
+    Water = (0.4, 0.4, 1)
+    Background = (0.054, 0.06, 0.09)
 
 
 class State:

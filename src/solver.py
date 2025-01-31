@@ -91,19 +91,12 @@ class Solver:
         self.particle_JE = ti.field(dtype=float, shape=max_particles)
         self.particle_JP = ti.field(dtype=float, shape=max_particles)
 
-        # Initial properties to reset to.
-        # TODO: these can be replaced with the fields from the configuration
-        self.initial_position = ti.Vector.field(2, dtype=float, shape=max_particles)
-        self.initial_velocity = ti.Vector.field(2, dtype=float, shape=max_particles)
-        self.initial_phase = ti.field(dtype=float, shape=max_particles)
-
         ### NEW: fields to enable sources and sinks
         self.particle_state = ti.field(dtype=int, shape=max_particles)
         self.particle_frame_threshold = ti.field(dtype=int, shape=max_particles)
         self.initial_particle_state = ti.field(dtype=int, shape=max_particles)
         self.initial_frame_threshold = ti.field(dtype=int, shape=max_particles)
         self.particle_to_be_drawn = ti.Vector.field(2, dtype=ti.float32, shape=max_particles)
-
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
         self.stickiness = ti.field(dtype=float, shape=())
@@ -205,15 +198,15 @@ class Solver:
 
             # APIC momentum + MLS-MPM stress contribution [Hu et al. 2018, Eqn. 29].
             affine = stress + self.particle_mass[p] * self.particle_C[p]
-            x_affine = affine @ ti.Vector([1, 0])
-            y_affine = affine @ ti.Vector([0, 1])
+            x_affine = affine @ ti.Vector([1, 0])  # pyright: ignore
+            y_affine = affine @ ti.Vector([0, 1])  # pyright: ignore
 
             # We use an additional offset of 0.5 for element-wise flooring.
             x_stagger = ti.Vector([self.dx / 2, 0])
             y_stagger = ti.Vector([0, self.dx / 2])
-            c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)
-            x_base = (self.particle_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)
-            y_base = (self.particle_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)
+            c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)  # pyright: ignore
+            x_base = (self.particle_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)  # pyright: ignore
+            y_base = (self.particle_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)  # pyright: ignore
             c_fx = self.particle_position[p] * self.inv_dx - c_base.cast(float)
             x_fx = self.particle_position[p] * self.inv_dx - x_base.cast(float)
             y_fx = self.particle_position[p] * self.inv_dx - y_base.cast(float)
@@ -455,9 +448,9 @@ class Solver:
 
             x_stagger = ti.Vector([self.dx / 2, 0])
             y_stagger = ti.Vector([0, self.dx / 2])
-            c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)
-            x_base = (self.particle_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)
-            y_base = (self.particle_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)
+            c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)  # pyright: ignore
+            x_base = (self.particle_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)  # pyright: ignore
+            y_base = (self.particle_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)  # pyright: ignore
             c_fx = self.particle_position[p] * self.inv_dx - c_base.cast(float)
             x_fx = self.particle_position[p] * self.inv_dx - x_base.cast(float)
 
@@ -492,72 +485,6 @@ class Solver:
             self.particle_position[p] += self.dt * nv
             self.particle_temperature[p] = nt
             self.particle_velocity[p] = nv
-
-    @ti.kernel
-    def load(self, configuration: ti.template()):  # pyright: ignore
-        # Load the properties from the given configuration.
-        self.n_particles[None] = configuration.n_particles
-        self.stickiness[None] = configuration.stickiness
-        self.friction[None] = configuration.friction
-        self.lambda_0[None] = configuration.lambda_0
-        self.theta_c[None] = configuration.theta_c
-        self.theta_s[None] = configuration.theta_s
-        self.zeta[None] = configuration.zeta
-        self.mu_0[None] = configuration.mu_0
-        self.nu[None] = configuration.nu
-        self.E[None] = configuration.E
-
-        # Set the first n_particles to the given values, all others are reset.
-        for p in self.initial_position:
-            if p < configuration.n_particles:
-                self.initial_position[p] = configuration.position[p]
-                self.initial_velocity[p] = configuration.velocity[p]
-                self.initial_phase[p] = configuration.phase[p]
-
-                self.initial_particle_state[p] = configuration.state[p]
-                self.initial_frame_threshold[p] = configuration.frame_threshold[p]
-            else:
-                self.initial_position[p] = 0
-                self.initial_velocity[p] = 0
-                self.initial_phase[p] = 0
-
-                self.initial_particle_state[p] = State.Disabled
-                self.initial_frame_threshold[p] = 0
-
-    @ti.kernel
-    def reset(self):
-        for p in self.particle_position:
-            self.particle_color[p] = Color.Water if self.initial_phase[p] == Phase.Water else Color.Ice
-            self.particle_mass[p] = self.particle_vol * self.rho_0
-
-            self.particle_state[p] = self.initial_particle_state[p]
-            self.particle_frame_threshold[p] = self.initial_frame_threshold[p]
-            self.particle_to_be_drawn[p] = [999, 999]
-
-            self.particle_inv_lambda[p] = 1 / self.lambda_0[None]
-            self.particle_position[p] = self.initial_position[p]
-            self.particle_velocity[p] = self.initial_velocity[p]
-            self.particle_FE[p] = ti.Matrix([[1, 0], [0, 1]])
-            self.particle_C[p] = ti.Matrix.zero(float, 2, 2)
-            self.particle_phase[p] = self.initial_phase[p]
-            self.particle_JE[p] = 1
-            self.particle_JP[p] = 1
-
-    # @ti.kernel
-    # def add_geometry(self, g: ti.template()):  # pyright: ignore
-    #     for i in range(self.n_particles[None], self.n_particles[None] + g.n_particles):
-    #         self.particle_color[i] = Color.Water
-    #         self.particle_mass[i] = self.particle_vol * self.rho_0
-    #         self.particle_inv_lambda[i] = 1 / self.lambda_0[None]
-    #         self.particle_position[i][0] = ti.sin(2 * ti.math.pi * ti.random()) * 0.02 * ti.sqrt(ti.random()) + 0.5
-    #         self.particle_position[i][1] = ti.cos(2 * ti.math.pi * ti.random()) * 0.02 * ti.sqrt(ti.random()) + 0.8
-    #         self.particle_velocity[i] = ti.Vector([0, -1])
-    #         self.particle_FE[i] = ti.Matrix([[1, 0], [0, 1]])
-    #         self.particle_C[i] = ti.Matrix.zero(float, 2, 2)
-    #         self.particle_phase[i] = Phase.Water
-    #         self.particle_JE[i] = 1
-    #         self.particle_JP[i] = 1
-    #     self.n_particles[None] += g.n_particles
 
     def substep(self, frame: int) -> None:
         for _ in range(int(2e-3 // self.dt)):

@@ -1,19 +1,15 @@
 from configurations import Configuration
+from enums import Phase, Color, State
 from datetime import datetime
-from enums import Phase
-from geometries import Circle, Square
 from solver import Solver
 
 import taichi as ti
 import os
 
 
+@ti.data_oriented
 class Renderer:
-    def __init__(
-        self,
-        solver: Solver,
-        configurations: list[Configuration],
-    ) -> None:
+    def __init__(self, solver: Solver, configurations: list[Configuration]) -> None:
         # The MPM solver.
         self.solver = solver
 
@@ -30,17 +26,56 @@ class Renderer:
         self.parent_dir = ".output"
         if not os.path.exists(self.parent_dir):
             os.makedirs(self.parent_dir)
-        self.frame = 0 # We enable particles depending on the current frame
+        self.frame = 0  # We enable particles depending on the current frame
 
         # Load the initial configuration
         self.configuration_id = 0
         self.configurations = configurations
         self.configuration = configurations[self.configuration_id]
-        self.solver.load(self.configuration)
 
     def reset(self):
+        self.reset_solver(self.configuration)
         self.frame = 0
-        self.solver.reset()
+
+    @ti.kernel
+    def reset_solver(self, configuration: ti.template()):  # pyright: ignore
+        self.solver.n_particles[None] = configuration.n_particles
+        self.solver.stickiness[None] = configuration.stickiness
+        self.solver.friction[None] = configuration.friction
+        self.solver.lambda_0[None] = configuration.lambda_0
+        self.solver.theta_c[None] = configuration.theta_c
+        self.solver.theta_s[None] = configuration.theta_s
+        self.solver.zeta[None] = configuration.zeta
+        self.solver.mu_0[None] = configuration.mu_0
+        self.solver.nu[None] = configuration.nu
+        self.solver.E[None] = configuration.E
+
+        for p in self.solver.particle_position:
+            if p < configuration.n_particles:
+                self.solver.particle_color[p] = Color.Water if configuration.p_phase[p] == Phase.Water else Color.Ice
+                self.solver.particle_frame_threshold[p] = configuration.p_activity_bound[p]
+                self.solver.particle_position[p] = configuration.p_position[p]
+                self.solver.particle_velocity[p] = configuration.p_velocity[p]
+                self.solver.particle_state[p] = configuration.p_state[p]
+                self.solver.particle_phase[p] = configuration.p_phase[p]
+            else:
+                # TODO: this might be completely irrelevant, as only the first n_particles are used anyway?
+                #       So work can be saved by just ignoring all the other particles and iterating only
+                #       over the configuration.n_particles?
+                self.solver.particle_color[p] = Color.Background
+                self.solver.particle_frame_threshold[p] = 0
+                self.solver.particle_position[p] = [0, 0]
+                self.solver.particle_velocity[p] = [0, 0]
+                self.solver.particle_state[p] = State.Disabled
+                self.solver.particle_phase[p] = Phase.Water
+
+            self.solver.particle_to_be_drawn[p] = [999, 999]  # TODO: we might not need this
+            self.solver.particle_mass[p] = self.solver.particle_vol * self.solver.rho_0
+            self.solver.particle_inv_lambda[p] = 1 / self.solver.lambda_0[None]
+            self.solver.particle_FE[p] = ti.Matrix([[1, 0], [0, 1]])
+            self.solver.particle_C[p] = ti.Matrix.zero(float, 2, 2)
+            self.solver.particle_JE[p] = 1
+            self.solver.particle_JP[p] = 1
 
     def handle_events(self):
         if self.window.get_event(ti.ui.PRESS):
@@ -62,7 +97,6 @@ class Renderer:
         if self.configuration_id != prev_configuration_id:
             _id = self.configuration_id
             self.configuration = self.configurations[_id]
-            self.solver.load(self.configuration)
             self.is_paused = True
             self.reset()
 
@@ -113,7 +147,7 @@ class Renderer:
             self.show_buttons(subwindow)
 
     def render(self):
-        self.canvas.set_background_color((0.054, 0.06, 0.09))
+        self.canvas.set_background_color(Color.Background)
         self.canvas.circles(
             per_vertex_color=self.solver.particle_color,
             centers=self.solver.particle_position,
