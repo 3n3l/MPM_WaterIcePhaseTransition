@@ -73,6 +73,7 @@ class Renderer:
             self.solver.particle_inv_lambda[p] = 1 / self.solver.lambda_0[None]
             self.solver.particle_FE[p] = ti.Matrix([[1, 0], [0, 1]])
             self.solver.particle_C[p] = ti.Matrix.zero(float, 2, 2)
+            self.solver.shown_particles[p] = [0, 0]
             self.solver.particle_JE[p] = 1
             self.solver.particle_JP[p] = 1
 
