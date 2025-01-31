@@ -17,9 +17,8 @@ def main():
 
     configurations = [
         Configuration(
-            name="Spherefall (Water)",
+            name="Simple Spout Source",
             geometries=[
-                # Circle(Phase.Water, 0.01, 1000, (0, 0), (0.5, 0.25)),
                 *[Square(Phase.Water, 0.05, 10, (0, -2), (0.5, 0.8), i) for i in range(10, 100)],
                 Square(Phase.Ice, 0.05, 500, (0, 0), (0.25, 0.25)),
                 Square(Phase.Ice, 0.05, 500, (0, 0), (0.5, 0.05)),
@@ -31,43 +30,65 @@ def main():
             theta_c=2.5e-2,  # Critical compression (2.5e-2)
             theta_s=5.0e-3,  # Critical stretch (7.5e-3)
         ),
-        # Configuration(
-        #     name="Spherefall (Ice)",
-        #     geometries=[
-        #         Circle(Phase.Ice, 0.08, 3000, (0, 0), (0.5, 0.25)),
-        #     ],
-        #     E=1.4e5,  # Young's modulus (1.4e5)
-        #     nu=0.2,  # Poisson's ratio (0.2)
-        #     zeta=10,  # Hardening coefficient (10)
-        #     theta_c=2.5e-2,  # Critical compression (2.5e-2)
-        #     theta_s=5.0e-3,  # Critical stretch (7.5e-3)
-        # ),
-        # Configuration(
-        #     name="Spherefall (Water + Ice)",
-        #     geometries=[
-        #         Circle(Phase.Water, 0.08, 3000, (0, 0), (0.5, 0.5)),
-        #         Circle(Phase.Ice, 0.08, 3000, (0, 0), (0.5, 0.25)),
-        #     ],
-        #     E=1.4e5,  # Young's modulus (1.4e5)
-        #     nu=0.2,  # Poisson's ratio (0.2)
-        #     zeta=10,  # Hardening coefficient (10)
-        #     theta_c=2.5e-2,  # Critical compression (2.5e-2)
-        #     theta_s=5.0e-3,  # Critical stretch (7.5e-3)
-        # ),
-        # Configuration(
-        #     name="Circle and Squares (Water + Ice)",
-        #     geometries=[
-        #         Circle(Phase.Water, 0.1, 15_000, (0, -3), (0.5, 0.5)),
-        #         Square(Phase.Ice, 0.05, 500, (0, 0), (0.25, 0.05)),
-        #         Square(Phase.Ice, 0.05, 500, (0, 0), (0.5, 0.05)),
-        #         Square(Phase.Ice, 0.05, 500, (0, 0), (0.75, 0.05)),
-        #     ],
-        #     E=1.4e5,  # Young's modulus (1.4e5)
-        #     nu=0.2,  # Poisson's ratio (0.2)
-        #     zeta=10,  # Hardening coefficient (10)
-        #     theta_c=2.5e-2,  # Critical compression (2.5e-2)
-        #     theta_s=5.0e-3,  # Critical stretch (7.5e-3)
-        # ),
+        Configuration(
+            name="Simple Blob Source",
+            geometries=[
+                *[Circle(Phase.Ice, 0.05, 3000, (5, 0), (0.1, 0.5), i) for i in range(0, 250, 25)],
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.25,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_s=7.5e-3,  # Critical stretch (7.5e-3)
+        ),
+        Configuration(
+            name="Spherefall (Water)",
+            geometries=[
+                Circle(Phase.Water, 0.08, 5000, (0, 0), (0.5, 0.25)),
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ),
+        Configuration(
+            name="Spherefall (Ice)",
+            geometries=[
+                Circle(Phase.Ice, 0.08, 5000, (0, 0), (0.5, 0.25)),
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ),
+        Configuration(
+            name="Spherefall (Water + Ice)",
+            geometries=[
+                Circle(Phase.Water, 0.08, 3000, (0, 0), (0.5, 0.5)),
+                Circle(Phase.Ice, 0.08, 3000, (0, 0), (0.5, 0.25)),
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ),
+        Configuration(
+            name="Circle and Squares (Water + Ice)",
+            geometries=[
+                Circle(Phase.Water, 0.1, 15_000, (0, -3), (0.5, 0.5)),
+                Square(Phase.Ice, 0.05, 500, (0, 0), (0.25, 0.05)),
+                Square(Phase.Ice, 0.05, 500, (0, 0), (0.5, 0.05)),
+                Square(Phase.Ice, 0.05, 500, (0, 0), (0.75, 0.05)),
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ),
     ]
 
     quality = 1

@@ -32,13 +32,11 @@ class Renderer:
         self.configuration_id = 0
         self.configurations = configurations
         self.configuration = configurations[self.configuration_id]
-
-    def reset(self):
+        self.load_configuration(self.configuration)
         self.reset_solver(self.configuration)
-        self.frame = 0
 
     @ti.kernel
-    def reset_solver(self, configuration: ti.template()):  # pyright: ignore
+    def load_configuration(self, configuration: ti.template()):  # pyright: ignore
         self.solver.n_particles[None] = configuration.n_particles
         self.solver.stickiness[None] = configuration.stickiness
         self.solver.friction[None] = configuration.friction
@@ -50,6 +48,9 @@ class Renderer:
         self.solver.nu[None] = configuration.nu
         self.solver.E[None] = configuration.E
 
+    @ti.kernel
+    def reset_solver(self, configuration: ti.template()):  # pyright: ignore
+        self.solver.current_frame[None] = 0
         for p in self.solver.particle_position:
             if p < configuration.n_particles:
                 self.solver.particle_color[p] = Color.Water if configuration.p_phase[p] == Phase.Water else Color.Ice
@@ -80,7 +81,7 @@ class Renderer:
     def handle_events(self):
         if self.window.get_event(ti.ui.PRESS):
             if self.window.event.key == "r":
-                self.reset()
+                self.reset_solver(self.configuration)
             elif self.window.event.key in [ti.GUI.BACKSPACE, "s"]:
                 self.should_write_to_disk = not self.should_write_to_disk
             elif self.window.event.key in [ti.GUI.SPACE, "p"]:
@@ -98,14 +99,15 @@ class Renderer:
             _id = self.configuration_id
             self.configuration = self.configurations[_id]
             self.is_paused = True
-            self.reset()
+            self.load_configuration(self.configuration)
+            self.reset_solver(self.configuration)
 
     def show_parameters(self, subwindow):
         self.solver.stickiness[None] = subwindow.slider_float("stickiness", self.solver.stickiness[None], 1.0, 5.0)
         self.solver.friction[None] = subwindow.slider_float("friction", self.solver.friction[None], 1.0, 5.0)
         self.solver.theta_c[None] = subwindow.slider_float("theta_c", self.solver.theta_c[None], 1e-2, 3.5e-2)
         self.solver.theta_s[None] = subwindow.slider_float("theta_s", self.solver.theta_s[None], 5.0e-3, 10e-3)
-        self.solver.zeta[None] = subwindow.slider_int("zeta", self.solver.zeta[None], 3, 10)
+        self.solver.zeta[None] = subwindow.slider_int("zeta", self.solver.zeta[None], 3, 20)
         self.solver.nu[None] = subwindow.slider_float("nu", self.solver.nu[None], 0.1, 0.4)
         self.solver.E[None] = subwindow.slider_float("E", self.solver.E[None], 4.8e4, 2.8e5)
         E = self.solver.E[None]
@@ -132,7 +134,7 @@ class Renderer:
                 # Convert stored frames to video and GIF.
                 self.video_manager.make_video(gif=True, mp4=True)
         if subwindow.button(" Reset Particles "):
-            self.reset()
+            self.reset_solver(self.configuration)
         if subwindow.button(" Start Simulation"):
             self.is_paused = False
 
@@ -158,11 +160,10 @@ class Renderer:
         self.window.show()
 
     def run(self):
-        self.reset()
         while self.window.running:
             self.handle_events()
             self.show_settings()
             if not self.is_paused:
-                self.solver.substep(self.frame)
+                self.solver.substep()
                 self.frame += 1
             self.render()

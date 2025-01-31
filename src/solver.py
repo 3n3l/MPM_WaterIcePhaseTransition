@@ -27,6 +27,7 @@ class Solver:
         # self.n_particles = max_particles
         # TODO: move somewhere else
         self.n_particles = ti.field(dtype=ti.int32, shape=())
+        self.current_frame = ti.field(dtype=ti.int32, shape=())
         self.n_grid = 128 * quality
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
@@ -139,10 +140,10 @@ class Solver:
         self.face_volume_y.fill(0)
 
     @ti.kernel
-    def particle_to_grid(self, frame: int):
+    def particle_to_grid(self):
         for p in ti.ndrange(self.n_particles[None]):
             # Check whether the particle can be enabled.
-            if self.particle_frame_threshold[p] == frame:
+            if self.particle_frame_threshold[p] == self.current_frame[None]:
                 self.particle_state[p] = State.Enabled
 
             # We only update enabled particles.
@@ -491,10 +492,11 @@ class Solver:
             # pushing the position into shown_particles will draw the particle.
             self.shown_particles[p] = self.particle_position[p]
 
-    def substep(self, frame: int) -> None:
+    def substep(self) -> None:
+        self.current_frame[None] += 1
         for _ in range(int(2e-3 // self.dt)):
             self.reset_grids()
-            self.particle_to_grid(frame)
+            self.particle_to_grid()
             self.momentum_to_velocity()
             # self.classify_cells()
             # self.solve_pressure()
