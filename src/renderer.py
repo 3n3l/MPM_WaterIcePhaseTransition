@@ -24,11 +24,13 @@ class Renderer:
         self.is_paused = True
         self.should_write_to_disk = False
         self.is_showing_settings = not self.is_paused
+
         # Create a parent directory, in there folders will be created containing
         # newly created frames, videos and GIFs.
         self.parent_dir = ".output"
         if not os.path.exists(self.parent_dir):
             os.makedirs(self.parent_dir)
+        self.frame = 0 # We enable particles depending on the current frame
 
         # Load the initial configuration
         self.configuration_id = 0
@@ -38,14 +40,12 @@ class Renderer:
 
     def reset(self):
         self.frame = 0
-        self.directory = datetime.now().strftime("%d%m%Y_%H%M")
-        os.makedirs(f".output/{self.directory}")
         self.solver.reset()
 
     def handle_events(self):
         if self.window.get_event(ti.ui.PRESS):
             if self.window.event.key == "r":
-                self.solver.reset()
+                self.reset()
             elif self.window.event.key in [ti.GUI.BACKSPACE, "s"]:
                 self.should_write_to_disk = not self.should_write_to_disk
             elif self.window.event.key in [ti.GUI.SPACE, "p"]:
@@ -64,7 +64,7 @@ class Renderer:
             self.configuration = self.configurations[_id]
             self.solver.load(self.configuration)
             self.is_paused = True
-            self.solver.reset()
+            self.reset()
 
     def show_parameters(self, subwindow):
         self.solver.stickiness[None] = subwindow.slider_float("stickiness", self.solver.stickiness[None], 1.0, 5.0)
@@ -85,13 +85,13 @@ class Renderer:
             self.should_write_to_disk = not self.should_write_to_disk
             if self.should_write_to_disk:
                 # Create directory to dump frames, videos and GIFs.
-                date = datetime.now().strftime("%d%m%Y_%H%M")
+                date = datetime.now().strftime("%d%m%Y_%H%M%S")
                 output_dir = f"{self.parent_dir}/{date}"
                 os.makedirs(output_dir)
                 # Create a VideoManager to save frames, videos and GIFs.
                 self.video_manager = ti.tools.VideoManager(
                     output_dir=output_dir,
-                    framerate=24,
+                    framerate=60,
                     automatic_build=False,
                 )
             else:
@@ -124,19 +124,11 @@ class Renderer:
         self.window.show()
 
     def run(self):
-        frame = 0
-        c = Configuration(
-            name="aaaaa",
-            geometries=[Circle(Phase.Water, 0.25, 100, (0, -1), (0.5, 0.5))],
-        )
-
-        self.solver.reset()
+        self.reset()
         while self.window.running:
             self.handle_events()
             self.show_settings()
             if not self.is_paused:
-                self.solver.substep(frame)
-                # if 10 < frame < 200:
-                #     self.solver.add_geometry(c)
-                frame += 1
+                self.solver.substep(self.frame)
+                self.frame += 1
             self.render()
