@@ -38,13 +38,13 @@ def main():
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.25,  # Poisson's ratio (0.2)
             zeta=10,  # Hardening coefficient (10)
-            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_c=8.5e-2,  # Critical compression (2.5e-2)
             theta_s=7.5e-3,  # Critical stretch (7.5e-3)
         ),
         Configuration(
             name="Spherefall (Water)",
             geometries=[
-                Circle(Phase.Water, 0.08, 5000, (0, 0), (0.5, 0.25)),
+                Circle(Phase.Water, 0.06, 4000, (0, 0), (0.5, 0.5)),
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.2,  # Poisson's ratio (0.2)
@@ -55,12 +55,12 @@ def main():
         Configuration(
             name="Spherefall (Ice)",
             geometries=[
-                Circle(Phase.Ice, 0.08, 5000, (0, 0), (0.5, 0.25)),
+                Circle(Phase.Ice, 0.06, 4000, (0, 0), (0.5, 0.5)),
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.2,  # Poisson's ratio (0.2)
             zeta=10,  # Hardening coefficient (10)
-            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_c=8.5e-2,  # Critical compression (2.5e-2)
             theta_s=5.0e-3,  # Critical stretch (7.5e-3)
         ),
         Configuration(

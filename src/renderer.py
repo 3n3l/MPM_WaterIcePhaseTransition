@@ -26,7 +26,6 @@ class Renderer:
         self.parent_dir = ".output"
         if not os.path.exists(self.parent_dir):
             os.makedirs(self.parent_dir)
-        self.frame = 0  # We enable particles depending on the current frame
 
         # Load the initial configuration
         self.configuration_id = 0
@@ -103,10 +102,11 @@ class Renderer:
             self.reset_solver(self.configuration)
 
     def show_parameters(self, subwindow):
-        self.solver.stickiness[None] = subwindow.slider_float("stickiness", self.solver.stickiness[None], 1.0, 5.0)
-        self.solver.friction[None] = subwindow.slider_float("friction", self.solver.friction[None], 1.0, 5.0)
-        self.solver.theta_c[None] = subwindow.slider_float("theta_c", self.solver.theta_c[None], 1e-2, 3.5e-2)
-        self.solver.theta_s[None] = subwindow.slider_float("theta_s", self.solver.theta_s[None], 5.0e-3, 10e-3)
+        # TODO: Implement back stickiness + friction or remove them entirely
+        # self.solver.stickiness[None] = subwindow.slider_float("stickiness", self.solver.stickiness[None], 1.0, 5.0)
+        # self.solver.friction[None] = subwindow.slider_float("friction", self.solver.friction[None], 1.0, 5.0)
+        self.solver.theta_c[None] = subwindow.slider_float("theta_c", self.solver.theta_c[None], 1e-2, 10e-2)
+        self.solver.theta_s[None] = subwindow.slider_float("theta_s", self.solver.theta_s[None], 1e-3, 10e-3)
         self.solver.zeta[None] = subwindow.slider_int("zeta", self.solver.zeta[None], 3, 20)
         self.solver.nu[None] = subwindow.slider_float("nu", self.solver.nu[None], 0.1, 0.4)
         self.solver.E[None] = subwindow.slider_float("E", self.solver.E[None], 4.8e4, 2.8e5)
@@ -165,5 +165,4 @@ class Renderer:
             self.show_settings()
             if not self.is_paused:
                 self.solver.substep()
-                self.frame += 1
             self.render()
