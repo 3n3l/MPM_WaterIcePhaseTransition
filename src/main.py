@@ -94,7 +94,12 @@ def main():
     quality = 1
     max_particles = max([c.n_particles for c in configurations])
     solver = Solver(quality=quality, max_particles=max_particles)
-    renderer = Renderer(solver=solver, configurations=configurations)
+    renderer = Renderer(
+        name="MPM - Water and Ice with Phase Transition",
+        configurations=configurations,
+        res=(720, 720),
+        solver=solver,
+    )
     renderer.run()
 
 

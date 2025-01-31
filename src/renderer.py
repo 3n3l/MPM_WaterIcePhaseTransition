@@ -9,25 +9,35 @@ import os
 
 @ti.data_oriented
 class Renderer:
-    def __init__(self, solver: Solver, configurations: list[Configuration]) -> None:
-        # The MPM solver.
-        self.solver = solver
-
-        # Parameters to control the simulation
-        self.window = ti.ui.Window(name="MPM - Water and Ice with Phase Transition", res=(720, 720), fps_limit=60)
-        self.gui = self.window.get_gui()
+    def __init__(self, name: str, res: tuple[int, int], solver: Solver, configurations: list[Configuration]) -> None:
+        """Constructs a Renderer object, this advances the MLS-MPM solver and renders the updated particle positions.
+        ---
+        Parameters:
+            name: string displayed at the top of the window
+            res: tuple holding window width and height
+            solver: the MLS-MPM solver
+            configurations: list of configurations for the solver
+        """
+        # GGUI.
+        self.window = ti.ui.Window(name, res)
         self.canvas = self.window.get_canvas()
+        self.gui = self.window.get_gui()
+
+        # State.
         self.is_paused = True
         self.should_write_to_disk = False
         self.is_showing_settings = not self.is_paused
 
-        # Create a parent directory, in there folders will be created containing
-        # newly created frames, videos and GIFs.
+        # Create a parent directory, more directories will be created inside this
+        # directory that contain newly created frames, videos and GIFs.
         self.parent_dir = ".output"
         if not os.path.exists(self.parent_dir):
             os.makedirs(self.parent_dir)
 
-        # Load the initial configuration
+        # The MLS-MPM solver.
+        self.solver = solver
+
+        # Load the initial configuration and reset the solver to this configuration.
         self.configuration_id = 0
         self.configurations = configurations
         self.configuration = configurations[self.configuration_id]
@@ -36,6 +46,12 @@ class Renderer:
 
     @ti.kernel
     def load_configuration(self, configuration: ti.template()):  # pyright: ignore
+        """
+        Loads the chosen configuration into the MLS-MPM solver.
+        ---
+        Parameters:
+            configuration: Configuration
+        """
         self.solver.n_particles[None] = configuration.n_particles
         self.solver.stickiness[None] = configuration.stickiness
         self.solver.friction[None] = configuration.friction
@@ -49,6 +65,12 @@ class Renderer:
 
     @ti.kernel
     def reset_solver(self, configuration: ti.template()):  # pyright: ignore
+        """
+        Resets the MLS-MPM solver to the field values of the configuration.
+        ---
+        Parameters:
+            configuration: Configuration
+        """
         self.solver.current_frame[None] = 0
         for p in self.solver.particle_position:
             if p < configuration.n_particles:
@@ -77,7 +99,8 @@ class Renderer:
             self.solver.particle_JE[p] = 1
             self.solver.particle_JP[p] = 1
 
-    def handle_events(self):
+    def handle_events(self) -> None:
+        """Handle key presses arising from window events."""
         if self.window.get_event(ti.ui.PRESS):
             if self.window.event.key == "r":
                 self.reset_solver(self.configuration)
@@ -88,7 +111,14 @@ class Renderer:
             elif self.window.event.key in [ti.GUI.ESCAPE, ti.GUI.EXIT]:
                 self.window.running = False  # Stop the simulation
 
-    def show_configurations(self, subwindow):
+    def show_configurations(self, subwindow) -> None:
+        """
+        Show all possible configurations in the subwindow, choosing one will
+        load that configuration and reset the solver.
+        ---
+        Parameters:
+            subwindow: GGUI subwindow
+        """
         prev_configuration_id = self.configuration_id
         for i in range(len(self.configurations)):
             name = self.configurations[i].name
@@ -101,7 +131,14 @@ class Renderer:
             self.load_configuration(self.configuration)
             self.reset_solver(self.configuration)
 
-    def show_parameters(self, subwindow):
+    def show_parameters(self, subwindow) -> None:
+        """
+        Show all parameters in the subwindow, the user can then adjust these values
+        with sliders which will update the correspoding value in the solver.
+        ---
+        Parameters:
+            subwindow: GGUI subwindow
+        """
         # TODO: Implement back stickiness + friction or remove them entirely
         # self.solver.stickiness[None] = subwindow.slider_float("stickiness", self.solver.stickiness[None], 1.0, 5.0)
         # self.solver.friction[None] = subwindow.slider_float("friction", self.solver.friction[None], 1.0, 5.0)
@@ -115,30 +152,30 @@ class Renderer:
         self.solver.lambda_0[None] = E * nu / ((1 + nu) * (1 - 2 * nu))
         self.solver.mu_0[None] = E / (2 * (1 + nu))
 
-    def show_buttons(self, subwindow):
+    def show_buttons(self, subwindow) -> None:
+        """
+        Show a set of buttons in the subwindow, this mainly holds functions to control the simulation.
+        ---
+        Parameters:
+            subwindow: GGUI subwindow
+        """
         if subwindow.button(" Stop recording  " if self.should_write_to_disk else " Start recording "):
             # This button toggles between saving frames and not saving frames.
             self.should_write_to_disk = not self.should_write_to_disk
             if self.should_write_to_disk:
-                # Create directory to dump frames, videos and GIFs.
-                date = datetime.now().strftime("%d%m%Y_%H%M%S")
-                output_dir = f"{self.parent_dir}/{date}"
-                os.makedirs(output_dir)
-                # Create a VideoManager to save frames, videos and GIFs.
-                self.video_manager = ti.tools.VideoManager(
-                    output_dir=output_dir,
-                    framerate=60,
-                    automatic_build=False,
-                )
+                self.dump_frames()
             else:
-                # Convert stored frames to video and GIF.
-                self.video_manager.make_video(gif=True, mp4=True)
+                self.create_video()
         if subwindow.button(" Reset Particles "):
             self.reset_solver(self.configuration)
         if subwindow.button(" Start Simulation"):
             self.is_paused = False
 
-    def show_settings(self):
+    def show_settings(self) -> None:
+        """
+        Show settings in a GGUI subwindow, this should be called once per generated frames
+        and will only show these settings if the simulation is paused at the moment.
+        """
         if not self.is_paused:
             self.is_showing_settings = False
             return  # don't bother
@@ -148,7 +185,23 @@ class Renderer:
             self.show_configurations(subwindow)
             self.show_buttons(subwindow)
 
-    def render(self):
+    def dump_frames(self) -> None:
+        """Creates an output directory, a VideoManager in this directory and then dumps frames to this directory."""
+        date = datetime.now().strftime("%d%m%Y_%H%M%S")
+        output_dir = f"{self.parent_dir}/{date}"
+        os.makedirs(output_dir)
+        self.video_manager = ti.tools.VideoManager(
+            output_dir=output_dir,
+            framerate=60,
+            automatic_build=False,
+        )
+
+    def create_video(self) -> None:
+        """Converts stored frames in the before created output directory to a video."""
+        self.video_manager.make_video(gif=True, mp4=True)
+
+    def render(self) -> None:
+        """Renders the simulation with the data from the MLS-MPM solver."""
         self.canvas.set_background_color(Color.Background)
         self.canvas.circles(
             per_vertex_color=self.solver.particle_color,
@@ -159,7 +212,8 @@ class Renderer:
             self.video_manager.write_frame(self.window.get_image_buffer_as_numpy())
         self.window.show()
 
-    def run(self):
+    def run(self) -> None:
+        """Runs this simulation."""
         while self.window.running:
             self.handle_events()
             self.show_settings()
