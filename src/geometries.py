@@ -6,13 +6,13 @@ from abc import ABC
 
 
 class Geometry(ABC):
-    def __init__(self) -> None:
-        self.n_particles: int
-        self.position: np.ndarray
-        self.velocity: np.ndarray
-        self.phase: np.ndarray
-        self.frame_threshold: np.ndarray
-        self.state: np.ndarray
+    def __init__(self, n_particles, phase) -> None:
+        self.n_particles = n_particles
+        self.position = np.zeros(shape=(n_particles, 2), dtype=np.float32)
+        self.velocity = np.zeros(shape=(n_particles, 2), dtype=np.float32)
+        self.phase = np.full(shape=n_particles, fill_value=phase, dtype=int)
+        self.frame_threshold = np.zeros(shape=n_particles, dtype=int)
+        self.state = np.zeros(shape=n_particles, dtype=int)
 
 
 class Circle(Geometry):
@@ -25,12 +25,7 @@ class Circle(Geometry):
         coordinates: Tuple[float, float],
         frame_threshold: int = 0,
     ) -> None:
-        self.n_particles = n_particles
-        self.position = np.zeros(shape=(n_particles, 2), dtype=np.float32)
-        self.velocity = np.zeros(shape=(n_particles, 2), dtype=np.float32)
-        self.phase = np.full(shape=n_particles, fill_value=phase, dtype=np.int32)
-        self.frame_threshold = np.zeros(shape=n_particles, dtype=np.int32)
-        self.state = np.zeros(shape=n_particles, dtype=np.int32)
+        super().__init__(n_particles, phase)
 
         # Create the position of the circle.
         for p in range(n_particles):
@@ -54,13 +49,7 @@ class Square(Geometry):
         coordinates: Tuple[float, float],
         frame_threshold: int = 0,
     ) -> None:
-        self.n_particles = n_particles
-        self.position = np.zeros(shape=(n_particles, 2), dtype=np.float32)
-        self.velocity = np.zeros(shape=(n_particles, 2), dtype=np.float32)
-        self.phase = np.full(shape=n_particles, fill_value=phase, dtype=np.int32)
-        self.frame_threshold = np.zeros(shape=n_particles, dtype=np.int32)
-        self.state = np.zeros(shape=n_particles, dtype=np.int32)
-
+        super().__init__(n_particles, phase)
         # Translate from center-coordinates to lower-left-coordinates.
         coordinates = (coordinates[0] - 0.5 * size, coordinates[1] - 0.5 * size)
 

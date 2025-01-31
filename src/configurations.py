@@ -38,13 +38,16 @@ class Configuration:
         # Declare fields.
         self.p_position = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
         self.p_velocity = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
-        self.p_activity_bound = ti.field(dtype=ti.f32, shape=self.n_particles)
+        # TODO: rename p_activity_bound to something more meaningful
+        self.p_activity_bound = ti.field(dtype=int, shape=self.n_particles)
         self.p_phase = ti.field(dtype=ti.f32, shape=self.n_particles)
-        self.p_state = ti.field(dtype=ti.f32, shape=self.n_particles)
+        self.p_state = ti.field(dtype=int, shape=self.n_particles)
 
         # Initialize fields.
         self.p_position.from_numpy(np.concatenate([g.position for g in geometries], dtype=np.float32))
         self.p_velocity.from_numpy(np.concatenate([g.velocity for g in geometries], dtype=np.float32))
         self.p_activity_bound.from_numpy(np.concatenate([g.frame_threshold for g in geometries], dtype=int))
-        self.p_phase.from_numpy(np.concatenate([g.phase for g in geometries], dtype=np.float32).reshape(self.n_particles))
+        self.p_phase.from_numpy(
+            np.concatenate([g.phase for g in geometries], dtype=np.float32).reshape(self.n_particles)
+        )
         self.p_state.from_numpy(np.concatenate([g.state for g in geometries], dtype=int))
