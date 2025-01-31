@@ -135,8 +135,8 @@ class Renderer:
             self.handle_events()
             self.show_settings()
             if not self.is_paused:
-                self.solver.substep()
-                if 10 < frame < 200:
-                    self.solver.add_geometry(c)
+                self.solver.substep(frame)
+                # if 10 < frame < 200:
+                #     self.solver.add_geometry(c)
                 frame += 1
             self.render()

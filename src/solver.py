@@ -1,5 +1,5 @@
 from taichi.linalg import MatrixFreeCG, LinearOperator
-from enums import Classification, Color, Phase
+from enums import Classification, Color, Phase, State
 import taichi as ti
 
 WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
@@ -97,6 +97,15 @@ class Solver:
         self.initial_velocity = ti.Vector.field(2, dtype=float, shape=max_particles)
         self.initial_phase = ti.field(dtype=float, shape=max_particles)
 
+        ### NEW: fields to enable sources and sinks
+        self.particle_state = ti.field(dtype=int, shape=max_particles)
+        self.particle_is_not_active = ti.field(dtype=bool, shape=max_particles)
+        self.particle_frame_threshold = ti.field(dtype=int, shape=max_particles)
+        self.initial_particle_state = ti.field(dtype=int, shape=max_particles)
+        self.initial_frame_threshold = ti.field(dtype=int, shape=max_particles)
+        self.particle_to_be_drawn = ti.Vector.field(2, dtype=ti.float32, shape=max_particles)
+
+
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
         self.stickiness = ti.field(dtype=float, shape=())
         self.friction = ti.field(dtype=float, shape=())
@@ -137,9 +146,26 @@ class Solver:
         self.face_volume_y.fill(0)
 
     @ti.kernel
-    def particle_to_grid(self):
-        # for p in self.particle_position:
+    def particle_to_grid(self, frame: int):
         for p in ti.ndrange(self.n_particles[None]):
+            # Check whether the particle can be enabled.
+            if self.particle_frame_threshold[p] == frame:
+                # self.particle_state[p] = State.Enabled
+                self.particle_is_not_active[p] = False
+
+            # We only update enabled particles.
+            # print(self.particle_state[p] == State.Disabled)
+            # print(self.particle_state[p] != State.Disabled)
+            # print(self.particle_state[p] == State.Enabled)
+            # print(self.particle_state[p] != State.Enabled)
+            # print("-" * 100)
+            if self.particle_is_not_active[p]:
+            # if self.particle_state[p] == State.Disabled:
+                # print("HELLO??")
+                # print(self.particle_state[p], State.Disabled)
+                # print("-" * 100)
+                continue
+
             # Deformation gradient update.
             self.particle_FE[p] = (ti.Matrix.identity(float, 2) + self.dt * self.particle_C[p]) @ self.particle_FE[p]
 
@@ -177,7 +203,8 @@ class Solver:
                 mu *= hardening
 
             # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
-            stress = 2 * mu * (self.particle_FE[p] - U @ V.transpose()) @ self.particle_FE[p].transpose()
+            stress = 2 * mu * (self.particle_FE[p] - U @ V.transpose())
+            stress = stress @ self.particle_FE[p].transpose()  # pyright: ignore
             stress += ti.Matrix.identity(float, 2) * la * JE * (JE - 1)
 
             # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
@@ -432,8 +459,12 @@ class Solver:
 
     @ti.kernel
     def grid_to_particle(self):
-        # for p in self.particle_position:
         for p in ti.ndrange(self.n_particles[None]):
+            # We only update enabled particles.
+            # if self.particle_state[p] == State.Disabled:
+            if self.particle_is_not_active[p]:
+                continue
+
             x_stagger = ti.Vector([self.dx / 2, 0])
             y_stagger = ti.Vector([0, self.dx / 2])
             c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)
@@ -494,16 +525,29 @@ class Solver:
                 self.initial_position[p] = configuration.position[p]
                 self.initial_velocity[p] = configuration.velocity[p]
                 self.initial_phase[p] = configuration.phase[p]
+
+                self.initial_particle_state[p] = configuration.state[p]
+                self.initial_frame_threshold[p] = configuration.frame_threshold[p]
             else:
                 self.initial_position[p] = 0
                 self.initial_velocity[p] = 0
                 self.initial_phase[p] = 0
+
+                self.initial_particle_state[p] = State.Disabled
+                self.initial_frame_threshold[p] = 0
 
     @ti.kernel
     def reset(self):
         for p in self.particle_position:
             self.particle_color[p] = Color.Water if self.initial_phase[p] == Phase.Water else Color.Ice
             self.particle_mass[p] = self.particle_vol * self.rho_0
+
+            self.particle_is_not_active[p] = True
+
+            self.particle_state[p] = self.initial_particle_state[p]
+            self.particle_frame_threshold[p] = self.initial_frame_threshold[p]
+            self.particle_to_be_drawn[p] = [999, 999]
+
             self.particle_inv_lambda[p] = 1 / self.lambda_0[None]
             self.particle_position[p] = self.initial_position[p]
             self.particle_velocity[p] = self.initial_velocity[p]
@@ -513,27 +557,26 @@ class Solver:
             self.particle_JE[p] = 1
             self.particle_JP[p] = 1
 
-    @ti.kernel
-    # def add(self, n: int, p: int, x: ti.template(), v: ti.template()):  # pyright: ignore
-    def add_geometry(self, g: ti.template()):  # pyright: ignore
-        for i in range(self.n_particles[None], self.n_particles[None] + g.n_particles):
-            self.particle_color[i] = Color.Water
-            self.particle_mass[i] = self.particle_vol * self.rho_0
-            self.particle_inv_lambda[i] = 1 / self.lambda_0[None]
-            self.particle_position[i][0] = ti.sin(2 * ti.math.pi * ti.random()) * 0.02 * ti.sqrt(ti.random()) + 0.5
-            self.particle_position[i][1] = ti.cos(2 * ti.math.pi * ti.random()) * 0.02 * ti.sqrt(ti.random()) + 0.8
-            self.particle_velocity[i] = ti.Vector([0, -1])
-            self.particle_FE[i] = ti.Matrix([[1, 0], [0, 1]])
-            self.particle_C[i] = ti.Matrix.zero(float, 2, 2)
-            self.particle_phase[i] = Phase.Water
-            self.particle_JE[i] = 1
-            self.particle_JP[i] = 1
-        self.n_particles[None] += g.n_particles
+    # @ti.kernel
+    # def add_geometry(self, g: ti.template()):  # pyright: ignore
+    #     for i in range(self.n_particles[None], self.n_particles[None] + g.n_particles):
+    #         self.particle_color[i] = Color.Water
+    #         self.particle_mass[i] = self.particle_vol * self.rho_0
+    #         self.particle_inv_lambda[i] = 1 / self.lambda_0[None]
+    #         self.particle_position[i][0] = ti.sin(2 * ti.math.pi * ti.random()) * 0.02 * ti.sqrt(ti.random()) + 0.5
+    #         self.particle_position[i][1] = ti.cos(2 * ti.math.pi * ti.random()) * 0.02 * ti.sqrt(ti.random()) + 0.8
+    #         self.particle_velocity[i] = ti.Vector([0, -1])
+    #         self.particle_FE[i] = ti.Matrix([[1, 0], [0, 1]])
+    #         self.particle_C[i] = ti.Matrix.zero(float, 2, 2)
+    #         self.particle_phase[i] = Phase.Water
+    #         self.particle_JE[i] = 1
+    #         self.particle_JP[i] = 1
+    #     self.n_particles[None] += g.n_particles
 
-    def substep(self):
+    def substep(self, frame: int) -> None:
         for _ in range(int(2e-3 // self.dt)):
             self.reset_grids()
-            self.particle_to_grid()
+            self.particle_to_grid(frame)
             self.momentum_to_velocity()
             # self.classify_cells()
             # self.solve_pressure()
