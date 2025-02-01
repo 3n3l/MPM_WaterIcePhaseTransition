@@ -19,7 +19,7 @@ def main():
         Configuration(
             name="Simple Spout Source (Water)",
             geometries=[
-                *[Square(Phase.Water, 0.05, 10, (0, -2), (0.5, 0.8), i) for i in range(10, 500)],
+                *[Square(Phase.Water, 0.05, 10, (0, -2), (0.45, 0.85), i) for i in range(10, 500)],
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.2,  # Poisson's ratio (0.2)
