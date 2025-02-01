@@ -42,9 +42,9 @@ def main():
             name="Waterspout Hits Ice Cubes",
             geometries=[
                 *[Square(Phase.Water, 0.05, 50, (2, -2), (0.1, 0.9), i) for i in range(10, 500)],
-                Square(Phase.Ice, 0.1, 2000, (0, 0), (0.59, 0.05)),
-                Square(Phase.Ice, 0.1, 2000, (0, 0), (0.71, 0.05)),
-                Square(Phase.Ice, 0.1, 2000, (0, 0), (0.65, 0.15)),
+                Square(Phase.Ice, 0.1, 2000, (0, 0), (0.59, 0.0)),
+                Square(Phase.Ice, 0.1, 2000, (0, 0), (0.70, 0.0)),
+                Square(Phase.Ice, 0.1, 2000, (0, 0), (0.65, 0.1)),
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.2,  # Poisson's ratio (0.2)

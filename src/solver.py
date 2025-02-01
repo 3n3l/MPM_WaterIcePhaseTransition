@@ -23,20 +23,22 @@ class Solver:
         nu=0.2,  # Poisson's ratio (0.2)
     ):
         # MPM Parameters that are configuration independent
-        self.quality = quality
-        # self.n_particles = max_particles
-        # TODO: move somewhere else
         self.n_particles = ti.field(dtype=ti.int32, shape=())
         self.current_frame = ti.field(dtype=ti.int32, shape=())
         self.n_grid = 128 * quality
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
-        self.dt = 1e-4 / self.quality
+        self.dt = 1e-4 / quality
         self.rho_0 = 4e2
         self.particle_vol = (self.dx * 0.1) ** 2
-
-        # Number of dimensions
         self.n_dimensions = 2
+
+        # The width of the simulation boundary in grid nodes.
+        self.boundary_width = 3
+
+        # Offset to correct coordinates such that the origin lies within the boundary,
+        # added to each position vector when loading a new configuration.
+        self.boundary_offset = 1 - ((self.n_grid - self.boundary_width) * self.dx)
 
         # Parameters to control melting/freezing
         # TODO: these are variables and need toof the particle, be put into fields
@@ -294,16 +296,16 @@ class Solver:
         for i, j in self.face_mass_x:
             if self.face_mass_x[i, j] > 0:  # No need for epsilon here
                 self.face_velocity_x[i, j] *= 1 / self.face_mass_x[i, j]
-                collision_left = i < 3 and self.face_velocity_x[i, j] < 0
-                collision_right = i > (self.n_grid - 3) and self.face_velocity_x[i, j] > 0
+                collision_left = i < self.boundary_width and self.face_velocity_x[i, j] < 0
+                collision_right = i > (self.n_grid - self.boundary_width) and self.face_velocity_x[i, j] > 0
                 if collision_left or collision_right:
                     self.face_velocity_x[i, j] = 0
         for i, j in self.face_mass_y:
             if self.face_mass_y[i, j] > 0:  # No need for epsilon here
                 self.face_velocity_y[i, j] *= 1 / self.face_mass_y[i, j]
                 self.face_velocity_y[i, j] += self.dt * GRAVITY
-                collision_top = j > (self.n_grid - 3) and self.face_velocity_y[i, j] > 0
-                collision_bottom = j < 3 and self.face_velocity_y[i, j] < 0
+                collision_top = j > (self.n_grid - self.boundary_width) and self.face_velocity_y[i, j] > 0
+                collision_bottom = j < self.boundary_width and self.face_velocity_y[i, j] < 0
                 if collision_top or collision_bottom:
                     self.face_velocity_y[i, j] = 0
         for i, j in self.cell_mass:

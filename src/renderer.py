@@ -76,7 +76,7 @@ class Renderer:
             if p < configuration.n_particles:
                 self.solver.particle_color[p] = Color.Water if configuration.p_phase[p] == Phase.Water else Color.Ice
                 self.solver.particle_frame_threshold[p] = configuration.p_activity_bound[p]
-                self.solver.particle_position[p] = configuration.p_position[p]
+                self.solver.particle_position[p] = configuration.p_position[p] + self.solver.boundary_offset
                 self.solver.particle_velocity[p] = configuration.p_velocity[p]
                 self.solver.particle_state[p] = configuration.p_state[p]
                 self.solver.particle_phase[p] = configuration.p_phase[p]

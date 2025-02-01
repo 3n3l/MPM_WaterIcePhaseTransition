@@ -26,8 +26,6 @@ class Circle(Geometry):
         frame_threshold: int = 0,
     ) -> None:
         super().__init__(n_particles, phase)
-
-        # Create the position of the circle.
         for p in range(n_particles):
             t = 2 * np.pi * np.random.rand()
             r = radius * np.sqrt(np.random.rand())
@@ -50,10 +48,6 @@ class Square(Geometry):
         frame_threshold: int = 0,
     ) -> None:
         super().__init__(n_particles, phase)
-        # Translate from center-coordinates to lower-left-coordinates.
-        coordinates = (coordinates[0] - 0.5 * size, coordinates[1] - 0.5 * size)
-
-        # Create the position of the square.
         for p in range(n_particles):
             x = np.random.rand() * size + coordinates[0]
             y = np.random.rand() * size + coordinates[1]
