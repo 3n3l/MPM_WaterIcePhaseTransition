@@ -16,5 +16,5 @@ class Color:
 
 
 class State:
-    Disabled = 0
-    Enabled = 1
+    Inactive = 0
+    Active = 1

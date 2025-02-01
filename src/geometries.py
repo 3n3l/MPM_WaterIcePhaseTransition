@@ -33,7 +33,7 @@ class Circle(Geometry):
             y = (r * np.cos(t)) + coordinates[1]
             self.velocity[p] = velocity
             self.position[p] = [x, y]
-            self.state[p] = State.Enabled if frame_threshold == 0 else State.Disabled
+            self.state[p] = State.Active if frame_threshold == 0 else State.Inactive
             self.frame_threshold[p] = frame_threshold
 
 
@@ -53,5 +53,5 @@ class Square(Geometry):
             y = np.random.rand() * size + coordinates[1]
             self.velocity[p] = velocity
             self.position[p] = [x, y]
-            self.state[p] = State.Enabled if frame_threshold == 0 else State.Disabled
+            self.state[p] = State.Active if frame_threshold == 0 else State.Inactive
             self.frame_threshold[p] = frame_threshold

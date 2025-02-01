@@ -84,14 +84,12 @@ class Solver:
         self.particle_JE = ti.field(dtype=float, shape=max_particles)
         self.particle_JP = ti.field(dtype=float, shape=max_particles)
 
-        ### NEW: fields to enable sources and sinks
-        ### TODO: move them somewhere else
-        ### TODO: rename this
-        self.particle_state = ti.field(dtype=int, shape=max_particles)
-        self.particle_frame_threshold = ti.field(dtype=int, shape=max_particles)
-        # shown_particles holds the particles which will be displayed in the scene
-        # TODO: rename this
-        self.shown_particles = ti.Vector.field(2, dtype=ti.float32, shape=max_particles)
+        # Fields needed to implement sources (TODO: and sinks), the state will be set to
+        # active once the activation threshold (frame) is reached. Active particles in
+        # p_active_position will be drawn, all other particles are hidden until active.
+        self.p_activation_threshold = ti.field(dtype=int, shape=max_particles)
+        self.p_activation_state = ti.field(dtype=int, shape=max_particles)
+        self.p_active_position = ti.Vector.field(2, dtype=ti.float32, shape=max_particles)
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
         self.stickiness = ti.field(dtype=float, shape=())
@@ -126,12 +124,12 @@ class Solver:
     @ti.kernel
     def particle_to_grid(self):
         for p in ti.ndrange(self.n_particles[None]):
-            # Check whether the particle can be enabled.
-            if self.particle_frame_threshold[p] == self.current_frame[None]:
-                self.particle_state[p] = State.Enabled
+            # Check whether the particle can be activated.
+            if self.p_activation_threshold[p] == self.current_frame[None]:
+                self.p_activation_state[p] = State.Active
 
-            # We only update enabled particles.
-            if self.particle_state[p] == State.Disabled:
+            # We only update currently active particles.
+            if self.p_activation_state[p] == State.Inactive:
                 continue
 
             # Deformation gradient update.
@@ -428,8 +426,8 @@ class Solver:
     @ti.kernel
     def grid_to_particle(self):
         for p in ti.ndrange(self.n_particles[None]):
-            # We only update enabled particles.
-            if self.particle_state[p] == State.Disabled:
+            # We only update active particles.
+            if self.p_activation_state[p] == State.Inactive:
                 continue
 
             x_stagger = ti.Vector([self.dx / 2, 0])
@@ -472,9 +470,9 @@ class Solver:
             self.particle_temperature[p] = nt
             self.particle_velocity[p] = nv
 
-            # The particle_position holds the positions for all particles,
-            # pushing the position into shown_particles will draw the particle.
-            self.shown_particles[p] = self.particle_position[p]
+            # The particle_position holds the positions for all particles, active and inactive,
+            # only pushing the position into p_active_position will draw this particle.
+            self.p_active_position[p] = self.particle_position[p]
 
     def substep(self) -> None:
         self.current_frame[None] += 1

@@ -75,27 +75,27 @@ class Renderer:
         for p in self.solver.particle_position:
             if p < configuration.n_particles:
                 self.solver.particle_color[p] = Color.Water if configuration.p_phase[p] == Phase.Water else Color.Ice
-                self.solver.particle_frame_threshold[p] = configuration.p_activity_bound[p]
+                self.solver.p_activation_threshold[p] = configuration.p_activity_bound[p]
                 self.solver.particle_position[p] = configuration.p_position[p] + self.solver.boundary_offset
                 self.solver.particle_velocity[p] = configuration.p_velocity[p]
-                self.solver.particle_state[p] = configuration.p_state[p]
+                self.solver.p_activation_state[p] = configuration.p_state[p]
                 self.solver.particle_phase[p] = configuration.p_phase[p]
             else:
                 # TODO: this might be completely irrelevant, as only the first n_particles are used anyway?
                 #       So work can be saved by just ignoring all the other particles and iterating only
                 #       over the configuration.n_particles?
                 self.solver.particle_color[p] = Color.Background
-                self.solver.particle_frame_threshold[p] = 0
+                self.solver.p_activation_threshold[p] = 0
                 self.solver.particle_position[p] = [0, 0]
                 self.solver.particle_velocity[p] = [0, 0]
-                self.solver.particle_state[p] = State.Disabled
+                self.solver.p_activation_state[p] = State.Inactive
                 self.solver.particle_phase[p] = Phase.Water
 
             self.solver.particle_mass[p] = self.solver.particle_vol * self.solver.rho_0
             self.solver.particle_inv_lambda[p] = 1 / self.solver.lambda_0[None]
             self.solver.particle_FE[p] = ti.Matrix([[1, 0], [0, 1]])
             self.solver.particle_C[p] = ti.Matrix.zero(float, 2, 2)
-            self.solver.shown_particles[p] = [0, 0]
+            self.solver.p_active_position[p] = [0, 0]
             self.solver.particle_JE[p] = 1
             self.solver.particle_JP[p] = 1
 
@@ -205,7 +205,7 @@ class Renderer:
         self.canvas.set_background_color(Color.Background)
         self.canvas.circles(
             per_vertex_color=self.solver.particle_color,
-            centers=self.solver.shown_particles,
+            centers=self.solver.p_active_position,
             radius=0.0015,
         )
         if self.should_write_to_disk and not self.is_paused and not self.is_showing_settings:
