@@ -1,5 +1,5 @@
 from taichi.linalg import MatrixFreeCG, LinearOperator
-from enums import Classification, Color, Phase
+from enums import Classification, Color, Phase, State
 import taichi as ti
 
 WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
@@ -12,33 +12,27 @@ GRAVITY = -9.81
 
 @ti.data_oriented
 class Solver:
-    def __init__(
-        self,
-        quality: int,
-        max_particles: int,
-        theta_c=2.5e-2,  # Critical compression (2.5e-2)
-        theta_s=7.5e-3,  # Critical stretch (7.5e-3)
-        zeta=10,  # Hardening coefficient (10)
-        E=1.4e5,  # Young's modulus (1.4e5)
-        nu=0.2,  # Poisson's ratio (0.2)
-    ):
+    def __init__(self, quality: int, max_particles: int):
         # MPM Parameters that are configuration independent
-        self.quality = quality
-        # self.n_particles = max_particles
-        # TODO: move somewhere else
         self.n_particles = ti.field(dtype=ti.int32, shape=())
+        self.current_frame = ti.field(dtype=ti.int32, shape=())
         self.n_grid = 128 * quality
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
-        self.dt = 1e-4 / self.quality
+        self.dt = 1e-4 / quality
         self.rho_0 = 4e2
         self.particle_vol = (self.dx * 0.1) ** 2
-
-        # Number of dimensions
         self.n_dimensions = 2
 
+        # The width of the simulation boundary in grid nodes.
+        self.boundary_width = 3
+
+        # Offset to correct coordinates such that the origin lies within the boundary,
+        # added to each position vector when loading a new configuration.
+        self.boundary_offset = 1 - ((self.n_grid - self.boundary_width) * self.dx)
+
         # Parameters to control melting/freezing
-        # TODO: these are variables and need to be put into fields
+        # TODO: these are variables and need toof the particle, be put into fields
         # TODO: these depend not only on phase, but also on temperature,
         #       so ideally they are functions of these two variables
         # self.heat_conductivity = 0.55 # Water: 0.55, Ice: 2.33
@@ -87,15 +81,15 @@ class Solver:
         self.particle_mass = ti.field(dtype=ti.float32, shape=max_particles)
         self.particle_FE = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
         self.particle_C = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
-
         self.particle_JE = ti.field(dtype=float, shape=max_particles)
         self.particle_JP = ti.field(dtype=float, shape=max_particles)
 
-        # Initial properties to reset to.
-        # TODO: these can be replaced with the fields from the configuration
-        self.initial_position = ti.Vector.field(2, dtype=float, shape=max_particles)
-        self.initial_velocity = ti.Vector.field(2, dtype=float, shape=max_particles)
-        self.initial_phase = ti.field(dtype=float, shape=max_particles)
+        # Fields needed to implement sources (TODO: and sinks), the state will be set to
+        # active once the activation threshold (frame) is reached. Active particles in
+        # p_active_position will be drawn, all other particles are hidden until active.
+        self.p_activation_threshold = ti.field(dtype=int, shape=max_particles)
+        self.p_activation_state = ti.field(dtype=int, shape=max_particles)
+        self.p_active_position = ti.Vector.field(2, dtype=ti.float32, shape=max_particles)
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
         self.stickiness = ti.field(dtype=float, shape=())
@@ -107,15 +101,6 @@ class Solver:
         self.zeta = ti.field(dtype=int, shape=())
         self.nu = ti.field(dtype=float, shape=())
         self.E = ti.field(dtype=float, shape=())
-
-        # Initialize fields
-        self.lambda_0[None] = E * nu / ((1 + nu) * (1 - 2 * nu))
-        self.mu_0[None] = E / (2 * (1 + nu))
-        self.theta_c[None] = theta_c
-        self.theta_s[None] = theta_s
-        self.zeta[None] = zeta
-        self.nu[None] = nu
-        self.E[None] = E
 
     @ti.kernel
     def reset_grids(self):
@@ -138,8 +123,15 @@ class Solver:
 
     @ti.kernel
     def particle_to_grid(self):
-        # for p in self.particle_position:
         for p in ti.ndrange(self.n_particles[None]):
+            # Check whether the particle can be activated.
+            if self.p_activation_threshold[p] == self.current_frame[None]:
+                self.p_activation_state[p] = State.Active
+
+            # We only update currently active particles.
+            if self.p_activation_state[p] == State.Inactive:
+                continue
+
             # Deformation gradient update.
             self.particle_FE[p] = (ti.Matrix.identity(float, 2) + self.dt * self.particle_C[p]) @ self.particle_FE[p]
 
@@ -147,13 +139,18 @@ class Solver:
             U, sigma, V = ti.svd(self.particle_FE[p])
             JE, JP = 1.0, 1.0
             for d in ti.static(range(self.n_dimensions)):
-                # Clamp singular values to [1 - theta_c, 1 + theta_s]
                 singular_value = float(sigma[d, d])
-                clamped = max(singular_value, 1 - self.theta_c[None])
-                clamped = min(clamped, 1 + self.theta_s[None])
-                sigma[d, d] = clamped
-                JP *= singular_value / clamped
-                JE *= clamped
+                # Clamp singular values to [1 - theta_c, 1 + theta_s]
+                if self.particle_phase[p] == Phase.Ice:
+                    clamped = singular_value
+                    clamped = max(singular_value, 1 - self.theta_c[None])
+                    clamped = min(clamped, 1 + self.theta_s[None])
+                    sigma[d, d] = clamped
+                    JP *= singular_value / clamped
+                    JE *= clamped
+                else:
+                    JP *= singular_value
+                    JE *= singular_value
 
             la = self.lambda_0[None]
             mu = self.mu_0[None]
@@ -172,7 +169,8 @@ class Solver:
                 mu *= hardening
 
             # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
-            stress = 2 * mu * (self.particle_FE[p] - U @ V.transpose()) @ self.particle_FE[p].transpose()
+            stress = 2 * mu * (self.particle_FE[p] - U @ V.transpose())
+            stress = stress @ self.particle_FE[p].transpose()  # pyright: ignore
             stress += ti.Matrix.identity(float, 2) * la * JE * (JE - 1)
 
             # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
@@ -184,15 +182,15 @@ class Solver:
 
             # APIC momentum + MLS-MPM stress contribution [Hu et al. 2018, Eqn. 29].
             affine = stress + self.particle_mass[p] * self.particle_C[p]
-            x_affine = affine @ ti.Vector([1, 0])
-            y_affine = affine @ ti.Vector([0, 1])
+            x_affine = affine @ ti.Vector([1, 0])  # pyright: ignore
+            y_affine = affine @ ti.Vector([0, 1])  # pyright: ignore
 
             # We use an additional offset of 0.5 for element-wise flooring.
             x_stagger = ti.Vector([self.dx / 2, 0])
             y_stagger = ti.Vector([0, self.dx / 2])
-            c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)
-            x_base = (self.particle_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)
-            y_base = (self.particle_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)
+            c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)  # pyright: ignore
+            x_base = (self.particle_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)  # pyright: ignore
+            y_base = (self.particle_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)  # pyright: ignore
             c_fx = self.particle_position[p] * self.inv_dx - c_base.cast(float)
             x_fx = self.particle_position[p] * self.inv_dx - x_base.cast(float)
             y_fx = self.particle_position[p] * self.inv_dx - y_base.cast(float)
@@ -278,16 +276,16 @@ class Solver:
         for i, j in self.face_mass_x:
             if self.face_mass_x[i, j] > 0:  # No need for epsilon here
                 self.face_velocity_x[i, j] *= 1 / self.face_mass_x[i, j]
-                collision_left = i < 3 and self.face_velocity_x[i, j] < 0
-                collision_right = i > (self.n_grid - 3) and self.face_velocity_x[i, j] > 0
+                collision_left = i < self.boundary_width and self.face_velocity_x[i, j] < 0
+                collision_right = i > (self.n_grid - self.boundary_width) and self.face_velocity_x[i, j] > 0
                 if collision_left or collision_right:
                     self.face_velocity_x[i, j] = 0
         for i, j in self.face_mass_y:
             if self.face_mass_y[i, j] > 0:  # No need for epsilon here
                 self.face_velocity_y[i, j] *= 1 / self.face_mass_y[i, j]
                 self.face_velocity_y[i, j] += self.dt * GRAVITY
-                collision_top = j > (self.n_grid - 3) and self.face_velocity_y[i, j] > 0
-                collision_bottom = j < 3 and self.face_velocity_y[i, j] < 0
+                collision_top = j > (self.n_grid - self.boundary_width) and self.face_velocity_y[i, j] > 0
+                collision_bottom = j < self.boundary_width and self.face_velocity_y[i, j] < 0
                 if collision_top or collision_bottom:
                     self.face_velocity_y[i, j] = 0
         for i, j in self.cell_mass:
@@ -427,13 +425,16 @@ class Solver:
 
     @ti.kernel
     def grid_to_particle(self):
-        # for p in self.particle_position:
         for p in ti.ndrange(self.n_particles[None]):
+            # We only update active particles.
+            if self.p_activation_state[p] == State.Inactive:
+                continue
+
             x_stagger = ti.Vector([self.dx / 2, 0])
             y_stagger = ti.Vector([0, self.dx / 2])
-            c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)
-            x_base = (self.particle_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)
-            y_base = (self.particle_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)
+            c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)  # pyright: ignore
+            x_base = (self.particle_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)  # pyright: ignore
+            y_base = (self.particle_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)  # pyright: ignore
             c_fx = self.particle_position[p] * self.inv_dx - c_base.cast(float)
             x_fx = self.particle_position[p] * self.inv_dx - x_base.cast(float)
 
@@ -469,46 +470,12 @@ class Solver:
             self.particle_temperature[p] = nt
             self.particle_velocity[p] = nv
 
-    @ti.kernel
-    def load(self, configuration: ti.template()):  # pyright: ignore
-        # Load the properties from the given configuration.
-        self.n_particles[None] = configuration.n_particles
-        self.stickiness[None] = configuration.stickiness
-        self.friction[None] = configuration.friction
-        self.lambda_0[None] = configuration.lambda_0
-        self.theta_c[None] = configuration.theta_c
-        self.theta_s[None] = configuration.theta_s
-        self.zeta[None] = configuration.zeta
-        self.mu_0[None] = configuration.mu_0
-        self.nu[None] = configuration.nu
-        self.E[None] = configuration.E
+            # The particle_position holds the positions for all particles, active and inactive,
+            # only pushing the position into p_active_position will draw this particle.
+            self.p_active_position[p] = self.particle_position[p]
 
-        # Set the first n_particles to the given values, all others are reset.
-        for p in self.initial_position:
-            if p < configuration.n_particles:
-                self.initial_position[p] = configuration.position[p]
-                self.initial_velocity[p] = configuration.velocity[p]
-                self.initial_phase[p] = configuration.phase[p]
-            else:
-                self.initial_position[p] = 0
-                self.initial_velocity[p] = 0
-                self.initial_phase[p] = 0
-
-    @ti.kernel
-    def reset(self):
-        for p in self.particle_position:
-            self.particle_color[p] = Color.Water if self.initial_phase[p] == Phase.Water else Color.Ice
-            self.particle_mass[p] = self.particle_vol * self.rho_0
-            self.particle_inv_lambda[p] = 1 / self.lambda_0[None]
-            self.particle_position[p] = self.initial_position[p]
-            self.particle_velocity[p] = self.initial_velocity[p]
-            self.particle_FE[p] = ti.Matrix([[1, 0], [0, 1]])
-            self.particle_C[p] = ti.Matrix.zero(float, 2, 2)
-            self.particle_phase[p] = self.initial_phase[p]
-            self.particle_JE[p] = 1
-            self.particle_JP[p] = 1
-
-    def substep(self):
+    def substep(self) -> None:
+        self.current_frame[None] += 1
         for _ in range(int(2e-3 // self.dt)):
             self.reset_grids()
             self.particle_to_grid()
