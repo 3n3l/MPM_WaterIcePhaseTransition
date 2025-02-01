@@ -12,16 +12,7 @@ GRAVITY = -9.81
 
 @ti.data_oriented
 class Solver:
-    def __init__(
-        self,
-        quality: int,
-        max_particles: int,
-        theta_c=2.5e-2,  # Critical compression (2.5e-2)
-        theta_s=7.5e-3,  # Critical stretch (7.5e-3)
-        zeta=10,  # Hardening coefficient (10)
-        E=1.4e5,  # Young's modulus (1.4e5)
-        nu=0.2,  # Poisson's ratio (0.2)
-    ):
+    def __init__(self, quality: int, max_particles: int):
         # MPM Parameters that are configuration independent
         self.n_particles = ti.field(dtype=ti.int32, shape=())
         self.current_frame = ti.field(dtype=ti.int32, shape=())
@@ -112,15 +103,6 @@ class Solver:
         self.zeta = ti.field(dtype=int, shape=())
         self.nu = ti.field(dtype=float, shape=())
         self.E = ti.field(dtype=float, shape=())
-
-        # Initialize fields
-        self.lambda_0[None] = E * nu / ((1 + nu) * (1 - 2 * nu))
-        self.mu_0[None] = E / (2 * (1 + nu))
-        self.theta_c[None] = theta_c
-        self.theta_s[None] = theta_s
-        self.zeta[None] = zeta
-        self.nu[None] = nu
-        self.E[None] = E
 
     @ti.kernel
     def reset_grids(self):
