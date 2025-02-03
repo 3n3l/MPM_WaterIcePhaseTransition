@@ -1,6 +1,9 @@
-from taichi.linalg import MatrixFreeCG, LinearOperator
+from taichi.linalg import SparseMatrixBuilder, SparseSolver
 from enums import Classification, Color, Phase, State
 import taichi as ti
+import numpy as np
+
+from experiments.poisson_solver import PCG
 
 WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
 ICE_CONDUCTIVITY = 2.33
@@ -17,6 +20,7 @@ class Solver:
         self.n_particles = ti.field(dtype=ti.int32, shape=())
         self.current_frame = ti.field(dtype=ti.int32, shape=())
         self.n_grid = 128 * quality
+        self.n_cells = self.n_grid * self.n_grid
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
         self.dt = 1e-4 / quality
@@ -64,10 +68,9 @@ class Solver:
         self.face_volume_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
         self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.right_hand_side = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.left_hand_side = LinearOperator(self.fill_left_hand_side)
 
         # FIXME: just for testing
-        self.Ap = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        # self.Ap = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
 
         # Properties on particles.
         self.particle_conductivity = ti.field(dtype=ti.float32, shape=max_particles)
@@ -104,6 +107,8 @@ class Solver:
 
     @ti.kernel
     def reset_grids(self):
+        # TODO: not all of these need to be reset
+        # TODO: performance can be gained by bundling fields in loops
         self.cell_classification.fill(Classification.Empty)
         self.face_velocity_x.fill(0)
         self.face_velocity_y.fill(0)
@@ -324,104 +329,98 @@ class Solver:
             else:
                 self.cell_classification[i, j] = Classification.Empty
 
-    @ti.func
-    def sample(self, x, i, j):
-        indices = ti.Vector([int(i), int(j)])
-        indices = ti.max(0, ti.min(self.n_grid - 1, indices))
-        return x[indices]
-
     @ti.kernel
-    def compute_divergence(self):
-        for i, j in self.cell_divergence:
-            self.cell_divergence[i, j] = 0
-            self.cell_divergence[i, j] += self.face_velocity_x[i + 1, j]
-            self.cell_divergence[i, j] += self.face_velocity_y[i, j + 1]
-            self.cell_divergence[i, j] -= self.face_velocity_x[i, j]
-            self.cell_divergence[i, j] -= self.face_velocity_y[i, j]
+    def fill_linear_system(self, A: ti.types.sparse_matrix_builder(), b: ti.types.ndarray()):  # pyright: ignore
+        # TODO: Laplacian L needs to be filled according to paper.
+        # DONE: Solution vector b needs to be filled according to paper.
+        for i, j in ti.ndrange(self.n_grid, self.n_grid):
+            row = (i * self.n_grid) + j
+            center = 0.0
+            if (j != 0) and (self.cell_classification[i, j - 1] == Classification.Interior):
+                A[row, row - 1] += -1.0
+                center += 1.0
+            if (j != self.n_grid - 1) and (self.cell_classification[i, j + 1] == Classification.Interior):
+                A[row, row + 1] += -1.0
+                center += 1.0
+            if (i != 0) and (self.cell_classification[i - 1, j] == Classification.Interior):
+                A[row, row - self.n_grid] += -1.0
+                center += 1.0
+            if (i != self.n_grid - 1) and (self.cell_classification[i + 1, j] == Classification.Interior):
+                A[row, row + self.n_grid] += -1.0
+                center += 1.0
+            A[row, row] += center
 
-    @ti.kernel
-    def fill_left_hand_side(self, p: ti.template(), Ap: ti.template()):  # pyright: ignore
-        delta = 0.00032  # relaxation
-        inv_rho = 1 / self.rho_0  # TODO: compute rho per cell
-        z = self.dt * self.inv_dx * self.inv_dx * inv_rho
-        for i, j in ti.ndrange((1, self.n_grid - 1), (1, self.n_grid - 1)):
-            # for i, j in self.cell_pressure:
-            Ap[i, j] = 0
+            # Fill the right hand side if the cell is classified as interior.
             if self.cell_classification[i, j] == Classification.Interior:
-                l = p[i - 1, j]
-                r = p[i + 1, j]
-                t = p[i, j + 1]
-                b = p[i, j - 1]
+                b[row] = (-1) * (self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j])
+                b[row] += self.inv_dx * (self.face_velocity_x[i + 1, j] - self.face_velocity_x[i, j])
+                b[row] += self.inv_dx * (self.face_velocity_y[i, j + 1] - self.face_velocity_y[i, j])
+        # delta = 0.00032  # relaxation
+        # inv_rho = 1 / self.rho_0  # TODO: compute rho per cell
+        # z = self.dt * self.inv_dx * self.inv_dx * inv_rho
+        # for i, j in ti.ndrange((1, self.n_grid - 1), (1, self.n_grid - 1)):
+        #     # for i, j in self.cell_pressure:
+        #     Ap[i, j] = 0
+        #     if self.cell_classification[i, j] == Classification.Interior:
+        #         l = p[i - 1, j]
+        #         r = p[i + 1, j]
+        #         t = p[i, j + 1]
+        #         b = p[i, j - 1]
+        #
+        #         # TODO: collect face volumes here first
+        #
+        #         # FIXME: the error is somewhere here:
+        #         # Ap[i, j] = delta * p[i, j] * self.cell_inv_lambda[i, j]
+        #         # Ap[i, j] *= self.cell_JP[i, j] * (1 / (self.cell_JE[i, j] * self.dt))
+        #         Ap[i, j] += z * delta * (4.0 * p[i, j] - l - r - t - b)
+        #         self.Ap[i, j] = Ap[i, j]  # FIXME: for testing only
 
-                # TODO: collect face volumes here first
-
-                # FIXME: the error is somewhere here:
-                # Ap[i, j] = delta * p[i, j] * self.cell_inv_lambda[i, j]
-                # Ap[i, j] *= self.cell_JP[i, j] * (1 / (self.cell_JE[i, j] * self.dt))
-
-                Ap[i, j] += z * delta * (4.0 * p[i, j] - l - r - t - b)
-                self.Ap[i, j] = Ap[i, j]  # FIXME: for testing only
-
-    @ti.kernel
-    def fill_right_hand_side(self):
-        z = self.inv_dx
-        for i, j in ti.ndrange((1, self.n_grid), (1, self.n_grid)):
-            # for i, j in self.cell_pressure:
-            self.right_hand_side[i, j] = 0
-            if self.cell_classification[i, j] == Classification.Interior:
-
-                # FIXME: the error is somewhere here:
-                # self.right_hand_side[i, j] = -1 * (self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j])
-
-                self.right_hand_side[i, j] += z * (self.face_velocity_x[i + 1, j] - self.face_velocity_x[i, j])
-                self.right_hand_side[i, j] += z * (self.face_velocity_y[i, j + 1] - self.face_velocity_y[i, j])
-
-            if self.cell_classification[i, j] == Classification.Interior:
-                print("-" * 100)
-                print("PRESSU ->", self.cell_pressure[i, j])
-                print("CELLJE ->", self.cell_JE[i, j])
-                print("CELLJP ->", self.cell_JP[i, j])
-                print("X_VELO ->", self.face_velocity_x[i, j])
-                print("Y_VELO ->", self.face_velocity_y[i, j])
-                print("DTTTTT ->", self.dt)
-                print("LAMBDA ->", self.cell_inv_lambda[i, j])
-                print("BBBBBB ->", self.right_hand_side[i, j])
-                print("AAAAAA ->", self.Ap[i, j])
-
-    def solve_pressure(self):
-        self.fill_right_hand_side()
-        self.cell_pressure.fill(0)
-        MatrixFreeCG(
-            A=self.left_hand_side,
-            b=self.right_hand_side,
-            x=self.cell_pressure,
-            maxiter=100,
-            tol=1e-5,
-            quiet=False,
-        )
+    # @ti.kernel
+    # # def fill_right_side(self, b: ti.template()):  # pyright: ignore
+    # def fill_right_side(self, b: ti.types.ndarray()):  # pyright: ignore
+    #     # for i, j in ti.ndrange((1, self.n_grid), (1, self.n_grid)):
+    #     for i, j in self.cell_pressure:
+    #         if self.cell_classification[i, j] == Classification.Interior:
+    #             row = (i * self.n_grid) + j
+    #             b[row] = -1 * (self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j])
+    #             b[row] += self.inv_dx * (self.face_velocity_x[i + 1, j] - self.face_velocity_x[i, j])
+    #             b[row] += self.inv_dx * (self.face_velocity_y[i, j + 1] - self.face_velocity_y[i, j])
+    #         # if self.cell_classification[i, j] == Classification.Interior:
+    #         #     print("-" * 100)
+    #         #     print("PRESSU ->", self.cell_pressure[i, j])
+    #         #     print("CELLJE ->", self.cell_JE[i, j])
+    #         #     print("CELLJP ->", self.cell_JP[i, j])
+    #         #     print("X_VELO ->", self.face_velocity_x[i, j])
+    #         #     print("Y_VELO ->", self.face_velocity_y[i, j])
+    #         #     print("DTTTTT ->", self.dt)
+    #         #     print("LAMBDA ->", self.cell_inv_lambda[i, j])
+    #         #     print("BBBBBB ->", b[i, j])
+    #         #     print("AAAAAA ->", self.Ap[i, j])
 
     @ti.kernel
-    def apply_pressure(self):
-        inv_rho = 1 / self.rho_0  # TODO: compute inv_rho from face volumes per cell
-        z = self.dt * inv_rho * self.inv_dx * self.inv_dx
-        for i, j in self.face_mass_x:
-            # if self.cell_classification[i - 1, j] == Classification.Interior:
-            self.face_velocity_x[i, j] -= z * self.sample(self.cell_pressure, i - 1, j)
-            # if self.cell_classification[i, j] == Classification.Interior:
-            self.face_velocity_x[i, j] -= z * self.sample(self.cell_pressure, i, j)
-            # self.face_velocity_x[i, j] -= z * self.sample(self.cell_pressure, i, j + 1)
-            # self.face_velocity_x[i, j] -= z * self.sample(self.cell_pressure, i, j - 1)
-            # self.face_velocity_x[i, j] -= 4 * z * self.cell_pressure[i, j]
-            # self.face_velocity_x[i, j] -= 4 * z * self.cell_pressure[i, j]
-        for i, j in self.face_mass_y:
-            # self.face_velocity_y[i, j] -= z * self.sample(self.cell_pressure, i - 1, j)
-            # self.face_velocity_y[i, j] -= z * self.sample(self.cell_pressure, i + 1, j)
-            # if self.cell_classification[i, j - 1] == Classification.Interior:
-            self.face_velocity_y[i, j] -= z * self.sample(self.cell_pressure, i, j - 1)
-            # if self.cell_classification[i, j] == Classification.Interior:
-            self.face_velocity_y[i, j] -= z * self.sample(self.cell_pressure, i, j)
-            # self.face_velocity_y[i, j] -= 4 * z * self.cell_pressure[i, j]
-            # self.face_velocity_y[i, j] -= 4 * z * self.cell_pressure[i, j]
+    def fill_pressure_field(self, p: ti.types.ndarray()):  # pyright: ignore
+        for i, j in self.cell_pressure:
+            row = (i * self.n_grid) + j
+            self.cell_pressure[i, j] = p[row]
+
+    # @ti.kernel
+    def correct_pressure(self):
+        # self.pressure_solver = PCG(self.n_grid)
+        # n = self.n_grid * self.n_grid
+
+        A = SparseMatrixBuilder(self.n_cells, self.n_cells, max_num_triplets=(self.n_cells * 6))
+        b = ti.ndarray(ti.f32, shape=self.n_cells)
+        self.fill_linear_system(A, b)
+        L = A.build()
+
+        # Create solver and TODO: pre????
+        solver = SparseSolver()
+        solver.analyze_pattern(L)
+        solver.factorize(L)
+
+        # Solve the linear system.
+        p = solver.solve(b)
+        self.fill_pressure_field(p)
 
     @ti.kernel
     def grid_to_particle(self):
@@ -480,9 +479,6 @@ class Solver:
             self.reset_grids()
             self.particle_to_grid()
             self.momentum_to_velocity()
-            # self.classify_cells()
-            # self.solve_pressure()
-            # self.apply_pressure()
-            # self.compute_divergence()
-            # print(self.cell_divergence)
+            self.classify_cells()
+            self.correct_pressure()
             self.grid_to_particle()
