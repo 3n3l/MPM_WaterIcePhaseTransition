@@ -1,10 +1,7 @@
-from taichi.linalg import SparseMatrixBuilder, SparseSolver
 from enums import Classification, Color, Phase, State
-from ps import Pressure_MGPCGSolver
-import taichi as ti
-import numpy as np
+from pressure_solver import PressureSolver
 
-from experiments.poisson_solver import PCG
+import taichi as ti
 
 WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
 ICE_CONDUCTIVITY = 2.33
@@ -15,7 +12,7 @@ GRAVITY = -9.81
 
 
 @ti.data_oriented
-class Solver:
+class MPM_Solver:
     def __init__(self, quality: int, max_particles: int):
         # MPM Parameters that are configuration independent
         self.n_particles = ti.field(dtype=ti.int32, shape=())
@@ -45,49 +42,24 @@ class Solver:
         # self.latent_heat = 0.334 # in J/kg
 
         # Properties on MAC-faces.
-        self.face_classification_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
-        self.face_classification_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
         self.face_conductivity_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
         self.face_conductivity_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
         self.face_velocity_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
         self.face_velocity_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
+        self.face_volume_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
+        self.face_volume_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
         self.face_mass_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
         self.face_mass_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
 
         # Properties on MAC-cells.
         self.cell_classification = ti.field(dtype=ti.int8, shape=(self.n_grid, self.n_grid))
         self.cell_temperature = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.cell_divergence = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.cell_capacity = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.cell_mass = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-
-        # TODO: are these all needed?
         self.cell_inv_lambda = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.cell_capacity = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.cell_mass = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.cell_JE = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
         self.cell_JP = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
-
-        # These fields will be used to solve for pressure, where Ax = b
-        self.face_volume_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
-        self.face_volume_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
-        self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.right_hand_side = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-
-        # FIXME: just for testing
-        # self.Ap = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.pressure_solver = Pressure_MGPCGSolver(
-            self.n_grid,
-            self.n_grid,
-            self.face_velocity_x,
-            self.face_velocity_y,
-            self.dt,
-            self.cell_JP,
-            self.cell_JE,
-            self.cell_inv_lambda,
-            self.cell_classification,
-            multigrid_level=4,
-            # pre_and_post_smoothing=pre_and_post_smoothing,
-            # bottom_smoothing=bottom_smoothing,
-        )
 
         # Properties on particles.
         self.particle_conductivity = ti.field(dtype=ti.float32, shape=max_particles)
@@ -100,9 +72,9 @@ class Solver:
         self.particle_phase = ti.field(dtype=ti.float32, shape=max_particles)
         self.particle_mass = ti.field(dtype=ti.float32, shape=max_particles)
         self.particle_FE = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
-        self.particle_C = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
         self.particle_JE = ti.field(dtype=float, shape=max_particles)
         self.particle_JP = ti.field(dtype=float, shape=max_particles)
+        self.particle_C = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
 
         # Fields needed to implement sources (TODO: and sinks), the state will be set to
         # active once the activation threshold (frame) is reached. Active particles in
@@ -121,6 +93,9 @@ class Solver:
         self.zeta = ti.field(dtype=int, shape=())
         self.nu = ti.field(dtype=float, shape=())
         self.E = ti.field(dtype=float, shape=())
+
+        # The solver for the Poisson pressure equation.
+        self.pressure_solver = PressureSolver(self)
 
     @ti.kernel
     def reset_grids(self):
@@ -250,8 +225,8 @@ class Solver:
                 self.face_mass_y[y_base + offset] += y_weight * self.particle_mass[p]
 
                 # TODO: implement proper volume computation
-                self.face_volume_x[x_base + offset] += x_weight * self.particle_vol
-                self.face_volume_y[x_base + offset] += y_weight * self.particle_vol
+                # self.face_volume_x[x_base + offset] += x_weight * self.particle_vol
+                # self.face_volume_y[x_base + offset] += y_weight * self.particle_vol
 
                 # Rasterize velocity to grid faces.
                 x_velocity = self.particle_mass[p] * self.particle_velocity[p][0] + x_affine @ x_dpos
@@ -314,6 +289,30 @@ class Solver:
                 self.cell_capacity[i, j] *= 1 / self.cell_mass[i, j]
 
     @ti.kernel
+    def compute_volumes(self):
+        # TODO: Do this right
+        w_4 = [0.041667, 0.45833, 0.45833, 0.041667]
+        w_5 = [0.0026042, 0.1979125, 0.59896, 0.1979125, 0.0026042]
+        for i, j in self.face_volume_x:
+            for x_offset in ti.static(range(4)):
+                for y_offset in ti.static(range(5)):
+                    k = i - 2 + x_offset
+                    l = j - 2 + y_offset
+                    if k >= 0 and k < self.n_grid and l >= 0 and l < self.n_grid:
+                        if self.cell_classification[k, l] == Classification.Interior:
+                            self.face_volume_x[i, j] += w_4[x_offset] * w_5[y_offset]
+
+        for i, j in self.face_volume_y:
+            for x_offset in ti.static(range(5)):
+                for y_offset in ti.static(range(4)):
+                    k = i - 2 + x_offset
+                    l = j - 2 + y_offset
+                    if k >= 0 and k < self.n_grid and l >= 0 and l < self.n_grid:
+                        if self.cell_classification[k, l] == Classification.Interior:
+                            self.face_volume_y[i, j] += w_5[x_offset] * w_4[y_offset]
+
+
+    @ti.kernel
     def classify_cells(self):
         # We can extract the offset coordinates from the faces by adding one to the respective axis,
         # e.g. we get the two x-faces with [i, j] and [i + 1, j], where each cell looks like:
@@ -342,224 +341,6 @@ class Solver:
                 self.cell_classification[i, j] = Classification.Interior
             else:
                 self.cell_classification[i, j] = Classification.Empty
-
-    @ti.kernel
-    def fill_linear_system(
-        self,
-        A: ti.types.sparse_matrix_builder(),  # pyright: ignore
-        B: ti.types.sparse_matrix_builder(),  # pyright: ignore
-        C: ti.types.sparse_matrix_builder(),  # pyright: ignore
-        b: ti.types.ndarray(),  # pyright: ignore
-    ):
-        # TODO: Laplacian L needs to be filled according to paper.
-        # DONE: Solution vector b needs to be filled according to paper.
-        # delta = 0.00032  # relaxation
-        # inv_rho = 1 / self.rho_0  # TODO: compute rho per cell
-        # inv_rho = 1  # TODO: compute rho per cell
-        # z = self.dt * self.inv_dx * self.inv_dx * inv_rho
-        for i, j in ti.ndrange(self.n_grid, self.n_grid):
-            # TODO: could be something like:
-            # (see https://gitee.com/citadel2020/taichi_demos/blob/master/mgpcgflip/mgpcgflip.py)
-            # s = 4.0
-            # s -= float(self.is_solid(self.f[l], i - 1, j, _nx, _ny))
-            # s -= float(self.is_solid(self.f[l], i + 1, j, _nx, _ny))
-            # s -= float(self.is_solid(self.f[l], i, j - 1, _nx, _ny))
-            # s -= float(self.is_solid(self.f[l], i, j + 1, _nx, _ny))
-            # if self.cell_classification[i, j] == Classification.Interior:
-
-            # Unraveled index.
-            row = (i * self.n_grid) + j
-            # row = (j * self.n_grid) + i
-
-            # Fill the right hand side of the linear system.
-            b[row] = (-1) * (self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j])
-            b[row] += self.inv_dx * (self.face_velocity_x[i + 1, j] - self.face_velocity_x[i, j])
-            b[row] += self.inv_dx * (self.face_velocity_y[i, j + 1] - self.face_velocity_y[i, j])
-            # b[row] += 4
-            #
-            # A[row, row] += 2
-
-            # Fill the left hand side of the linear system.
-            if self.cell_classification[i, j] == Classification.Interior:
-                # if True:
-                A[row, row] += self.cell_inv_lambda[i, j] * self.cell_JP[i, j] * (1 / (self.cell_JE[i, j] * self.dt))
-                if (i != 0) and (self.cell_classification[i - 1, j] == Classification.Interior):
-                    # B[row, row - self.n_grid] += -self.dt * (self.face_volume_x[i, j] / self.face_mass_x[i, j])
-                    B[row, row - 1] += -self.dt * (self.face_volume_x[i, j] / self.face_mass_x[i, j])
-                    B[row, row] += 1.0
-                    C[row, row - self.n_grid] += -1.0
-                    C[row, row] += 1.0
-
-                if (i != self.n_grid - 1) and (self.cell_classification[i + 1, j] == Classification.Interior):
-                    # B[row, row + self.n_grid] += -self.dt * (self.face_volume_x[i + 1, j] / self.face_mass_x[i + 1, j])
-                    B[row, row + 1] += -self.dt * (self.face_volume_x[i + 1, j] / self.face_mass_x[i + 1, j])
-                    B[row, row] += 1.0
-                    C[row, row + self.n_grid] += -1.0
-                    C[row, row] += 1.0
-
-                if (j != 0) and (self.cell_classification[i, j - 1] == Classification.Interior):
-                    B[row, row - 1] += -self.dt * (self.face_volume_y[i, j] / self.face_mass_y[i, j])
-                    B[row, row] += 1.0
-                    C[row, row - 1] += -1.0
-                    C[row, row] += 1.0
-
-                if (j != self.n_grid - 1) and (self.cell_classification[i, j + 1] == Classification.Interior):
-                    B[row, row + 1] += -self.dt * (self.face_volume_y[i, j + 1] / self.face_mass_y[i, j + 1])
-                    B[row, row] += 1.0
-                    C[row, row + 1] += -1.0
-                    C[row, row] += 1.0
-
-            elif self.cell_classification[i, j] == Classification.Empty:  # Dirichlet
-                # TODO: apply Dirichlet boundary condition
-                A[row, row] += 1.0
-                # B[row, row] += 1.0
-                # C[row, row] += 1.0
-
-            elif self.cell_classification[i, j] == Classification.Colliding:  # Neumann
-                # TODO: apply Neumann boundary condition
-                # TODO: the colliding classification doesn't exist atm
-                A[row, row] += 1.0
-                # B[row, row] += 1.0
-                # C[row, row] += 1.0
-
-        # delta = 0.00032  # relaxation
-        # inv_rho = 1 / self.rho_0  # TODO: compute rho per cell
-        # z = self.dt * self.inv_dx * self.inv_dx * inv_rho
-        # for i, j in ti.ndrange((1, self.n_grid - 1), (1, self.n_grid - 1)):
-        #     # for i, j in self.cell_pressure:
-        #     Ap[i, j] = 0
-        #     if self.cell_classification[i, j] == Classification.Interior:
-        #         l = p[i - 1, j]
-        #         r = p[i + 1, j]
-        #         t = p[i, j + 1]
-        #         b = p[i, j - 1]
-        #
-        #         # TODO: collect face volumes here first
-        #
-        #         # FIXME: the error is somewhere here:
-        #         # Ap[i, j] = delta * p[i, j] * self.cell_inv_lambda[i, j]
-        #         # Ap[i, j] *= self.cell_JP[i, j] * (1 / (self.cell_JE[i, j] * self.dt))
-        #         Ap[i, j] += z * delta * (4.0 * p[i, j] - l - r - t - b)
-        #         self.Ap[i, j] = Ap[i, j]  # FIXME: for testing only
-
-    # @ti.kernel
-    # # def fill_right_side(self, b: ti.template()):  # pyright: ignore
-    # def fill_right_side(self, b: ti.types.ndarray()):  # pyright: ignore
-    #     # for i, j in ti.ndrange((1, self.n_grid), (1, self.n_grid)):
-    #     for i, j in self.cell_pressure:
-    #         if self.cell_classification[i, j] == Classification.Interior:
-    #             row = (i * self.n_grid) + j
-    #             b[row] = -1 * (self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j])
-    #             b[row] += self.inv_dx * (self.face_velocity_x[i + 1, j] - self.face_velocity_x[i, j])
-    #             b[row] += self.inv_dx * (self.face_velocity_y[i, j + 1] - self.face_velocity_y[i, j])
-    #         # if self.cell_classification[i, j] == Classification.Interior:
-    #         #     print("-" * 100)
-    #         #     print("PRESSU ->", self.cell_pressure[i, j])
-    #         #     print("CELLJE ->", self.cell_JE[i, j])
-    #         #     print("CELLJP ->", self.cell_JP[i, j])
-    #         #     print("X_VELO ->", self.face_velocity_x[i, j])
-    #         #     print("Y_VELO ->", self.face_velocity_y[i, j])
-    #         #     print("DTTTTT ->", self.dt)
-    #         #     print("LAMBDA ->", self.cell_inv_lambda[i, j])
-    #         #     print("BBBBBB ->", b[i, j])
-    #         #     print("AAAAAA ->", self.Ap[i, j])
-    # elif self.cell_classification[i, j - 1] == Classification.Empty:  # Dirichlet
-    #     C[row, row] += 1.0
-    #     D[row, row] += 1.0
-    # elif self.cell_classification[i, j - 1] == Classification.Colliding:  # Neumann
-    #     C[row, row] += 1.0
-    #     D[row, row] += 1.0
-    # elif self.cell_classification[i, j + 1] == Classification.Empty:  # Dirichlet
-    #     C[row, row] += 1.0
-    #     D[row, row] += 1.0
-    # elif self.cell_classification[i, j + 1] == Classification.Colliding:  # Neumann
-    #     C[row, row] += 1.0
-    #     D[row, row] += 1.0
-    # elif self.cell_classification[i - 1, j] == Classification.Empty:  # Dirichlet
-    #     C[row, row] += 1.0
-    #     D[row, row] += 1.0
-    # elif self.cell_classification[i - 1, j] == Classification.Colliding:  # Neumann
-    #     C[row, row] += 1.0
-    #     D[row, row] += 1.0
-    # elif self.cell_classification[i + 1, j] == Classification.Empty:  # Dirichlet
-    #     C[row, row] += 1.0
-    #     D[row, row] += 1.0
-    # elif self.cell_classification[i + 1, j] == Classification.Colliding:  # Neumann
-    #     C[row, row] += 1.0
-    #     D[row, row] += 1.0
-
-    @ti.kernel
-    def compute_volumes(self):
-        # TODO: Do this right
-        w_4 = [0.041667, 0.45833, 0.45833, 0.041667]
-        w_5 = [0.0026042, 0.1979125, 0.59896, 0.1979125, 0.0026042]
-        for i, j in self.face_volume_x:
-            for x_offset in ti.static(range(4)):
-                for y_offset in ti.static(range(5)):
-                    k = i - 2 + x_offset
-                    l = j - 2 + y_offset
-                    is_fluid = k >= 0 and k < self.n_grid and l >= 0 and l < self.n_grid
-                    is_fluid &= self.cell_classification[k, l] == Classification.Interior
-                    if is_fluid:
-                        self.face_volume_x[i, j] += w_4[x_offset] * w_5[y_offset]
-
-        for i, j in self.face_volume_y:
-            for x_offset in ti.static(range(5)):
-                for y_offset in ti.static(range(4)):
-                    k = i - 2 + x_offset
-                    l = j - 2 + y_offset
-                    is_fluid = k >= 0 and k < self.n_grid and l >= 0 and l < self.n_grid
-                    is_fluid &= self.cell_classification[k, l] == Classification.Interior
-                    if is_fluid:
-                        self.face_volume_y[i, j] += w_5[x_offset] * w_4[y_offset]
-
-    @ti.kernel
-    def fill_pressure_field(self, p: ti.types.ndarray()):  # pyright: ignore
-        for i, j in self.cell_pressure:
-            # TODO: move this to apply_pressure, delete self.cell_pressure
-            row = (i * self.n_grid) + j
-            self.cell_pressure[i, j] = p[row]
-            # print(p[row])
-            # print(self.cell_pressure[i, j])
-
-    @ti.kernel
-    def apply_pressure(self):
-        # inv_rho = 1  # TODO: compute inv_rho from face volumes per cell
-        inv_rho = 1 / self.rho_0  # TODO: compute rho per cell
-        # z = self.dt * inv_rho * self.inv_dx * self.inv_dx  # TODO: are these even needed?
-        z = 1
-        for i, j in ti.ndrange((1, self.n_grid - 1), (1, self.n_grid - 1)):
-            if self.cell_classification[i - 1, j] == Classification.Interior:
-                self.face_velocity_x[i, j] -= z * self.cell_pressure[i - 1, j]
-            if self.cell_classification[i + 1, j] == Classification.Interior:
-                self.face_velocity_x[i, j] -= z * self.cell_pressure[i + 1, j]
-            if self.cell_classification[i, j - 1] == Classification.Interior:
-                self.face_velocity_y[i, j] -= z * self.cell_pressure[i, j - 1]
-            if self.cell_classification[i, j + 1] == Classification.Interior:
-                self.face_velocity_y[i, j] -= z * self.cell_pressure[i, j + 1]
-
-    def correct_pressure(self):
-        A = SparseMatrixBuilder(self.n_cells, self.n_cells, max_num_triplets=(self.n_cells * 5))
-        B = SparseMatrixBuilder(self.n_cells, self.n_cells, max_num_triplets=(self.n_cells * 5))
-        C = SparseMatrixBuilder(self.n_cells, self.n_cells, max_num_triplets=(self.n_cells * 5))
-        b = ti.ndarray(ti.f32, shape=self.n_cells)
-        self.fill_linear_system(A, B, C, b)
-        L, M, N = A.build(), B.build(), C.build()
-        R = L + (M @ N)
-
-        # Solve the linear system.
-        solver = SparseSolver()
-        solver.compute(R)
-        p = solver.solve(b)
-        # for i in ti.ndrange(p.shape[0]):
-        #     pressure = p[i]
-        #     if pressure != 0:
-        #         print(pressure)
-        print("SUCCESS??? ->", solver.info())
-
-        # Apply the pressure to the intermediate velocity field.
-        self.fill_pressure_field(p)
-        self.apply_pressure()
 
     @ti.kernel
     def grid_to_particle(self):
@@ -612,50 +393,13 @@ class Solver:
             # only pushing the position into p_active_position will draw this particle.
             self.p_active_position[p] = self.particle_position[p]
 
-    @ti.kernel
-    def compute_divergence(self):
-        # TODO: this method is only for debugging and should go to some test file or ???
-        for i, j in self.cell_divergence:
-            if self.cell_classification[i, j] == Classification.Interior:
-                x_divergence = self.face_velocity_x[i + 1, j] - self.face_velocity_x[i, j]
-                y_divergence = self.face_velocity_y[i, j + 1] - self.face_velocity_y[i, j]
-                self.cell_divergence[i, j] = x_divergence + y_divergence
-            else:
-                self.cell_divergence[i, j] = 0
-
     def substep(self) -> None:
         self.current_frame[None] += 1
         for _ in range(int(2e-3 // self.dt)):
             self.reset_grids()
             self.particle_to_grid()
             self.momentum_to_velocity()
+            self.compute_volumes()
             self.classify_cells()
-
-            # print("BEFORE:")
-            # self.compute_divergence()
-            # print(self.cell_pressure)
-            # print(self.cell_divergence)
-
-            # print(self.face_volume_x)
-            # print(self.face_mass_x)
-            # print("-" * 200)
-
-            self.correct_pressure()
-
-            # scale_A = self.dt / (self.n_grid * self.n_grid)
-            # scale_b = 1 / self.n_grid
-            # self.pressure_solver.system_init(scale_A, scale_b)
-            # self.pressure_solver.solve(500)
-            # self.cell_pressure.copy_from(self.pressure_solver.p)
-            # self.apply_pressure()
-
-            # print(self.cell_pressure)
-            # print(self.cell_classification)
-
-            # print("AFTER:")
-            # self.compute_divergence()
-            # print(self.cell_pressure)
-            # print(self.cell_divergence)
-            # print("-" * 200)
-
+            # self.pressure_solver.solve()
             self.grid_to_particle()

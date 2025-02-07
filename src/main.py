@@ -1,13 +1,14 @@
 from configurations import Configuration
 from geometries import Circle, Square
 from renderer import Renderer
-from solver import Solver
+from mpm_solver import MPM_Solver
 from enums import Phase
 
 import taichi as ti
 
-# ti.init(arch=ti.cpu, debug=True)
-ti.init(arch=ti.gpu)
+ti.init(arch=ti.cpu, debug=True)
+# ti.init(arch=ti.cuda, debug=True)
+# ti.init(arch=ti.gpu)
 
 
 def main():
@@ -20,6 +21,7 @@ def main():
             name="Simple Spout Source (Water)",
             geometries=[
                 *[Square(Phase.Water, 0.05, 10, (0, -2), (0.45, 0.85), i) for i in range(10, 500)],
+                # *[Square(Phase.Water, 0.05, 10, (0, -2), (0.45, 0.15), i) for i in range(10, 500)],
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.2,  # Poisson's ratio (0.2)
@@ -78,7 +80,7 @@ def main():
 
     quality = 1
     max_particles = max([c.n_particles for c in configurations])
-    solver = Solver(quality=quality, max_particles=max_particles)
+    solver = MPM_Solver(quality=quality, max_particles=max_particles)
     renderer = Renderer(
         name="MPM - Water and Ice with Phase Transition",
         configurations=configurations,

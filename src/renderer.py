@@ -1,7 +1,7 @@
 from configurations import Configuration
 from enums import Phase, Color, State
 from datetime import datetime
-from solver import Solver
+from mpm_solver import MPM_Solver
 
 import taichi as ti
 import os
@@ -9,7 +9,9 @@ import os
 
 @ti.data_oriented
 class Renderer:
-    def __init__(self, name: str, res: tuple[int, int], solver: Solver, configurations: list[Configuration]) -> None:
+    def __init__(
+        self, name: str, res: tuple[int, int], solver: MPM_Solver, configurations: list[Configuration]
+    ) -> None:
         """Constructs a Renderer object, this advances the MLS-MPM solver and renders the updated particle positions.
         ---
         Parameters:
