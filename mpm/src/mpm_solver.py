@@ -1,5 +1,5 @@
-from enums import Classification, Color, Phase, State
-from pressure_solver import PressureSolver
+from src.enums import Classification, Color, Phase, State
+from src.pressure_solver import PressureSolver
 
 import taichi as ti
 
@@ -101,19 +101,18 @@ class MPM_Solver:
     def reset_grids(self):
         # TODO: not all of these need to be reset
         # TODO: performance can be gained by bundling fields in loops
-        # self.cell_classification.fill(Classification.Empty)
         self.face_velocity_x.fill(0)
         self.face_velocity_y.fill(0)
-        self.cell_pressure.fill(0)
-        self.face_mass_x.fill(0)
-        self.face_mass_y.fill(0)
-        self.cell_mass.fill(0)
-        self.cell_JE.fill(1)
-        self.cell_JP.fill(1)
-
-        # TODO: implemented volume computation
         self.face_volume_x.fill(0)
         self.face_volume_y.fill(0)
+        self.face_mass_x.fill(0)
+        self.face_mass_y.fill(0)
+
+        self.cell_pressure.fill(0)
+        self.cell_mass.fill(0)
+        # TODO: this should be zero because we are adding to it later on???
+        self.cell_JE.fill(1)
+        self.cell_JP.fill(1)
 
     @ti.kernel
     def particle_to_grid(self):
@@ -247,7 +246,6 @@ class MPM_Solver:
                 # self.cell_inv_lambda[c_base + offset] += c_weight * self.particle_inv_lambda[p]
                 self.cell_inv_lambda[c_base + offset] += c_weight * self.lambda_0[None]
 
-                # NOTE: the old JE, JP values are used here to compute the cell values.
                 # print("WEIGHT", c_weight)
                 # print("WEIGHT", x_weight)
                 # print("WEIGHT", y_weight)
@@ -255,15 +253,15 @@ class MPM_Solver:
                 # print("PARTJE", self.particle_JE[p])
                 # print("RESULT", c_weight * self.particle_JE[p])
 
+                # NOTE: the old JE, JP values are used here to compute the cell values.
                 self.cell_JE[c_base + offset] += c_weight * self.particle_JE[p]
                 self.cell_JP[c_base + offset] += c_weight * self.particle_JP[p]
                 # self.cell_JE[c_base + offset] += c_weight * JE
                 # self.cell_JP[c_base + offset] += c_weight * JP
 
+            # NOTE: the par
             self.particle_JE[p] = JE
             self.particle_JP[p] = JP
-        # for i, j in self.cell_pressure:
-        #     self.cell_pressure[i, j] = (-1 / self.cell_JP[i, j]) * self.lambda_0[None] * (self.cell_JE[i, j] - 1)
 
     @ti.kernel
     def momentum_to_velocity(self):
@@ -287,30 +285,6 @@ class MPM_Solver:
                 self.cell_temperature[i, j] *= 1 / self.cell_mass[i, j]
                 self.cell_inv_lambda[i, j] *= self.cell_mass[i, j]
                 self.cell_capacity[i, j] *= 1 / self.cell_mass[i, j]
-
-    @ti.kernel
-    def compute_volumes(self):
-        # TODO: Do this right
-        w_4 = [0.041667, 0.45833, 0.45833, 0.041667]
-        w_5 = [0.0026042, 0.1979125, 0.59896, 0.1979125, 0.0026042]
-        for i, j in self.face_volume_x:
-            for x_offset in ti.static(range(4)):
-                for y_offset in ti.static(range(5)):
-                    k = i - 2 + x_offset
-                    l = j - 2 + y_offset
-                    if k >= 0 and k < self.n_grid and l >= 0 and l < self.n_grid:
-                        if self.cell_classification[k, l] == Classification.Interior:
-                            self.face_volume_x[i, j] += w_4[x_offset] * w_5[y_offset]
-
-        for i, j in self.face_volume_y:
-            for x_offset in ti.static(range(5)):
-                for y_offset in ti.static(range(4)):
-                    k = i - 2 + x_offset
-                    l = j - 2 + y_offset
-                    if k >= 0 and k < self.n_grid and l >= 0 and l < self.n_grid:
-                        if self.cell_classification[k, l] == Classification.Interior:
-                            self.face_volume_y[i, j] += w_5[x_offset] * w_4[y_offset]
-
 
     @ti.kernel
     def classify_cells(self):
@@ -341,6 +315,35 @@ class MPM_Solver:
                 self.cell_classification[i, j] = Classification.Interior
             else:
                 self.cell_classification[i, j] = Classification.Empty
+
+    @ti.kernel
+    def compute_volumes(self):
+        # TODO: Do this right
+        # w_4 = [0.041667, 0.45833, 0.45833, 0.041667]
+        # w_5 = [0.0026042, 0.1979125, 0.59896, 0.1979125, 0.0026042]
+
+        for i, j in self.face_volume_x:
+            self.face_volume_x[i, j] = self.face_mass_x[i, j]
+        for i, j in self.face_volume_y:
+            self.face_volume_y[i, j] = self.face_mass_y[i, j]
+
+        # for i, j in self.face_volume_x:
+        #     for x_offset in ti.static(range(4)):
+        #         for y_offset in ti.static(range(5)):
+        #             k = i - 2 + x_offset
+        #             l = j - 2 + y_offset
+        #             if k >= 0 and k < self.n_grid and l >= 0 and l < self.n_grid:
+        #                 if self.cell_classification[k, l] == Classification.Interior:
+        #                     self.face_volume_x[i, j] += w_4[x_offset] * w_5[y_offset]
+        #
+        # for i, j in self.face_volume_y:
+        #     for x_offset in ti.static(range(5)):
+        #         for y_offset in ti.static(range(4)):
+        #             k = i - 2 + x_offset
+        #             l = j - 2 + y_offset
+        #             if k >= 0 and k < self.n_grid and l >= 0 and l < self.n_grid:
+        #                 if self.cell_classification[k, l] == Classification.Interior:
+        #                     self.face_volume_y[i, j] += w_5[x_offset] * w_4[y_offset]
 
     @ti.kernel
     def grid_to_particle(self):
@@ -399,7 +402,7 @@ class MPM_Solver:
             self.reset_grids()
             self.particle_to_grid()
             self.momentum_to_velocity()
-            self.compute_volumes()
             self.classify_cells()
-            # self.pressure_solver.solve()
+            self.compute_volumes()
+            self.pressure_solver.solve()
             self.grid_to_particle()

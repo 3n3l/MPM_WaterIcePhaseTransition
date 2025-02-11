@@ -1,5 +1,5 @@
+from src.geometries import Geometry
 from functools import reduce
-from geometries import Geometry
 
 import taichi as ti
 import numpy as np

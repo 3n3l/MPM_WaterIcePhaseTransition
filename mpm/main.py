@@ -1,8 +1,8 @@
-from configurations import Configuration
-from geometries import Circle, Square
-from renderer import Renderer
-from mpm_solver import MPM_Solver
-from enums import Phase
+from src.geometries import Circle, Square
+from src.configurations import Configuration
+from src.renderer import Renderer
+from src.mpm_solver import MPM_Solver
+from src.enums import Color, Phase
 
 import taichi as ti
 
@@ -20,8 +20,8 @@ def main():
         Configuration(
             name="Simple Spout Source (Water)",
             geometries=[
-                *[Square(Phase.Water, 0.05, 10, (0, -2), (0.45, 0.85), i) for i in range(10, 500)],
-                # *[Square(Phase.Water, 0.05, 10, (0, -2), (0.45, 0.15), i) for i in range(10, 500)],
+                # *[Square(Phase.Water, 0.05, 10, (0, -2), (0.45, 0.85), i) for i in range(10, 500)],
+                *[Square(Phase.Water, 0.05, 20, (0, -0.5), (0.45, 0.5), i) for i in range(10, 200)],
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.2,  # Poisson's ratio (0.2)
@@ -43,16 +43,16 @@ def main():
         Configuration(
             name="Waterspout Hits Ice Cubes",
             geometries=[
-                *[Square(Phase.Water, 0.05, 50, (2, -2), (0.1, 0.9), i) for i in range(10, 500)],
+                *[Square(Phase.Water, 0.05, 25, (2, -2), (0.1, 0.8), i) for i in range(10, 500)],
                 Square(Phase.Ice, 0.1, 2000, (0, 0), (0.59, 0.0)),
                 Square(Phase.Ice, 0.1, 2000, (0, 0), (0.70, 0.0)),
                 Square(Phase.Ice, 0.1, 2000, (0, 0), (0.65, 0.1)),
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
-            nu=0.2,  # Poisson's ratio (0.2)
-            zeta=10,  # Hardening coefficient (10)
-            theta_c=2.5e-2,  # Critical compression (2.5e-2)
-            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+            nu=0.1,  # Poisson's ratio (0.2)
+            zeta=20,  # Hardening coefficient (10)
+            theta_c=3.5e-2,  # Critical compression (2.5e-2)
+            theta_s=7.5e-3,  # Critical stretch (7.5e-3)
         ),
         Configuration(
             name="Spherefall (Water)",
@@ -91,4 +91,6 @@ def main():
 
 
 if __name__ == "__main__":
+    print(Color.Ice)
+    print(Color.Water)
     main()

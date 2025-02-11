@@ -1,6 +1,6 @@
 import numpy as np
 
-from enums import State
+from src.enums import State
 from typing import Tuple
 from abc import ABC
 

@@ -1,7 +1,7 @@
-from configurations import Configuration
-from enums import Phase, Color, State
+from src.configurations import Configuration
+from src.enums import Phase, Color, State
+from src.mpm_solver import MPM_Solver
 from datetime import datetime
-from mpm_solver import MPM_Solver
 
 import taichi as ti
 import os
