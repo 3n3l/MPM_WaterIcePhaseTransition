@@ -99,20 +99,21 @@ class MPM_Solver:
 
     @ti.kernel
     def reset_grids(self):
-        # TODO: not all of these need to be reset
-        # TODO: performance can be gained by bundling fields in loops
-        self.face_velocity_x.fill(0)
-        self.face_velocity_y.fill(0)
-        self.face_volume_x.fill(0)
-        self.face_volume_y.fill(0)
-        self.face_mass_x.fill(0)
-        self.face_mass_y.fill(0)
+        for i, j in self.face_velocity_x:
+            self.face_velocity_x[i, j] = 0
+            self.face_volume_x[i, j] = 0
+            self.face_mass_x[i, j] = 0
 
-        self.cell_pressure.fill(0)
-        self.cell_mass.fill(0)
-        # TODO: this should be zero because we are adding to it later on???
-        self.cell_JE.fill(1)
-        self.cell_JP.fill(1)
+        for i, j in self.face_velocity_y:
+            self.face_velocity_y[i, j] = 0
+            self.face_volume_y[i, j] = 0
+            self.face_mass_y[i, j] = 0
+
+        for i, j in self.cell_classification:
+            self.cell_pressure[i, j] = 0  # TODO: incorporate atmospheric pressure?
+            self.cell_mass[i, j] = 0
+            self.cell_JE[i, j] = 0  # TODO: zero or one???
+            self.cell_JP[i, j] = 0  # TODO: zero or one???
 
     @ti.kernel
     def particle_to_grid(self):
