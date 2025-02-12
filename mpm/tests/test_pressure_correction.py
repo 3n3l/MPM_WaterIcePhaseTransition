@@ -103,7 +103,7 @@ def main() -> None:
         solver.substep()
         compute_divergence(solver, divergence)
         print(".", end=("\n" if i % 10 == 0 else " "), flush=True)
-        if not np.any(divergence.to_numpy() > 0):
+        if np.any(divergence.to_numpy() > 0):
             we_succeeded = False
             break
 
