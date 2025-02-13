@@ -1,5 +1,5 @@
-from src.geometries import Circle, Square
 from src.configurations import Configuration
+from src.geometries import Circle, Rectangle
 from src.renderer import Renderer
 from src.mpm_solver import MPM_Solver
 from src.enums import Color, Phase
@@ -20,8 +20,7 @@ def main():
         Configuration(
             name="Simple Spout Source (Water)",
             geometries=[
-                # *[Square(Phase.Water, 0.05, 10, (0, -2), (0.45, 0.85), i) for i in range(10, 500)],
-                *[Square(Phase.Water, 0.05, 20, (0, -0.5), (0.45, 0.5), i) for i in range(10, 200)],
+                *[Rectangle(Phase.Water, 0.05, 0.05, 10, (0, -2), (0.45, 0.85), i) for i in range(10, 500)],
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.2,  # Poisson's ratio (0.2)
@@ -41,12 +40,24 @@ def main():
             theta_s=7.5e-3,  # Critical stretch (7.5e-3)
         ),
         Configuration(
-            name="Waterspout Hits Ice Cubes",
+            name="Waterspout Hits Body of Water (Water)",
             geometries=[
-                *[Square(Phase.Water, 0.05, 25, (2, -2), (0.1, 0.8), i) for i in range(10, 500)],
-                Square(Phase.Ice, 0.1, 2000, (0, 0), (0.59, 0.0)),
-                Square(Phase.Ice, 0.1, 2000, (0, 0), (0.70, 0.0)),
-                Square(Phase.Ice, 0.1, 2000, (0, 0), (0.65, 0.1)),
+                Rectangle(Phase.Water, 0.96, 0.1, 5_000, (0, 0), (0, 0)),
+                *[Rectangle(Phase.Water, 0.1, 0.05, 10, (0, -1), (0.45, 0.45), i) for i in range(10, 500)],
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ),
+        Configuration(
+            name="Waterspout Hits Ice Cubes (Water, Ice)",
+            geometries=[
+                *[Rectangle(Phase.Water, 0.05, 0.05, 25, (2, -2), (0.1, 0.8), i) for i in range(10, 500)],
+                Rectangle(Phase.Ice, 0.1, 0.1, 2000, (0, 0), (0.59, 0.0)),
+                Rectangle(Phase.Ice, 0.1, 0.1, 2000, (0, 0), (0.70, 0.0)),
+                Rectangle(Phase.Ice, 0.1, 0.1, 2000, (0, 0), (0.65, 0.1)),
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.1,  # Poisson's ratio (0.2)

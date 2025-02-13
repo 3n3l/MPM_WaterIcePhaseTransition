@@ -37,11 +37,12 @@ class Circle(Geometry):
             self.frame_threshold[p] = frame_threshold
 
 
-class Square(Geometry):
+class Rectangle(Geometry):
     def __init__(
         self,
         phase: int,
-        size: float,
+        width: float,
+        height: float,
         n_particles: int,
         velocity: Tuple[float, float],
         coordinates: Tuple[float, float],
@@ -49,8 +50,8 @@ class Square(Geometry):
     ) -> None:
         super().__init__(n_particles, phase)
         for p in range(n_particles):
-            x = np.random.rand() * size + coordinates[0]
-            y = np.random.rand() * size + coordinates[1]
+            x = np.random.rand() * width + coordinates[0]
+            y = np.random.rand() * height + coordinates[1]
             self.velocity[p] = velocity
             self.position[p] = [x, y]
             self.state[p] = State.Active if frame_threshold == 0 else State.Inactive
