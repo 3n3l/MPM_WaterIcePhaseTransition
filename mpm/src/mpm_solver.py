@@ -42,6 +42,8 @@ class MPM_Solver:
         # self.latent_heat = 0.334 # in J/kg
 
         # Properties on MAC-faces.
+        self.face_classification_x = ti.field(dtype=int, shape=(self.n_grid + 1, self.n_grid))
+        self.face_classification_y = ti.field(dtype=int, shape=(self.n_grid, self.n_grid + 1))
         self.face_conductivity_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
         self.face_conductivity_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
         self.face_velocity_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
@@ -269,6 +271,7 @@ class MPM_Solver:
         for i, j in self.face_mass_x:
             if self.face_mass_x[i, j] > 0:  # No need for epsilon here
                 self.face_velocity_x[i, j] *= 1 / self.face_mass_x[i, j]
+                # TODO: as the boundary is classified as colliding later on, this could done while applying pressure?
                 collision_left = i < self.boundary_width and self.face_velocity_x[i, j] < 0
                 collision_right = i > (self.n_grid - self.boundary_width) and self.face_velocity_x[i, j] > 0
                 if collision_left or collision_right:
@@ -277,6 +280,7 @@ class MPM_Solver:
             if self.face_mass_y[i, j] > 0:  # No need for epsilon here
                 self.face_velocity_y[i, j] *= 1 / self.face_mass_y[i, j]
                 self.face_velocity_y[i, j] += self.dt * GRAVITY
+                # TODO: as the boundary is classified as colliding later on, this could done while applying pressure?
                 collision_top = j > (self.n_grid - self.boundary_width) and self.face_velocity_y[i, j] > 0
                 collision_bottom = j < self.boundary_width and self.face_velocity_y[i, j] < 0
                 if collision_top or collision_bottom:
@@ -289,34 +293,65 @@ class MPM_Solver:
 
     @ti.kernel
     def classify_cells(self):
-        # We can extract the offset coordinates from the faces by adding one to the respective axis,
-        # e.g. we get the two x-faces with [i, j] and [i + 1, j], where each cell looks like:
-        # -  ^  -
-        # >  *  >
-        # -  ^  -
-        for i, j in self.cell_classification:
-            # TODO: A cell is marked as colliding if all of its surrounding faces are colliding.
+        for i, j in self.face_classification_x:
             # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
+
+            # The simulation boundary is always colliding.
+            if (self.n_grid - self.boundary_width) < i < self.boundary_width:
+                self.face_classification_x[i, j] = Classification.Colliding
+                continue
+
+            # For convenience later on: a face is marked interior if it has mass.
+            if self.face_mass_x[i, j] > 0:
+                self.face_classification_x[i, j] = Classification.Interior
+                continue
+
+            # All remaining faces are empty.
+            self.face_classification_x[i, j] = Classification.Empty
+
+        for i, j in self.face_classification_y:
+            # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
+
+            # The simulation boundary is always colliding.
+            if (self.n_grid - self.boundary_width) < j < self.boundary_width:
+                self.face_classification_x[i, j] = Classification.Colliding
+                continue
+
+            # For convenience later on: a face is marked interior if it has mass.
+            if self.face_mass_y[i, j] > 0:
+                self.face_classification_y[i, j] = Classification.Interior
+                continue
+
+            # All remaining faces are empty.
+            self.face_classification_y[i, j] = Classification.Empty
+
+        for i, j in self.cell_classification:
             # TODO: Colliding cells are either assigned the temperature of the object it collides with or a user-defined
             # spatially-varying value depending on the setup. If the free surface is being enforced as a Dirichlet
             # temperature condition, the ambient air temperature is recorded for empty cells. No other cells
             # require temperatures to be recorded at this stage.
-            is_colliding = False
+
+            # A cell is marked as colliding if all of its surrounding faces are colliding.
+            cell_is_colliding = self.face_classification_x[i, j] == Classification.Colliding
+            cell_is_colliding &= self.face_classification_x[i + 1, j] == Classification.Colliding
+            cell_is_colliding &= self.face_classification_y[i, j] == Classification.Colliding
+            cell_is_colliding &= self.face_classification_y[i, j + 1] == Classification.Colliding
+            if cell_is_colliding:
+                self.cell_classification[i, j] = Classification.Colliding
+                continue
 
             # A cell is interior if the cell and all of its surrounding faces have mass.
-            is_interior = self.cell_mass[i, j] > 0
-            is_interior &= self.face_mass_x[i, j] > 0
-            is_interior &= self.face_mass_y[i, j] > 0
-            is_interior &= self.face_mass_x[i + 1, j] > 0
-            is_interior &= self.face_mass_y[i, j + 1] > 0
-
-            if is_colliding:
-                self.cell_classification[i, j] = Classification.Colliding
-            elif is_interior:
+            cell_is_interior = self.cell_mass[i, j] > 0
+            cell_is_interior &= self.face_mass_x[i, j] > 0
+            cell_is_interior &= self.face_mass_x[i + 1, j] > 0
+            cell_is_interior &= self.face_mass_y[i, j] > 0
+            cell_is_interior &= self.face_mass_y[i, j + 1] > 0
+            if cell_is_interior:
                 self.cell_classification[i, j] = Classification.Interior
-            else:
-                self.cell_classification[i, j] = Classification.Empty
+                continue
 
+            # All remaining cells are empty.
+            self.cell_classification[i, j] = Classification.Empty
     @ti.kernel
     def compute_volumes(self):
         # TODO: Do this right
