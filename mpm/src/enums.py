@@ -1,12 +1,12 @@
 class Classification:
-    Empty = 0
-    Colliding = 1
-    Interior = 2
+    Empty = 22
+    Colliding = 33
+    Interior = 44
 
 
 class Phase:
-    Ice = 0
-    Water = 1
+    Ice = 55
+    Water = 66
 
 
 class Color:
@@ -16,5 +16,5 @@ class Color:
 
 
 class State:
-    Inactive = 0
-    Active = 1
+    Inactive = 77
+    Active = 88
