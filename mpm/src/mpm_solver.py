@@ -360,10 +360,54 @@ class MPM_Solver:
 
     @ti.kernel
     def compute_volumes(self):
-        for i, j in self.face_volume_x:
-            self.face_volume_x[i, j] = self.face_mass_x[i, j] / 10
-        for i, j in self.face_volume_y:
-            self.face_volume_y[i, j] = self.face_mass_y[i, j] / 10
+        for p in ti.ndrange(self.n_particles[None]):
+            # We use an additional offset of 0.5 for element-wise flooring.
+            position = self.particle_position[p]
+            c_base = (position * self.inv_dx - 0.5).cast(int)  # pyright: ignore
+            x_base = (position * self.inv_dx - (ti.Vector([self.dx / 2, 0]) + 0.5)).cast(int)  # pyright: ignore
+            y_base = (position * self.inv_dx - (ti.Vector([0, self.dx / 2]) + 0.5)).cast(int)  # pyright: ignore
+            x_fx = position * self.inv_dx - x_base.cast(float)
+            y_fx = position * self.inv_dx - y_base.cast(float)
+            # Integrated Cubic Kernels with [x=fx, x=fx+1, x=fx+2].
+            # See: https://www.bilibili.com/opus/662560355423092789
+            # TODO: simplify these terms
+            # x_v = [
+            #     # x = fx
+            #     ((1 / 8) * (x_fx**4)) + ((1 / 3) * (x_fx**3)) + ((2 / 3) * x_fx),
+            #     # x = abs(fx - 1)
+            #     ((-1 / 24) * (ti.abs(x_fx - 1) ** 4))
+            #     + ((1 / 3) * (ti.abs(x_fx - 1) ** 3))
+            #     + ((4 / 3) * ti.abs(x_fx - 1)),
+            #     # x = abs(fx - 2)
+            #     ((-1 / 24) * (ti.abs(x_fx - 2) ** 4))
+            #     + ((1 / 3) * (ti.abs(x_fx - 2) ** 3))
+            #     + ((4 / 3) * ti.abs(x_fx - 2)),
+            # ]
+            # y_v = [
+            #     # x = fx
+            #     ((1 / 8) * (y_fx**4)) + ((1 / 3) * (y_fx**3)) + ((2 / 3) * y_fx),
+            #     # x = abs(fx - 1)
+            #     ((-1 / 24) * (ti.abs(y_fx - 1) ** 4))
+            #     + ((1 / 3) * (ti.abs(y_fx - 1) ** 3))
+            #     + ((4 / 3) * ti.abs(y_fx - 1)),
+            #     # x = abs(fx - 2)
+            #     ((-1 / 24) * (ti.abs(y_fx - 2) ** 4))
+            #     + ((1 / 3) * (ti.abs(y_fx - 2) ** 3))
+            #     + ((4 / 3) * ti.abs(y_fx - 2)),
+            # ]
+
+            # Integrated quadratic kernels.
+            x_v = [0.33 * (1.5 - x_fx) ** 3, 0.25 - (x_fx - 1) ** 3, 0.33 * (x_fx - 0.5) ** 3]
+            y_v = [0.33 * (1.5 - y_fx) ** 3, 0.25 - (y_fx - 1) ** 3, 0.33 * (y_fx - 0.5) ** 3]
+
+            for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
+                offset = ti.Vector([i, j])
+                x_volume = x_v[i][0] * x_v[j][1]
+                y_volume = y_v[i][0] * y_v[j][1]
+                if self.cell_classification[c_base + offset] == Classification.Interior:
+                    # print("VOLUMES ->", x_volume, y_volume)
+                    self.face_volume_x[x_base + offset] += x_volume
+                    self.face_volume_y[y_base + offset] += y_volume
 
     @ti.kernel
     def grid_to_particle(self):
