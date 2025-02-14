@@ -22,8 +22,8 @@ class MPM_Solver:
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
         self.dt = 1e-4 / quality
-        self.rho_0 = 4e2
-        self.particle_vol = (self.dx * 0.1) ** 2
+        self.rho_0 = 997 # TODO: this is kg/m^3 for water, what about ice?
+        self.particle_vol = (self.dx * 0.5) ** 2
         self.n_dimensions = 2
 
         # The width of the simulation boundary in grid nodes.
