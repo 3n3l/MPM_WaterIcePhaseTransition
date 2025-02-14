@@ -63,14 +63,14 @@ class PressureSolver:
             # Unraveled index.
             idx = (i * self.n_grid) + j
 
-            # Fill the left hand side of the linear system.
-            A[idx, idx] += self.cell_inv_lambda[i, j] * self.cell_JP[i, j] * (1 / (self.cell_JE[i, j] * self.dt))
-
             # if self.cell_classification[i, j] != Classification.Interior:
             #     continue  # don't bother
 
+            # Fill the left hand side of the linear system.
+            A[idx, idx] += self.cell_inv_lambda[i, j] * self.cell_JP[i, j] * (1 / (self.cell_JE[i, j] * self.dt))
+
             # Fill the right hand side of the linear system.
-            b[idx] = (-2) * (self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j])
+            b[idx] = (-1) * (self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j])
 
             # TODO: b[i]: ??? BC might just be setting the velocities between interior and colliding cells to zero
             # TODO: L|M[i, i]: is set to the amount of NON COLLIDING neighbors
@@ -164,9 +164,9 @@ class PressureSolver:
         solver = SparseSolver()
         solver.compute(R)
         p = solver.solve(b)
-        # for i in ti.ndrange(p.shape[0]):
-        #     print(p[i])
-        # print("SUCCESS??? ->", solver.info())
+
+        solver_succeeded = solver.info()
+        assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
 
         # Apply the pressure to the intermediate velocity field.
         self.fill_pressure_field(p)

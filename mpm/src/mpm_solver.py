@@ -297,7 +297,8 @@ class MPM_Solver:
             # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
 
             # The simulation boundary is always colliding.
-            if (self.n_grid - self.boundary_width) < i < self.boundary_width:
+            x_face_is_colliding = i > (self.n_grid - self.boundary_width) or i < self.boundary_width
+            if x_face_is_colliding:
                 self.face_classification_x[i, j] = Classification.Colliding
                 continue
 
@@ -313,8 +314,9 @@ class MPM_Solver:
             # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
 
             # The simulation boundary is always colliding.
-            if (self.n_grid - self.boundary_width) < j < self.boundary_width:
-                self.face_classification_x[i, j] = Classification.Colliding
+            y_face_is_colliding = j > (self.n_grid - self.boundary_width) or j < self.boundary_width
+            if y_face_is_colliding:
+                self.face_classification_y[i, j] = Classification.Colliding
                 continue
 
             # For convenience later on: a face is marked interior if it has mass.
@@ -338,6 +340,7 @@ class MPM_Solver:
             cell_is_colliding &= self.face_classification_y[i, j + 1] == Classification.Colliding
             if cell_is_colliding:
                 self.cell_classification[i, j] = Classification.Colliding
+                # print("COLLIDING")
                 continue
 
             # A cell is interior if the cell and all of its surrounding faces have mass.
@@ -348,38 +351,19 @@ class MPM_Solver:
             cell_is_interior &= self.face_mass_y[i, j + 1] > 0
             if cell_is_interior:
                 self.cell_classification[i, j] = Classification.Interior
+                # print("INTERIOR")
                 continue
 
             # All remaining cells are empty.
             self.cell_classification[i, j] = Classification.Empty
+            # print("EMPTY")
+
     @ti.kernel
     def compute_volumes(self):
-        # TODO: Do this right
-        # w_4 = [0.041667, 0.45833, 0.45833, 0.041667]
-        # w_5 = [0.0026042, 0.1979125, 0.59896, 0.1979125, 0.0026042]
-
         for i, j in self.face_volume_x:
-            self.face_volume_x[i, j] = self.face_mass_x[i, j]
+            self.face_volume_x[i, j] = self.face_mass_x[i, j] / 10
         for i, j in self.face_volume_y:
-            self.face_volume_y[i, j] = self.face_mass_y[i, j]
-
-        # for i, j in self.face_volume_x:
-        #     for x_offset in ti.static(range(4)):
-        #         for y_offset in ti.static(range(5)):
-        #             k = i - 2 + x_offset
-        #             l = j - 2 + y_offset
-        #             if k >= 0 and k < self.n_grid and l >= 0 and l < self.n_grid:
-        #                 if self.cell_classification[k, l] == Classification.Interior:
-        #                     self.face_volume_x[i, j] += w_4[x_offset] * w_5[y_offset]
-        #
-        # for i, j in self.face_volume_y:
-        #     for x_offset in ti.static(range(5)):
-        #         for y_offset in ti.static(range(4)):
-        #             k = i - 2 + x_offset
-        #             l = j - 2 + y_offset
-        #             if k >= 0 and k < self.n_grid and l >= 0 and l < self.n_grid:
-        #                 if self.cell_classification[k, l] == Classification.Interior:
-        #                     self.face_volume_y[i, j] += w_5[x_offset] * w_4[y_offset]
+            self.face_volume_y[i, j] = self.face_mass_y[i, j] / 10
 
     @ti.kernel
     def grid_to_particle(self):
