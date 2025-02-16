@@ -119,36 +119,46 @@ class PressureSolver:
 
     @ti.kernel
     def apply_pressure(self):
-        # This uses a backward difference (TODO: verify) to apply the
-        # pressure from the two adjacent cells to the face velocity.
-        for i, j in ti.ndrange((1, self.n_grid), (1, self.n_grid - 1)):
+        left_boundary = self.boundary_width
+        right_boundary = self.n_grid - self.boundary_width
+        z = self.dt * self.inv_dx * self.inv_dx  # Central Difference Coefficients
+
+        for i, j in ti.ndrange((left_boundary, right_boundary + 1), (left_boundary, right_boundary)):
             # TODO: this could just be done for the classification step and then saved into a field?
             x_face_is_not_interior = self.cell_classification[i - 1, j] != Classification.Interior
             x_face_is_not_interior |= self.cell_classification[i, j] != Classification.Interior
             if x_face_is_not_interior:
                 continue  # don't bother
 
-            x_face_is_not_colliding = self.cell_classification[i - 1, j] != Classification.Colliding
-            x_face_is_not_colliding |= self.cell_classification[i, j] != Classification.Colliding
-            if x_face_is_not_colliding:
-                x_scale = self.dt * self.inv_dx * (self.face_volume_x[i, j] / self.face_mass_x[i, j])
-                self.face_velocity_x[i, j] += x_scale * (self.cell_pressure[i, j] - self.cell_pressure[i - 1, j])
-            else:  # just set the velocity to zero. TODO: use velocity of the collision object?
-                self.face_velocity_x[i, j] = 0
+            x_face_is_colliding = self.cell_classification[i - 1, j] == Classification.Colliding
+            x_face_is_colliding |= self.cell_classification[i, j] == Classification.Colliding
+            if x_face_is_colliding:
+                self.x_velocity[i, j] = 0
+                continue
 
-        for i, j in ti.ndrange((1, self.n_grid - 1), (1, self.n_grid)):
+            self.x_velocity[i, j] += 4 * z * (self.x_volume[i, j] / self.x_mass[i, j]) * self.c_pressure[i, j]
+            self.x_velocity[i, j] -= z * (self.x_volume[i + 1, j] / self.x_mass[i + 1, j]) * self.c_pressure[i + 1, j]
+            self.x_velocity[i, j] -= z * (self.x_volume[i - 1, j] / self.x_mass[i - 1, j]) * self.c_pressure[i - 1, j]
+            self.x_velocity[i, j] -= z * (self.x_volume[i, j + 1] / self.x_mass[i, j + 1]) * self.c_pressure[i, j + 1]
+            self.x_velocity[i, j] -= z * (self.x_volume[i, j - 1] / self.x_mass[i, j - 1]) * self.c_pressure[i, j - 1]
+
+        for i, j in ti.ndrange((left_boundary, right_boundary), (left_boundary, right_boundary + 1)):
             y_face_is_not_interior = self.cell_classification[i, j - 1] != Classification.Interior
             y_face_is_not_interior |= self.cell_classification[i, j] != Classification.Interior
             if y_face_is_not_interior:
                 continue  # don't bother
 
-            y_face_is_not_colliding = self.cell_classification[i, j - 1] != Classification.Colliding
-            y_face_is_not_colliding |= self.cell_classification[i, j] != Classification.Colliding
-            if y_face_is_not_colliding:
-                y_scale = self.dt * self.inv_dx * (self.face_volume_y[i, j] / self.face_mass_y[i, j])
-                self.face_velocity_y[i, j] += y_scale * (self.cell_pressure[i, j] - self.cell_pressure[i, j - 1])
-            else:  # just set the velocity to zero. TODO: use velocity of the collision object?
-                self.face_velocity_y[i, j] = 0
+            y_face_is_colliding = self.cell_classification[i - 1, j] == Classification.Colliding
+            y_face_is_colliding |= self.cell_classification[i, j] == Classification.Colliding
+            if y_face_is_colliding:
+                self.y_velocity[i, j] = 0
+                continue
+
+            self.y_velocity[i, j] += 4 * z * (self.y_volume[i, j] / self.y_mass[i, j]) * self.c_pressure[i, j]
+            self.y_velocity[i, j] -= z * (self.y_volume[i + 1, j] / self.y_mass[i + 1, j]) * self.c_pressure[i + 1, j]
+            self.y_velocity[i, j] -= z * (self.y_volume[i - 1, j] / self.y_mass[i - 1, j]) * self.c_pressure[i - 1, j]
+            self.y_velocity[i, j] -= z * (self.y_volume[i, j + 1] / self.y_mass[i, j + 1]) * self.c_pressure[i, j + 1]
+            self.y_velocity[i, j] -= z * (self.y_volume[i, j - 1] / self.y_mass[i, j - 1]) * self.c_pressure[i, j - 1]
 
     def solve(self):
         A = SparseMatrixBuilder(self.n_cells, self.n_cells, max_num_triplets=(self.n_cells * 5))
