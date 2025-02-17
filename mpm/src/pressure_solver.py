@@ -57,17 +57,17 @@ class PressureSolver:
 
             b[idx] = -((self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j]))
             if i != 0:
-                b[idx] += self.inv_dx * self.inv_dx * self.x_velocity[i, j]
                 b[idx] -= self.inv_dx * self.inv_dx * self.x_velocity[i - 1, j]
+                b[idx] += self.inv_dx * self.inv_dx * self.x_velocity[i, j]
             if i != self.n_grid - 1:
-                b[idx] += self.inv_dx * self.inv_dx * self.x_velocity[i, j]
                 b[idx] -= self.inv_dx * self.inv_dx * self.x_velocity[i + 1, j]
+                b[idx] += self.inv_dx * self.inv_dx * self.x_velocity[i, j]
             if j != 0:
-                b[idx] += self.inv_dx * self.inv_dx * self.x_velocity[i, j]
                 b[idx] -= self.inv_dx * self.inv_dx * self.y_velocity[i, j - 1]
-            if j != self.n_grid - 1:
                 b[idx] += self.inv_dx * self.inv_dx * self.x_velocity[i, j]
+            if j != self.n_grid - 1:
                 b[idx] -= self.inv_dx * self.inv_dx * self.y_velocity[i, j + 1]
+                b[idx] += self.inv_dx * self.inv_dx * self.x_velocity[i, j]
 
             # Build the Laplacian for the face density, apply homogeneous Neumann boundary condition to colliding faces.
             # TODO: or faces between colliding cells only?
@@ -85,7 +85,7 @@ class PressureSolver:
                 elif i != self.n_grid - 1:  # Homogeneous Neumann boundary condition.
                     L_r[idx, idx - self.n_grid] -= self.x_volume[i + 1, j] / self.x_mass[i + 1, j]
                     L_r[idx, idx] += self.x_volume[i, j] / self.x_mass[i, j]
-                    b[idx - self.n_grid] = 0
+                    # b[idx - self.n_grid] = 0
 
             if i != self.n_grid - 1:
                 if self.x_classification[i + 1, j] != Classification.Colliding:
@@ -94,7 +94,7 @@ class PressureSolver:
                 elif i != 0:  # Homogeneous Neumann boundary condition.
                     L_r[idx, idx + self.n_grid] -= self.x_volume[i - 1, j] / self.x_mass[i - 1, j]
                     L_r[idx, idx] += self.x_volume[i, j] / self.x_mass[i, j]
-                    b[idx + self.n_grid] = 0
+                    # b[idx + self.n_grid] = 0
 
             if j != 0:
                 if self.y_classification[i, j - 1] != Classification.Colliding:
@@ -103,7 +103,7 @@ class PressureSolver:
                 elif j != self.n_grid - 1:  # Homogeneous Neumann boundary condition.
                     L_r[idx, idx - 1] -= self.x_volume[i, j + 1] / self.x_mass[i, j + 1]
                     L_r[idx, idx] += self.x_volume[i, j] / self.x_mass[i, j]
-                    b[idx - 1] = 0
+                    # b[idx - 1] = 0
 
             if j != self.n_grid - 1:
                 if self.y_classification[i, j + 1] != Classification.Colliding:
@@ -112,7 +112,7 @@ class PressureSolver:
                 elif j != 0:  # Homogeneous Neumann boundary condition.
                     L_r[idx, idx + 1] -= self.x_volume[i, j - 1] / self.x_mass[i, j - 1]
                     L_r[idx, idx] += self.x_volume[i, j] / self.x_mass[i, j]
-                    b[idx + 1] = 0
+                    # b[idx + 1] = 0
 
             # Build the Laplacian for the cell pressure, apply homogeneous Dirichlet boundary condition to empty cells.
             # TODO: Colliding cells are also empty and need to be accounted for here?
@@ -127,27 +127,49 @@ class PressureSolver:
             # +---+---+---+
             if self.c_classification[i, j] == Classification.Interior:
                 if i != 0 and self.c_classification[i - 1, j] != Classification.Colliding:
-                    L_p[idx, idx] += 1.0
+                    L_p[idx, idx] -= 1.0
                     if self.c_classification[i - 1, j] == Classification.Interior:
-                        L_p[idx, idx - self.n_grid] -= 1.0
+                        L_p[idx, idx - self.n_grid] += 1.0
 
                 if i != self.n_grid - 1 and self.c_classification[i + 1, j] != Classification.Colliding:
-                    L_p[idx, idx + self.n_grid] -= 1.0
+                    L_p[idx, idx] -= 1.0
                     if self.c_classification[i + 1, j] == Classification.Interior:
-                        L_p[idx, idx] += 1.0
+                        L_p[idx, idx + self.n_grid] += 1.0
 
                 if j != 0 and self.c_classification[i, j - 1] != Classification.Colliding:
-                    L_p[idx, idx - 1] -= 1.0
+                    L_p[idx, idx] -= 1.0
                     if self.c_classification[i, j - 1] != Classification.Interior:
-                        L_p[idx, idx] += 1.0
+                        L_p[idx, idx - 1] += 1.0
 
                 if j != self.n_grid - 1 and self.c_classification[i, j + 1] != Classification.Colliding:
-                    L_p[idx, idx + 1] -= 1.0
+                    L_p[idx, idx] -= 1.0
                     if self.c_classification[i, j + 1] == Classification.Interior:
-                        L_p[idx, idx] += 1.0
+                        L_p[idx, idx + 1] += 1.0
             else:  # Homogeneous Dirichlet boundary condition.
                 L_p[idx, idx] += 1
                 b[idx] = 0
+
+            # print("~" * 100)
+            # print("D_s[idx - 1, idx] ->", D_s[idx, idx - self.n_grid])
+            # print("D_s[idx + 1, idx] ->", D_s[idx, idx + self.n_grid])
+            # print("D_s[idx, idx - 1] ->", D_s[idx, idx - 1])
+            # print("D_s[idx, idx + 1] ->", D_s[idx, idx + 1])
+            # print("D_s[idx, idx]     ->", D_s[idx, idx])
+            #
+            # print("L_r[idx - 1, idx] ->", L_r[idx, idx - self.n_grid])
+            # print("L_r[idx + 1, idx] ->", L_r[idx, idx + self.n_grid])
+            # print("L_r[idx, idx - 1] ->", L_r[idx, idx - 1])
+            # print("L_r[idx, idx + 1] ->", L_r[idx, idx + 1])
+            # print("L_r[idx, idx]     ->", L_r[idx, idx])
+            #
+            # print("L_p[idx - 1, idx] ->", L_p[idx, idx - self.n_grid])
+            # print("L_p[idx + 1, idx] ->", L_p[idx, idx + self.n_grid])
+            # print("L_p[idx, idx - 1] ->", L_p[idx, idx - 1])
+            # print("L_p[idx, idx + 1] ->", L_p[idx, idx + 1])
+            # print("L_p[idx, idx]     ->", L_p[idx, idx])
+            #
+            # print("b[idx]            ->", b[idx])
+            # print()
 
     @ti.kernel
     def fill_pressure_field(self, p: ti.types.ndarray()):  # pyright: ignore
@@ -211,10 +233,11 @@ class PressureSolver:
         self.fill_linear_system(D_s, L_r, L_p, b)
         D_s, L_r, L_p = D_s.build(), L_r.build(), L_p.build()
         # TODO: it might be more efficient to scale each entry directly?
-        # delta = 0.00032  # relaxation
-        delta = 1.0  # relaxation
+        delta = 0.0000032  # relaxation
+        # delta = 1.0  # relaxation
         coefficients = self.inv_dx * self.inv_dx
-        R = (delta * D_s) + ((self.dt * coefficients * L_r) @ (delta * coefficients * L_p))
+        R = (delta * D_s) + self.dt * ((coefficients * L_r) @ (delta * coefficients * L_p))
+        print(R)
 
         # Solve the linear system.
         solver = SparseSolver()
@@ -226,6 +249,6 @@ class PressureSolver:
         assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
         assert not np.any(np.isnan(pressure)), "NAN VALUE IN PRESSURE ARRAY!"
 
-        # Apply the pressure to the intermediate velocity field.
-        self.fill_pressure_field(p)
-        self.apply_pressure()
+        # FIXME: Apply the pressure to the intermediate velocity field.
+        # self.fill_pressure_field(p)
+        # self.apply_pressure()
