@@ -83,9 +83,10 @@ def compute_divergence(solver: ti.template(), div: ti.types.ndarray()):  # pyrig
 def main() -> None:
     configurations = [
         Configuration(
-            name="Simple Spout Source (Water)",
+            name="Waterspout Hits Body of Water (Water)",
             geometries=[
-                *[Rectangle(Phase.Water, 0.05, 0.05, 10, (0, -2), (0.45, 0.85), i) for i in range(10, 500)],
+                Rectangle(Phase.Water, 0.96, 0.1, 5_000, (0, 0), (0, 0)),
+                *[Rectangle(Phase.Water, 0.1, 0.05, 10, (0, -1), (0.45, 0.45), i) for i in range(10, 500)],
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.2,  # Poisson's ratio (0.2)
@@ -94,10 +95,9 @@ def main() -> None:
             theta_s=5.0e-3,  # Critical stretch (7.5e-3)
         ),
         Configuration(
-            name="Waterspout Hits Body of Water (Water)",
+            name="Simple Spout Source (Water)",
             geometries=[
-                Rectangle(Phase.Water, 0.96, 0.1, 5_000, (0, 0), (0, 0)),
-                *[Rectangle(Phase.Water, 0.1, 0.05, 10, (0, -1), (0.45, 0.45), i) for i in range(10, 500)],
+                *[Rectangle(Phase.Water, 0.05, 0.05, 10, (0, -2), (0.45, 0.85), i) for i in range(10, 500)],
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
             nu=0.2,  # Poisson's ratio (0.2)
@@ -150,24 +150,24 @@ def main() -> None:
                 solver.classify_cells()
                 solver.compute_volumes()
 
-                print("+" * 200)
-                compute_divergence(solver, divergence)
-                print("BEFORE:")
-                pressure = solver.cell_pressure.to_numpy()
-                print("P ->", np.min(pressure), np.max(pressure))
-                print("D ->", np.min(divergence.to_numpy()), np.max(divergence.to_numpy()))
+                # print("+" * 200)
+                # compute_divergence(solver, divergence)
+                # print("BEFORE:")
+                # pressure = solver.cell_pressure.to_numpy()
+                # print("P ->", np.min(pressure), np.max(pressure))
+                # print("D ->", np.min(divergence.to_numpy()), np.max(divergence.to_numpy()))
 
                 solver.pressure_solver.solve()
                 # FIXME: this shouldn't be needed, but keep this here for testing purposes ???
                 # solver.face_velocity_x.copy_from(solver.pressure_solver.face_velocity_x)
                 # solver.face_velocity_y.copy_from(solver.pressure_solver.face_velocity_y)
 
-                compute_divergence(solver, divergence)
-                pressure = solver.cell_pressure.to_numpy()
-                print("AFTER:")
-                print("P ->", np.min(pressure), np.max(pressure))
-                print("D ->", np.min(divergence.to_numpy()), np.max(divergence.to_numpy()))
-                print()
+                # compute_divergence(solver, divergence)
+                # pressure = solver.cell_pressure.to_numpy()
+                # print("AFTER:")
+                # print("P ->", np.min(pressure), np.max(pressure))
+                # print("D ->", np.min(divergence.to_numpy()), np.max(divergence.to_numpy()))
+                # print()
 
                 solver.grid_to_particle()
 
