@@ -18,28 +18,6 @@ def main():
 
     configurations = [
         Configuration(
-            name="Simple Spout Source (Water)",
-            geometries=[
-                *[Rectangle(Phase.Water, 0.05, 0.05, 10, (0, -2), (0.45, 0.85), i) for i in range(10, 500)],
-            ],
-            E=1.4e5,  # Young's modulus (1.4e5)
-            nu=0.2,  # Poisson's ratio (0.2)
-            zeta=10,  # Hardening coefficient (10)
-            theta_c=2.5e-2,  # Critical compression (2.5e-2)
-            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
-        ),
-        Configuration(
-            name="Simple Blob Source (Ice)",
-            geometries=[
-                *[Circle(Phase.Ice, 0.05, 1000, (5, 0), (0.1, 0.5), i) for i in range(0, 250, 25)],
-            ],
-            E=1.4e5,  # Young's modulus (1.4e5)
-            nu=0.25,  # Poisson's ratio (0.2)
-            zeta=10,  # Hardening coefficient (10)
-            theta_c=8.5e-2,  # Critical compression (2.5e-2)
-            theta_s=7.5e-3,  # Critical stretch (7.5e-3)
-        ),
-        Configuration(
             name="Waterspout Hits Body of Water (Water)",
             geometries=[
                 Rectangle(Phase.Water, 0.96, 0.1, 5_000, (0, 0), (0, 0)),
@@ -63,6 +41,28 @@ def main():
             nu=0.1,  # Poisson's ratio (0.2)
             zeta=20,  # Hardening coefficient (10)
             theta_c=3.5e-2,  # Critical compression (2.5e-2)
+            theta_s=7.5e-3,  # Critical stretch (7.5e-3)
+        ),
+        Configuration(
+            name="Simple Spout Source (Water)",
+            geometries=[
+                *[Rectangle(Phase.Water, 0.05, 0.05, 10, (0, -2), (0.45, 0.85), i) for i in range(10, 500)],
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ),
+        Configuration(
+            name="Simple Blob Source (Ice)",
+            geometries=[
+                *[Circle(Phase.Ice, 0.05, 1000, (5, 0), (0.1, 0.5), i) for i in range(0, 250, 25)],
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.25,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=8.5e-2,  # Critical compression (2.5e-2)
             theta_s=7.5e-3,  # Critical stretch (7.5e-3)
         ),
         Configuration(
@@ -102,6 +102,4 @@ def main():
 
 
 if __name__ == "__main__":
-    print(Color.Ice)
-    print(Color.Water)
     main()
