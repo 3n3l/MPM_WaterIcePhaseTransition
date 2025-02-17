@@ -114,8 +114,8 @@ class MPM_Solver:
         for i, j in self.cell_classification:
             self.cell_pressure[i, j] = 0  # TODO: incorporate atmospheric pressure?
             self.cell_mass[i, j] = 0
-            self.cell_JE[i, j] = 0  # TODO: zero or one???
-            self.cell_JP[i, j] = 0  # TODO: zero or one???
+            self.cell_JE[i, j] = 1  # TODO: zero or one???
+            self.cell_JP[i, j] = 1  # TODO: zero or one???
 
     @ti.kernel
     def particle_to_grid(self):
@@ -171,7 +171,6 @@ class MPM_Solver:
 
             # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
             D_inv = 4 * self.inv_dx * self.inv_dx  # Quadratic interpolation
-            # D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
 
             # TODO: What happens here exactly? Something with Cauchy-stress?
             stress *= -self.dt * self.particle_vol * D_inv
@@ -194,41 +193,18 @@ class MPM_Solver:
             c_w = [0.5 * (1.5 - c_fx) ** 2, 0.75 - (c_fx - 1) ** 2, 0.5 * (c_fx - 0.5) ** 2]
             x_w = [0.5 * (1.5 - x_fx) ** 2, 0.75 - (x_fx - 1) ** 2, 0.5 * (x_fx - 0.5) ** 2]
             y_w = [0.5 * (1.5 - y_fx) ** 2, 0.75 - (y_fx - 1) ** 2, 0.5 * (y_fx - 0.5) ** 2]
-            # Cubic kernels (JST16 Eqn. 122 with x=fx, abs(fx-1), abs(fx-2))
-            # Taken from https://github.com/taichi-dev/advanced_examples/blob/main/mpm/mpm99_cubic.py
-            # TODO: calculate own weights for x=fx, fx-1, fx-2
-            # c_w = [
-            #     0.5 * c_fx**3 - c_fx**2 + 2.0 / 3.0,
-            #     0.5 * (-(c_fx - 1.0)) ** 3 - (-(c_fx - 1.0)) ** 2 + 2.0 / 3.0,
-            #     1.0 / 6.0 * (2.0 + (c_fx - 2.0)) ** 3,
-            # ]
-            # x_w = [
-            #     0.5 * x_fx**3 - x_fx**2 + 2.0 / 3.0,
-            #     0.5 * (-(x_fx - 1.0)) ** 3 - (-(x_fx - 1.0)) ** 2 + 2.0 / 3.0,
-            #     1.0 / 6.0 * (2.0 + (x_fx - 2.0)) ** 3,
-            # ]
-            # y_w = [
-            #     0.5 * y_fx**3 - y_fx**2 + 2.0 / 3.0,
-            #     0.5 * (-(y_fx - 1.0)) ** 3 - (-(y_fx - 1.0)) ** 2 + 2.0 / 3.0,
-            #     1.0 / 6.0 * (2.0 + (y_fx - 2.0)) ** 3,
-            # ]
 
             for i, j in ti.static(ti.ndrange(3, 3)):
                 offset = ti.Vector([i, j])
                 c_weight = c_w[i][0] * c_w[j][1]
                 x_weight = x_w[i][0] * x_w[j][1]
                 y_weight = y_w[i][0] * y_w[j][1]
-                # c_dpos = (offset.cast(float) - c_fx) * self.dx
                 x_dpos = (offset.cast(float) - x_fx) * self.dx
                 y_dpos = (offset.cast(float) - y_fx) * self.dx
 
                 # Rasterize mass to grid faces.
                 self.face_mass_x[x_base + offset] += x_weight * self.particle_mass[p]
                 self.face_mass_y[y_base + offset] += y_weight * self.particle_mass[p]
-
-                # TODO: implement proper volume computation
-                # self.face_volume_x[x_base + offset] += x_weight * self.particle_vol
-                # self.face_volume_y[x_base + offset] += y_weight * self.particle_vol
 
                 # Rasterize velocity to grid faces.
                 x_velocity = self.particle_mass[p] * self.particle_velocity[p][0] + x_affine @ x_dpos
@@ -249,20 +225,12 @@ class MPM_Solver:
                 # self.cell_inv_lambda[c_base + offset] += c_weight * self.particle_inv_lambda[p]
                 self.cell_inv_lambda[c_base + offset] += c_weight * self.lambda_0[None]
 
-                # print("WEIGHT", c_weight)
-                # print("WEIGHT", x_weight)
-                # print("WEIGHT", y_weight)
-                # print("CELLJE", self.cell_JE[i, j])
-                # print("PARTJE", self.particle_JE[p])
-                # print("RESULT", c_weight * self.particle_JE[p])
-
                 # NOTE: the old JE, JP values are used here to compute the cell values.
                 self.cell_JE[c_base + offset] += c_weight * self.particle_JE[p]
                 self.cell_JP[c_base + offset] += c_weight * self.particle_JP[p]
+                # FIXME: or do we need to use the new ones?
                 # self.cell_JE[c_base + offset] += c_weight * JE
                 # self.cell_JP[c_base + offset] += c_weight * JP
-
-            # NOTE: the par
             self.particle_JE[p] = JE
             self.particle_JP[p] = JP
 
@@ -368,35 +336,7 @@ class MPM_Solver:
             y_base = (position * self.inv_dx - (ti.Vector([0, self.dx / 2]) + 0.5)).cast(int)  # pyright: ignore
             x_fx = position * self.inv_dx - x_base.cast(float)
             y_fx = position * self.inv_dx - y_base.cast(float)
-            # Integrated Cubic Kernels with [x=fx, x=fx+1, x=fx+2].
-            # See: https://www.bilibili.com/opus/662560355423092789
-            # TODO: simplify these terms
-            # x_v = [
-            #     # x = fx
-            #     ((1 / 8) * (x_fx**4)) + ((1 / 3) * (x_fx**3)) + ((2 / 3) * x_fx),
-            #     # x = abs(fx - 1)
-            #     ((-1 / 24) * (ti.abs(x_fx - 1) ** 4))
-            #     + ((1 / 3) * (ti.abs(x_fx - 1) ** 3))
-            #     + ((4 / 3) * ti.abs(x_fx - 1)),
-            #     # x = abs(fx - 2)
-            #     ((-1 / 24) * (ti.abs(x_fx - 2) ** 4))
-            #     + ((1 / 3) * (ti.abs(x_fx - 2) ** 3))
-            #     + ((4 / 3) * ti.abs(x_fx - 2)),
-            # ]
-            # y_v = [
-            #     # x = fx
-            #     ((1 / 8) * (y_fx**4)) + ((1 / 3) * (y_fx**3)) + ((2 / 3) * y_fx),
-            #     # x = abs(fx - 1)
-            #     ((-1 / 24) * (ti.abs(y_fx - 1) ** 4))
-            #     + ((1 / 3) * (ti.abs(y_fx - 1) ** 3))
-            #     + ((4 / 3) * ti.abs(y_fx - 1)),
-            #     # x = abs(fx - 2)
-            #     ((-1 / 24) * (ti.abs(y_fx - 2) ** 4))
-            #     + ((1 / 3) * (ti.abs(y_fx - 2) ** 3))
-            #     + ((4 / 3) * ti.abs(y_fx - 2)),
-            # ]
-
-            # Integrated quadratic kernels.
+            # Integrated quadratic kernels, see: https://www.bilibili.com/opus/662560355423092789
             x_v = [0.33 * (1.5 - x_fx) ** 3, 0.25 - (x_fx - 1) ** 3, 0.33 * (x_fx - 0.5) ** 3]
             y_v = [0.33 * (1.5 - y_fx) ** 3, 0.25 - (y_fx - 1) ** 3, 0.33 * (y_fx - 0.5) ** 3]
 
@@ -405,7 +345,6 @@ class MPM_Solver:
                 x_volume = x_v[i][0] * x_v[j][1]
                 y_volume = y_v[i][0] * y_v[j][1]
                 if self.cell_classification[c_base + offset] == Classification.Interior:
-                    # print("VOLUMES ->", x_volume, y_volume)
                     self.face_volume_x[x_base + offset] += x_volume
                     self.face_volume_y[y_base + offset] += y_volume
 
