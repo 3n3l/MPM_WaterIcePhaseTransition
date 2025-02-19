@@ -112,7 +112,10 @@ class MPM_Solver:
             self.face_mass_y[i, j] = 0
 
         for i, j in self.cell_classification:
-            self.cell_pressure[i, j] = 0  # TODO: incorporate atmospheric pressure?
+            self.cell_temperature[i, j] = 0
+            self.cell_inv_lambda[i, j] = 0
+            self.cell_pressure[i, j] = 0
+            self.cell_capacity[i, j] = 0
             self.cell_mass[i, j] = 0
             self.cell_JE[i, j] = 1
             self.cell_JP[i, j] = 1
@@ -218,13 +221,12 @@ class MPM_Solver:
                 self.face_conductivity_y[y_base + offset] += y_weight * conductivity
 
                 # Rasterize to cell centers.
-                self.cell_mass[c_base + offset] += c_weight * self.particle_mass[p]
-                self.cell_capacity[c_base + offset] += c_weight * self.particle_capacity[p]
                 self.cell_temperature[c_base + offset] += c_weight * self.particle_temperature[p]
+                self.cell_capacity[c_base + offset] += c_weight * self.particle_capacity[p]
+                self.cell_mass[c_base + offset] += c_weight * self.particle_mass[p]
 
                 # TODO: use particle_inv_lambda, set different lambda for each phase?
                 self.cell_inv_lambda[c_base + offset] += c_weight * self.particle_inv_lambda[p]
-                # self.cell_inv_lambda[c_base + offset] += c_weight * (1 / self.lambda_0[None])
 
                 # NOTE: the old JE, JP values are used here to compute the cell values.
                 # self.cell_JE[c_base + offset] += c_weight * self.particle_JE[p]
