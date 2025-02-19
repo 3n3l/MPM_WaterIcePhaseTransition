@@ -22,7 +22,7 @@ class MPM_Solver:
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
         self.dt = 1e-4 / quality
-        self.rho_0 = 997 # TODO: this is kg/m^3 for water, what about ice?
+        self.rho_0 = 1000  # TODO: this is kg/m^3 for water, what about ice?
         self.particle_vol = (self.dx * 0.5) ** 2
         self.n_dimensions = 2
 
@@ -222,15 +222,16 @@ class MPM_Solver:
                 self.cell_capacity[c_base + offset] += c_weight * self.particle_capacity[p]
                 self.cell_temperature[c_base + offset] += c_weight * self.particle_temperature[p]
 
-                # self.cell_inv_lambda[c_base + offset] += c_weight * self.particle_inv_lambda[p]
-                self.cell_inv_lambda[c_base + offset] += c_weight * self.lambda_0[None]
+                # TODO: use particle_inv_lambda, set different lambda for each phase?
+                self.cell_inv_lambda[c_base + offset] += c_weight * self.particle_inv_lambda[p]
+                # self.cell_inv_lambda[c_base + offset] += c_weight * (1 / self.lambda_0[None])
 
                 # NOTE: the old JE, JP values are used here to compute the cell values.
-                self.cell_JE[c_base + offset] += c_weight * self.particle_JE[p]
-                self.cell_JP[c_base + offset] += c_weight * self.particle_JP[p]
+                # self.cell_JE[c_base + offset] += c_weight * self.particle_JE[p]
+                # self.cell_JP[c_base + offset] += c_weight * self.particle_JP[p]
                 # FIXME: or do we need to use the new ones?
-                # self.cell_JE[c_base + offset] += c_weight * JE
-                # self.cell_JP[c_base + offset] += c_weight * JP
+                self.cell_JE[c_base + offset] += c_weight * JE
+                self.cell_JP[c_base + offset] += c_weight * JP
             self.particle_JE[p] = JE
             self.particle_JP[p] = JP
 
@@ -255,9 +256,11 @@ class MPM_Solver:
                     self.face_velocity_y[i, j] = 0
         for i, j in self.cell_mass:
             if self.cell_mass[i, j] > 0:  # No need for epsilon here
-                self.cell_temperature[i, j] *= 1 / self.cell_mass[i, j]
-                self.cell_inv_lambda[i, j] *= self.cell_mass[i, j]
-                self.cell_capacity[i, j] *= 1 / self.cell_mass[i, j]
+                self.cell_temperature[i, j] /= self.cell_mass[i, j]
+                self.cell_inv_lambda[i, j] /= self.cell_mass[i, j]
+                self.cell_capacity[i, j] /= self.cell_mass[i, j]
+                self.cell_JE[i, j] /= self.cell_mass[i, j]
+                self.cell_JP[i, j] /= self.cell_mass[i, j]
 
     @ti.kernel
     def classify_cells(self):
