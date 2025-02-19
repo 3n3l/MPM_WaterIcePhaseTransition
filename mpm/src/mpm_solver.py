@@ -114,8 +114,8 @@ class MPM_Solver:
         for i, j in self.cell_classification:
             self.cell_pressure[i, j] = 0  # TODO: incorporate atmospheric pressure?
             self.cell_mass[i, j] = 0
-            self.cell_JE[i, j] = 1  # TODO: zero or one???
-            self.cell_JP[i, j] = 1  # TODO: zero or one???
+            self.cell_JE[i, j] = 1
+            self.cell_JP[i, j] = 1
 
     @ti.kernel
     def particle_to_grid(self):
