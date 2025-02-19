@@ -340,8 +340,8 @@ class MPM_Solver:
             x_fx = position * self.inv_dx - x_base.cast(float)
             y_fx = position * self.inv_dx - y_base.cast(float)
             # Integrated quadratic kernels, see: https://www.bilibili.com/opus/662560355423092789
-            x_v = [0.33 * (1.5 - x_fx) ** 3, 0.25 - (x_fx - 1) ** 3, 0.33 * (x_fx - 0.5) ** 3]
-            y_v = [0.33 * (1.5 - y_fx) ** 3, 0.25 - (y_fx - 1) ** 3, 0.33 * (y_fx - 0.5) ** 3]
+            x_v = [0.167 * (1.5 - x_fx) ** 3, 0.25 - (x_fx - 1) ** 3, 0.167 * (x_fx - 0.5) ** 3]
+            y_v = [0.167 * (1.5 - y_fx) ** 3, 0.25 - (y_fx - 1) ** 3, 0.167 * (y_fx - 0.5) ** 3]
 
             for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
                 offset = ti.Vector([i, j])
