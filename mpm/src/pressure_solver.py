@@ -31,44 +31,66 @@ class PressureSolver:
         self.x_mass = mpm_solver.face_mass_x
         self.y_mass = mpm_solver.face_mass_y
 
+        self.___n = 0
+
     @ti.kernel
     def fill_linear_system(self, A: ti.types.sparse_matrix_builder(), b: ti.types.ndarray()):  # pyright: ignore
         # delta = 0.00032  # relaxation
+        # delta = 1.9  # relaxation
         delta = 1.0  # relaxation
-        # delta = 1.0 / self.dt  # relaxation
         # TODO: as the scaling is on both sides of the equation this could just be ignored??
-        # Gic = self.inv_dx * self.inv_dx * self.inv_dx * self.inv_dx  # central difference coefficients
         Gic = self.inv_dx * self.inv_dx  # central difference coefficients
-        # Gic = 1.0  # central difference coefficients
 
         for i, j in ti.ndrange(self.n_grid, self.n_grid):
             # Unraveled index.
             idx = (i * self.n_grid) + j
 
-            b[idx] = -((self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j]))
+            # FIXME: something is fishy in this term, or is it?
+            b[idx] = (1 - self.cell_JE[i, j]) / (self.dt * self.cell_JE[i, j])
+
             # Velocities components on colliding faces are considered to be zero.
-            # if i != 0: # and self.x_classification[i - 1, j] != Classification.Colliding:
-            #     b[idx] += self.inv_dx * (self.x_velocity[i - 1, j] - self.x_velocity[i, j])
-            if i != self.n_grid - 1:  # and self.x_classification[i + 1, j] != Classification.Colliding:
-                b[idx] -= self.inv_dx * (self.x_velocity[i + 1, j] - self.x_velocity[i, j])
-            # if j != 0: # and self.y_classification[i, j - 1] != Classification.Colliding:
-            #     b[idx] += self.inv_dx * (self.y_velocity[i, j - 1] - self.y_velocity[i, j])
-            if j != self.n_grid - 1:  # and self.y_classification[i, j + 1] != Classification.Colliding:
-                b[idx] -= self.inv_dx * (self.y_velocity[i, j + 1] - self.y_velocity[i, j])
+
+            # # if i != 0: # and self.x_classification[i - 1, j] != Classification.Colliding:
+            # #     b[idx] += self.inv_dx * (self.x_velocity[i - 1, j] - self.x_velocity[i, j])
+            # if i != self.n_grid - 1:  # and self.x_classification[i + 1, j] != Classification.Colliding:
+            #     b[idx] += self.inv_dx * (self.x_velocity[i + 1, j] - self.x_velocity[i, j])
+            # # if j != 0: # and self.y_classification[i, j - 1] != Classification.Colliding:
+            # #     b[idx] += self.inv_dx * (self.y_velocity[i, j - 1] - self.y_velocity[i, j])
+            # if j != self.n_grid - 1:  # and self.y_classification[i, j + 1] != Classification.Colliding:
+            #     b[idx] += self.inv_dx * (self.y_velocity[i, j + 1] - self.y_velocity[i, j])
+
+            # # if i != 0:
+            # #     b[idx] -= self.inv_dx * (self.x_velocity[i - 1, j] - self.x_velocity[i, j])
+            # if i != self.n_grid - 1:
+            #     b[idx] -= self.inv_dx * (self.x_velocity[i + 1, j] - self.x_velocity[i, j])
+            # # if j != 0:
+            # #     b[idx] -= self.inv_dx * (self.y_velocity[i, j - 1] - self.y_velocity[i, j])
+            # if j != self.n_grid - 1:
+            #     b[idx] -= self.inv_dx * (self.y_velocity[i, j + 1] - self.y_velocity[i, j])
+
+            if i != 0: # and self.c_classification[i - 1, j] != Classification.Colliding:
+                b[idx] += self.inv_dx * self.x_velocity[i, j]
+            if i != self.n_grid - 1: # and self.c_classification[i + 1, j] != Classification.Colliding:
+                b[idx] -= self.inv_dx * self.x_velocity[i + 1, j]
+            if j != 0: # and self.c_classification[i, j - 1] != Classification.Colliding:
+                b[idx] += self.inv_dx * self.y_velocity[i, j]
+            if j != self.n_grid - 1: # and self.c_classification[i, j + 1] != Classification.Colliding:
+                b[idx] -= self.inv_dx * self.y_velocity[i, j + 1]
 
             A_t = 0.0
             A_l = 0.0
             A_c = 0.0
             A_r = 0.0
             A_b = 0.0
+            # TODO: this should be on non empty cells, but then this linear system might be underdetermined
             # if self.c_classification[i, j] != Classification.Empty:
             if self.c_classification[i, j] == Classification.Interior:
                 # TODO: What about colliding cells? They are also empty, but the paper does not talk about this?
-                cell_lambda = 1 / self.cell_inv_lambda[i, j]  # TODO: save lambda instead of inverse (but compute inverse)
+                cell_lambda = 1 / self.cell_inv_lambda[i, j]
+                # TODO: save lambda instead of inverse (but compute inverse)
                 # A[idx, idx] += delta * self.cell_JP[i, j] / (self.cell_JE[i, j] * cell_lambda * self.dt)
                 A_c += delta * self.cell_JP[i, j] / (self.cell_JE[i, j] * cell_lambda * self.dt)
 
-                # FIXME: error somewhere in here
                 if i != 0 and self.x_classification[i - 1, j] != Classification.Colliding:
                     inv_rho = self.x_volume[i - 1, j] / self.x_mass[i - 1, j]
                     # if self.x_classification[i - 1, j] == Classification.Interior:
@@ -77,7 +99,6 @@ class PressureSolver:
 
                     # A[idx, idx] += self.dt * delta * Gic * inv_rho
                     A_c += self.dt * delta * Gic * inv_rho
-
 
                 if i != self.n_grid - 1 and self.x_classification[i + 1, j] != Classification.Colliding:
                     inv_rho = self.x_volume[i + 1, j] / self.x_mass[i + 1, j]
@@ -109,22 +130,16 @@ class PressureSolver:
                 A[idx, idx] += A_c
 
             else:  # Homogeneous Dirichlet boundary condition.
+                A[idx, idx] += self.dt * delta
                 # A[idx, idx] += self.dt * delta * Gic
-                A[idx, idx] += 1.0
+                # A[idx, idx] += 1.0
                 b[idx] = 0.0
 
-                A_c += 1.0
-                # A_c += self.dt * delta * Gic
+                # A_c += 1.0
+                A_c += self.dt * delta * Gic
 
-            nan_found =  False
-            nan_found |= A_t != A_t
-            nan_found |= A_l != A_l
-            nan_found |= A_c != A_c
-            nan_found |= A_r != A_r
-            nan_found |= A_b != A_b
-            nan_found |= b[idx] != b[idx]
-            if not nan_found:
-            # if self.c_classification[i, j] != Classification.Interior:
+            # continue
+            if self.c_classification[i, j] != Classification.Colliding:
                 continue
             print("~" * 100)
             print()
@@ -143,6 +158,21 @@ class PressureSolver:
             print(f"A[{idx}, {idx} - 1]   ->", A_b)
 
             print()
+            print(f"x_velocity[i, j]      ->", self.x_velocity[i, j])
+            # print(f"x_velocity[i + 1, j]  ->", self.x_velocity[i + 1, j])
+            # print(f"x_velocity[i - 1, j]  ->", self.x_velocity[i - 1, j])
+
+            print()
+            print(f"y_velocity[i, j]      ->", self.y_velocity[i, j])
+            # print(f"y_velocity[i, j - 1]  ->", self.y_velocity[i, j - 1])
+            # print(f"y_velocity[i, j + 1]  ->", self.y_velocity[i, j + 1])
+
+            print()
+            print(f"c_JE[i, j]            ->", self.cell_JE[i, j])
+            print(f"c_JP[i, j]            ->", self.cell_JP[i, j])
+            print(f"c_inv_lambda[i, j]    ->", self.cell_inv_lambda[i, j])
+
+            print()
             print(f"b[{idx}]                ->", b[idx])
             print()
 
@@ -158,10 +188,12 @@ class PressureSolver:
         left_boundary = self.boundary_width
         right_boundary = self.n_grid - self.boundary_width
         # z = self.dt * self.inv_dx * self.inv_dx  # Central Difference Coefficients
-        z = self.dt
+        z = self.dt * self.inv_dx
+        # z = self.dt
         # pressure = ti.static(self.c_pressure)
 
-        for i, j in ti.ndrange((left_boundary, right_boundary + 1), (left_boundary, right_boundary)):
+        # for i, j in ti.ndrange((left_boundary, right_boundary + 1), (left_boundary, right_boundary)):
+        for i, j in ti.ndrange((1, self.n_grid), (1, self.n_grid - 1)):
             # TODO: this could just be done for the classification step and then saved into a field?
             x_face_is_not_interior = self.c_classification[i - 1, j] != Classification.Interior
             x_face_is_not_interior |= self.c_classification[i, j] != Classification.Interior
@@ -175,10 +207,10 @@ class PressureSolver:
                 continue
 
             # inv_rho = self.x_volume[i + 1, j] / self.x_mass[i + 1, j]
-            # self.x_velocity[i, j] -= z * inv_rho * (self.c_pressure[i + 1, j] - self.c_pressure[i, j])
+            # self.x_velocity[i, j] -= z * inv_rho * (self.c_pressure[i, j] - self.c_pressure[i + 1, j])
 
             inv_rho = self.x_volume[i - 1, j] / self.x_mass[i - 1, j]
-            self.x_velocity[i, j] -= z * inv_rho * (self.c_pressure[i, j] - self.c_pressure[i - 1, j])
+            self.x_velocity[i, j] += z * inv_rho * (self.c_pressure[i, j] - self.c_pressure[i - 1, j])
 
             # inv_rho = self.x_volume[i, j + 1] / self.x_mass[i, j + 1]
             # self.x_velocity[i, j] -= z * inv_rho * (self.c_pressure[i, j + 1] - self.c_pressure[i, j])
@@ -186,7 +218,7 @@ class PressureSolver:
             # inv_rho = self.x_volume[i, j - 1] / self.x_mass[i, j - 1]
             # self.x_velocity[i, j] -= z * inv_rho * (self.c_pressure[i, j - 1] - self.c_pressure[i, j])
 
-            # print(">" * 100)
+            print(">" * 100)
             # # print("v_i:")
             # # print(self.x_volume[i, j])
             # # print(self.x_volume[i + 1, j])
@@ -205,15 +237,16 @@ class PressureSolver:
             # print(self.x_volume[i, j + 1] / self.x_mass[i, j + 1])
             # print(self.x_volume[i, j - 1] / self.x_mass[i, j - 1])
             # print("p_c:")
-            # print(self.c_pressure[i, j])
+            print("c_p ->", self.c_pressure[i, j])
             # print(self.c_pressure[i + 1, j])
             # print(self.c_pressure[i - 1, j])
             # print(self.c_pressure[i, j + 1])
             # print(self.c_pressure[i, j - 1])
-            # print("x_v:")
-            # print(self.x_velocity[i, j])
+            print("x_v ->", self.x_velocity[i, j])
+            print("y_v ->", self.y_velocity[i, j])
 
-        for i, j in ti.ndrange((left_boundary, right_boundary), (left_boundary, right_boundary + 1)):
+        # for i, j in ti.ndrange((left_boundary, right_boundary), (left_boundary, right_boundary + 1)):
+        for i, j in ti.ndrange((1, self.n_grid - 1), (1, self.n_grid)):
             y_face_is_not_interior = self.c_classification[i, j - 1] != Classification.Interior
             y_face_is_not_interior |= self.c_classification[i, j] != Classification.Interior
             if y_face_is_not_interior:
@@ -226,16 +259,16 @@ class PressureSolver:
                 continue
 
             inv_rho = self.y_volume[i, j - 1] / self.y_mass[i, j - 1]
-            self.y_velocity[i, j] -= z * inv_rho * (self.c_pressure[i, j] - self.c_pressure[i, j - 1])
+            self.y_velocity[i, j] += z * inv_rho * (self.c_pressure[i, j] - self.c_pressure[i, j - 1])
 
-            # inv_rho = self.y_volume[i - 1, j] / self.y_mass[i - 1, j]
-            # self.y_velocity[i, j] -= z * inv_rho * (self.c_pressure[i - 1, j] - self.c_pressure[i, j])
-            #
             # inv_rho = self.y_volume[i, j + 1] / self.y_mass[i, j + 1]
-            # self.y_velocity[i, j] -= z * inv_rho * (self.c_pressure[i, j + 1] - self.c_pressure[i, j])
+            # self.y_velocity[i, j] -= z * inv_rho * (self.c_pressure[i, j] + self.c_pressure[i, j + 1])
+
+            # inv_rho = self.y_volume[i, j + 1] / self.y_mass[i, j + 1]
+            # self.y_velocity[i, j] -= z * inv_rho * (self.c_pressure[i, j] - self.c_pressure[i, j + 1])
             #
             # inv_rho = self.y_volume[i, j - 1] / self.y_mass[i, j - 1]
-            # self.y_velocity[i, j] -= z * inv_rho * (self.c_pressure[i, j - 1] - self.c_pressure[i, j])
+            # self.y_velocity[i, j] -= z * inv_rho * (self.c_pressure[i, j] - self.c_pressure[i, j-1])
 
     def solve(self):
         # TODO: max_num_triplets could be optimized to N * 5?
@@ -253,12 +286,17 @@ class PressureSolver:
         # Solve the linear system.
         solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
         solver.compute(A.build())
+        # K = A.build()
+        # solver.analyze_pattern(K)
+        # solver.factorize(K)
         p = solver.solve(b)
 
         # FIXME: remove this debugging statements or move to test file
         solver_succeeded, pressure = solver.info(), p.to_numpy()
+        # print(f">>> Iteration: {self.___n}")
         assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
         assert not np.any(np.isnan(pressure)), "NAN VALUE IN PRESSURE ARRAY!"
+        self.___n += 1
 
         # FIXME: Apply the pressure to the intermediate velocity field.
         self.fill_pressure_field(p)
