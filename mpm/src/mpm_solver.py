@@ -345,7 +345,9 @@ class MPM_Solver:
             x_v = [0.167 * (1.5 - x_fx) ** 3, 0.25 - (x_fx - 1) ** 3, 0.167 * (x_fx - 0.5) ** 3]
             y_v = [0.167 * (1.5 - y_fx) ** 3, 0.25 - (y_fx - 1) ** 3, 0.167 * (y_fx - 0.5) ** 3]
 
-            for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
+            # FIXME: volume should probably only be added to the one nearest cell???
+            for i, j in ti.static(ti.ndrange(1, 1)):  # Loop over 3x3 grid node neighborhood
+            # for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
                 offset = ti.Vector([i, j])
                 x_volume = x_v[i][0] * x_v[j][1]
                 y_volume = y_v[i][0] * y_v[j][1]
