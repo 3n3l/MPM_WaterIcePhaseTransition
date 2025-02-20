@@ -229,11 +229,11 @@ class MPM_Solver:
                 self.cell_inv_lambda[c_base + offset] += c_weight * self.particle_inv_lambda[p]
 
                 # NOTE: the old JE, JP values are used here to compute the cell values.
-                # self.cell_JE[c_base + offset] += c_weight * self.particle_JE[p]
-                # self.cell_JP[c_base + offset] += c_weight * self.particle_JP[p]
+                self.cell_JE[c_base + offset] += c_weight * self.particle_JE[p]
+                self.cell_JP[c_base + offset] += c_weight * self.particle_JP[p]
                 # FIXME: or do we need to use the new ones?
-                self.cell_JE[c_base + offset] += c_weight * JE
-                self.cell_JP[c_base + offset] += c_weight * JP
+                # self.cell_JE[c_base + offset] += c_weight * JE
+                # self.cell_JP[c_base + offset] += c_weight * JP
             self.particle_JE[p] = JE
             self.particle_JP[p] = JP
 
@@ -313,7 +313,6 @@ class MPM_Solver:
             cell_is_colliding &= self.face_classification_y[i, j + 1] == Classification.Colliding
             if cell_is_colliding:
                 self.cell_classification[i, j] = Classification.Colliding
-                # print("COLLIDING")
                 continue
 
             # A cell is interior if the cell and all of its surrounding faces have mass.
@@ -324,12 +323,10 @@ class MPM_Solver:
             cell_is_interior &= self.face_mass_y[i, j + 1] > 0
             if cell_is_interior:
                 self.cell_classification[i, j] = Classification.Interior
-                # print("INTERIOR")
                 continue
 
             # All remaining cells are empty.
             self.cell_classification[i, j] = Classification.Empty
-            # print("EMPTY")
 
     @ti.kernel
     def compute_volumes(self):
