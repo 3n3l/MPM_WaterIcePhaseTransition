@@ -6,11 +6,12 @@ from abc import ABC
 
 
 class Geometry(ABC):
-    def __init__(self, n_particles, phase) -> None:
+    def __init__(self, n_particles, phase, temperature) -> None:
         self.n_particles = n_particles
         self.position = np.zeros(shape=(n_particles, 2), dtype=np.float32)
         self.velocity = np.zeros(shape=(n_particles, 2), dtype=np.float32)
         self.phase = np.full(shape=n_particles, fill_value=phase, dtype=int)
+        self.phase = np.full(shape=n_particles, fill_value=temperature, dtype=float)
         self.frame_threshold = np.zeros(shape=n_particles, dtype=int)
         self.state = np.zeros(shape=n_particles, dtype=int)
 
@@ -24,8 +25,9 @@ class Circle(Geometry):
         velocity: Tuple[float, float],
         coordinates: Tuple[float, float],
         frame_threshold: int = 0,
+        temperature: float = 0.0,
     ) -> None:
-        super().__init__(n_particles, phase)
+        super().__init__(n_particles, phase, temperature)
         for p in range(n_particles):
             t = 2 * np.pi * np.random.rand()
             r = radius * np.sqrt(np.random.rand())
@@ -47,8 +49,9 @@ class Rectangle(Geometry):
         velocity: Tuple[float, float],
         coordinates: Tuple[float, float],
         frame_threshold: int = 0,
+        temperature: float = 0.0,
     ) -> None:
-        super().__init__(n_particles, phase)
+        super().__init__(n_particles, phase, temperature)
         for p in range(n_particles):
             x = np.random.rand() * width + coordinates[0]
             y = np.random.rand() * height + coordinates[1]
