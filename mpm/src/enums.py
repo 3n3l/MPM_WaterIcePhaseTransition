@@ -31,3 +31,7 @@ class Conductivity:
     Water = 0.55
     Ice = 2.33
     Zero = 0
+
+class Density:
+    Water = 997.0
+    Ice = 400.0

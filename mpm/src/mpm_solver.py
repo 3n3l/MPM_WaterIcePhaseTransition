@@ -1,5 +1,4 @@
-from numpy import diff
-from src.enums import Capacity, Classification, Color, Conductivity, Phase, State
+from src.enums import Capacity, Classification, Color, Conductivity, Density, Phase, State, Density
 from src.pressure_solver import PressureSolver
 from src.heat_solver import HeatSolver
 
@@ -67,6 +66,8 @@ class MPM_Solver:
         # Properties on particles.
         self.particle_conductivity = ti.field(dtype=ti.float32, shape=max_particles)
         self.particle_temperature = ti.field(dtype=ti.float32, shape=max_particles)
+        # self.particle_lambda_0 = ti.field(dtype=ti.float32, shape=max_particles)
+        # self.particle_mu_0 = ti.field(dtype=ti.float32, shape=max_particles)
         self.particle_inv_lambda = ti.field(dtype=ti.float32, shape=max_particles)
         self.particle_position = ti.Vector.field(2, dtype=float, shape=max_particles)
         self.particle_velocity = ti.Vector.field(2, dtype=float, shape=max_particles)
@@ -118,7 +119,7 @@ class MPM_Solver:
             self.face_mass_y[i, j] = 0
 
         for i, j in self.cell_classification:
-            self.cell_temperature[i, j] = 0 # FIXME: do this or not?
+            self.cell_temperature[i, j] = 0  # FIXME: do this or not?
             self.cell_inv_lambda[i, j] = 0
             self.cell_pressure[i, j] = 0
             self.cell_capacity[i, j] = 0
@@ -410,9 +411,6 @@ class MPM_Solver:
                 by += y_velocity * y_dpos
                 nt += c_weight * self.cell_temperature[c_base + offset]
 
-                # print("prev ->", self.c_prev_temperature[c_base + offset])
-                # print("curr ->", self.c_curr_temperature[c_base + offset])
-                # print("diff ->", self.c_curr_temperature[c_base + offset] - self.c_prev_temperature[c_base + offset])
                 # print(nt)
             # print("<<<<<")
 
@@ -427,20 +425,37 @@ class MPM_Solver:
             # DONE: set temperature for particles, ideally per geometry
             # DONE: set heat capacity per particle depending on phase
             # DONE: set heat conductivity per particle depending on phase
+            # DONE: set particle mass per phase
+            # TODO: set E and nu for each particle depending on phase
             # TODO: apply latent heat
+            # TODO: move this to a ti.func?
             # Update phase
-            if nt > 0:
+            if nt > 0.9:
                 self.particle_conductivity[p] = Conductivity.Water
                 self.particle_capacity[p] = Capacity.Water
                 self.particle_color[p] = Color.Water
                 self.particle_phase[p] = Phase.Water
+                self.particle_mass[p] = self.particle_vol * Density.Water
+                # TODO: Lame parameters for each phase, something like:
+                # E = 3 * 1e-4
+                # nu = 0.45
+                # self.particle_lambda_0[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
+                # self.particle_mu_0[p] = E / (2 * (1 + nu))
+                # self.particle_inv_lambda[p] = 1 / self.lambda_0[None]
+                # TODO: inv_lambda could then be replaced with lambda_0
             else:
                 self.particle_conductivity[p] = Conductivity.Ice
                 self.particle_capacity[p] = Capacity.Ice
                 self.particle_color[p] = Color.Ice
                 self.particle_phase[p] = Phase.Ice
-
-            # self.particle_color[p] = Color.Water if self.particle_phase[p] == Phase.Water else Color.Ice
+                self.particle_mass[p] = self.particle_vol * Density.Ice
+                # TODO: Lame parameters for each phase, something like:
+                # E = 7 * 1e-4
+                # nu = 0.3
+                # self.particle_lambda_0[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
+                # self.particle_mu_0[p] = E / (2 * (1 + nu))
+                # self.particle_inv_lambda[p] = 1 / self.lambda_0[None]
+                # TODO: inv_lambda could then be replaced with lambda_0
 
             # The particle_position holds the positions for all particles, active and inactive,
             # only pushing the position into p_active_position will draw this particle.
