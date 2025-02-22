@@ -18,3 +18,16 @@ class Color:
 class State:
     Inactive = 77
     Active = 88
+
+
+# TODO: Capacity should not be an enum!?
+class Capacity:
+    Water = 4186  # j/dC
+    Ice = 2093  # j/dC
+    Zero = 0
+
+
+class Conductivity:
+    Water = 0.55
+    Ice = 2.33
+    Zero = 0

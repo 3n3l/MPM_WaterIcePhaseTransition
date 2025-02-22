@@ -1,13 +1,14 @@
-from src.enums import Classification, Color, Phase, State
+from numpy import diff
+from src.enums import Capacity, Classification, Color, Conductivity, Phase, State
 from src.pressure_solver import PressureSolver
+from src.heat_solver import HeatSolver
 
 import taichi as ti
 
 WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
 ICE_CONDUCTIVITY = 2.33
-WATER_HEAT_CAPACITY = 4.186  # j/dC
-ICE_HEAT_CAPACITY = 2.093  # j/dC
 LATENT_HEAT = 0.334  # J/kg
+AMBIENT_TEMPERATURE = 10  # degree Celcius # TODO: should be in configuration!?
 GRAVITY = -9.81
 
 
@@ -34,12 +35,12 @@ class MPM_Solver:
         self.boundary_offset = 1 - ((self.n_grid - self.boundary_width) * self.dx)
 
         # Parameters to control melting/freezing
-        # TODO: these are variables and need toof the particle, be put into fields
+        # TODO: these are variables and need to be put into fields
         # TODO: these depend not only on phase, but also on temperature,
         #       so ideally they are functions of these two variables
-        # self.heat_conductivity = 0.55 # Water: 0.55, Ice: 2.33
-        # self.heat_capacity = 4.186 # Water: 4.186, Ice: 2.093 (j/dC)
-        # self.latent_heat = 0.334 # in J/kg
+        # self.heat_conductivity = 0.55  # Water: 0.55, Ice: 2.33
+        # self.heat_capacity = 4.186  # Water: 4.186, Ice: 2.093 (j/dC)
+        self.latent_heat = 0.334  # in J/kg
 
         # Properties on MAC-faces.
         self.face_classification_x = ti.field(dtype=int, shape=(self.n_grid + 1, self.n_grid))
@@ -55,7 +56,8 @@ class MPM_Solver:
 
         # Properties on MAC-cells.
         self.cell_classification = ti.field(dtype=ti.int8, shape=(self.n_grid, self.n_grid))
-        self.cell_temperature = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.c_curr_temperature = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.c_prev_temperature = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.cell_inv_lambda = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.cell_capacity = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
@@ -98,21 +100,27 @@ class MPM_Solver:
 
         # The solver for the Poisson pressure equation.
         self.pressure_solver = PressureSolver(self)
+        self.heat_solver = HeatSolver(self)
+
+        self.c_curr_temperature.fill(AMBIENT_TEMPERATURE)
 
     @ti.kernel
     def reset_grids(self):
         for i, j in self.face_velocity_x:
+            self.face_conductivity_x[i, j] = 0
             self.face_velocity_x[i, j] = 0
             self.face_volume_x[i, j] = 0
             self.face_mass_x[i, j] = 0
 
         for i, j in self.face_velocity_y:
+            self.face_conductivity_y[i, j] = 0
             self.face_velocity_y[i, j] = 0
             self.face_volume_y[i, j] = 0
             self.face_mass_y[i, j] = 0
 
         for i, j in self.cell_classification:
-            self.cell_temperature[i, j] = 0
+            self.c_prev_temperature[i, j] = 0
+            # self.c_curr_temperature[i, j] = 0
             self.cell_inv_lambda[i, j] = 0
             self.cell_pressure[i, j] = 0
             self.cell_capacity[i, j] = 0
@@ -221,9 +229,16 @@ class MPM_Solver:
                 self.face_conductivity_y[y_base + offset] += y_weight * conductivity
 
                 # Rasterize to cell centers.
-                self.cell_temperature[c_base + offset] += c_weight * self.particle_temperature[p]
+                self.c_prev_temperature[c_base + offset] += c_weight * self.particle_temperature[p]
                 self.cell_capacity[c_base + offset] += c_weight * self.particle_capacity[p]
                 self.cell_mass[c_base + offset] += c_weight * self.particle_mass[p]
+
+                # t = self.cell_temperature[c_base + offset]
+                # if not (t < 0 or t > 0 or t == 0):
+                #     print("AAAAAAAAAAAAAAAAAAAAH")
+                #     print("INDICES ->", c_base + offset)
+                #     print("TEMP -> ", self.particle_temperature[p])
+                #     self.cell_temperature[c_base ** 100] = 0
 
                 # TODO: use particle_inv_lambda, set different lambda for each phase?
                 self.cell_inv_lambda[c_base + offset] += c_weight * self.particle_inv_lambda[p]
@@ -258,11 +273,12 @@ class MPM_Solver:
                     self.face_velocity_y[i, j] = 0
         for i, j in self.cell_mass:
             if self.cell_mass[i, j] > 0:  # No need for epsilon here
-                self.cell_temperature[i, j] /= self.cell_mass[i, j]
-                self.cell_inv_lambda[i, j] /= self.cell_mass[i, j]
-                self.cell_capacity[i, j] /= self.cell_mass[i, j]
-                self.cell_JE[i, j] /= self.cell_mass[i, j]
-                self.cell_JP[i, j] /= self.cell_mass[i, j]
+                self.cell_inv_lambda[i, j] *= 1 / self.cell_mass[i, j]
+                # self.c_curr_temperature[i, j] *= 1 / self.cell_mass[i, j]
+                self.c_prev_temperature[i, j] *= 1 / self.cell_mass[i, j]
+                self.cell_capacity[i, j] *= 1 / self.cell_mass[i, j]
+                self.cell_JE[i, j] *= 1 / self.cell_mass[i, j]
+                self.cell_JP[i, j] *= 1 / self.cell_mass[i, j]
 
     @ti.kernel
     def classify_cells(self):
@@ -328,6 +344,9 @@ class MPM_Solver:
             # All remaining cells are empty.
             self.cell_classification[i, j] = Classification.Empty
 
+            # The ambient air temperature is recorded for empty cells.
+            self.c_prev_temperature[i, j] = AMBIENT_TEMPERATURE
+
     @ti.kernel
     def compute_volumes(self):
         for p in ti.ndrange(self.n_particles[None]):
@@ -348,6 +367,7 @@ class MPM_Solver:
                 if self.cell_classification[c_base + offset] == Classification.Interior:
                     self.face_volume_x[x_base + offset] += x_volume
                     self.face_volume_y[y_base + offset] += y_volume
+
     @ti.kernel
     def grid_to_particle(self):
         for p in ti.ndrange(self.n_particles[None]):
@@ -373,6 +393,10 @@ class MPM_Solver:
             by = ti.Vector.zero(float, 2)
             nv = ti.Vector.zero(float, 2)
             nt = 0.0
+
+            # print()
+            # print(">>>>>")
+
             for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
                 offset = ti.Vector([i, j])
                 c_weight = c_w[i][0] * c_w[j][1]
@@ -385,15 +409,40 @@ class MPM_Solver:
                 nv += [x_velocity, y_velocity]
                 bx += x_velocity * x_dpos
                 by += y_velocity * y_dpos
-                nt += c_weight * self.cell_temperature[c_base + offset]
+                nt += c_weight * (self.c_curr_temperature[c_base + offset] - self.c_prev_temperature[c_base + offset])
+
+                # print("prev ->", self.c_prev_temperature[c_base + offset])
+                # print("curr ->", self.c_curr_temperature[c_base + offset])
+                # print("diff ->", self.c_curr_temperature[c_base + offset] - self.c_prev_temperature[c_base + offset])
+                # print(nt)
+            # print("<<<<<")
 
             cx = 4 * self.inv_dx * bx  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos.
             cy = 4 * self.inv_dx * by  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos.
             self.particle_C[p] = ti.Matrix([[cx[0], cy[0]], [cx[1], cy[1]]])  # pyright: ignore
-            self.particle_color[p] = Color.Water if self.particle_phase[p] == Phase.Water else Color.Ice
             self.particle_position[p] += self.dt * nv
             self.particle_temperature[p] = nt
+            # print(self.particle_temperature[p], nt)
             self.particle_velocity[p] = nv
+
+            # DONE: set temperature for empty cells
+            # TODO: set temperature for particles, ideally per geometry
+            # TODO: set heat capacity per particle depending on phase
+            # TODO: set heat conductivity per particle depending on phase
+            # TODO: apply latent heat
+            # Update phase
+            if nt > 0:
+                self.particle_conductivity[p] = Conductivity.Water
+                self.particle_capacity[p] = Capacity.Water
+                self.particle_color[p] = Color.Water
+                self.particle_phase[p] = Phase.Water
+            else:
+                self.particle_conductivity[p] = Conductivity.Ice
+                self.particle_capacity[p] = Capacity.Ice
+                self.particle_color[p] = Color.Ice
+                self.particle_phase[p] = Phase.Ice
+
+            # self.particle_color[p] = Color.Water if self.particle_phase[p] == Phase.Water else Color.Ice
 
             # The particle_position holds the positions for all particles, active and inactive,
             # only pushing the position into p_active_position will draw this particle.
@@ -407,5 +456,6 @@ class MPM_Solver:
             self.momentum_to_velocity()
             self.classify_cells()
             self.compute_volumes()
-            self.pressure_solver.solve()
+            # self.pressure_solver.solve()
+            self.heat_solver.solve()
             self.grid_to_particle()
