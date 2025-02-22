@@ -18,6 +18,29 @@ def main():
 
     configurations = [
         Configuration(
+            name="Melting Ice Cube",
+            geometries=[
+                Rectangle(Phase.Ice, 0.2, 0.2, 5000, (0, 0), (0.4, 0.0), 0, -10.0),
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=8.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ),
+        Configuration(
+            name="Freezing Water Cube",
+            geometries=[
+                Rectangle(Phase.Ice, 0.2, 0.2, 5000, (0, 0), (0.4, 0.0), 0, 10.0),
+                # TODO: ambient temperature must be set here
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=8.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ),
+        Configuration(
             name="Waterspout Hits Body of Water (Water)",
             geometries=[
                 Rectangle(Phase.Water, 0.96, 0.1, 5_000, (0, 0), (0, 0)),
