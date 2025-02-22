@@ -221,16 +221,18 @@ class MPM_Solver:
                 self.face_conductivity_y[y_base + offset] += y_weight * conductivity
 
                 # Rasterize to cell centers.
-                self.cell_temperature[c_base + offset] += c_weight * self.particle_temperature[p]
-                self.cell_capacity[c_base + offset] += c_weight * self.particle_capacity[p]
+                temperature = self.particle_mass[p] * self.particle_temperature[p]
+                self.cell_temperature[c_base + offset] += c_weight * temperature
+                capacity = self.particle_mass[p] * self.particle_capacity[p]
+                self.cell_capacity[c_base + offset] += c_weight * capacity
                 self.cell_mass[c_base + offset] += c_weight * self.particle_mass[p]
 
                 # TODO: use particle_inv_lambda, set different lambda for each phase?
                 self.cell_inv_lambda[c_base + offset] += c_weight * self.particle_inv_lambda[p]
 
                 # NOTE: the old JE, JP values are used here to compute the cell values.
-                self.cell_JE[c_base + offset] += c_weight * self.particle_JE[p]
-                self.cell_JP[c_base + offset] += c_weight * self.particle_JP[p]
+                self.cell_JE[c_base + offset] += c_weight * self.particle_mass[p] * self.particle_JE[p]
+                self.cell_JP[c_base + offset] += c_weight * self.particle_mass[p] * self.particle_JP[p]
                 # FIXME: or do we need to use the new ones?
                 # self.cell_JE[c_base + offset] += c_weight * JE
                 # self.cell_JP[c_base + offset] += c_weight * JP
