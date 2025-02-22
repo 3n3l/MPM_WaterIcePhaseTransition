@@ -338,13 +338,16 @@ class MPM_Solver:
             y_base = (position * self.inv_dx - (ti.Vector([0, self.dx / 2]) + 0.5)).cast(int)  # pyright: ignore
             x_fx = position * self.inv_dx - x_base.cast(float)
             y_fx = position * self.inv_dx - y_base.cast(float)
-            # Integrated quadratic kernel
-            x_v = 0.167 * (1.5 - x_fx) ** 3
-            y_v = 0.167 * (1.5 - y_fx) ** 3
-            if self.cell_classification[c_base] == Classification.Interior:
-                self.face_volume_x[x_base] += x_v[0] * x_v[1]  # pyright: ignore
-                self.face_volume_y[y_base] += y_v[0] * y_v[1]  # pyright: ignore
+            x_v = [0.167 * (1.5 - x_fx) ** 3, 0.25 - (x_fx - 1) ** 3, 0.167 * (x_fx - 0.5) ** 3]
+            y_v = [0.167 * (1.5 - y_fx) ** 3, 0.25 - (y_fx - 1) ** 3, 0.167 * (y_fx - 0.5) ** 3]
 
+            for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
+                offset = ti.Vector([i, j])
+                x_volume = x_v[i][0] * x_v[j][1]
+                y_volume = y_v[i][0] * y_v[j][1]
+                if self.cell_classification[c_base + offset] == Classification.Interior:
+                    self.face_volume_x[x_base + offset] += x_volume
+                    self.face_volume_y[y_base + offset] += y_volume
     @ti.kernel
     def grid_to_particle(self):
         for p in ti.ndrange(self.n_particles[None]):
