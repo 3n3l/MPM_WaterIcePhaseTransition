@@ -16,9 +16,8 @@ class HeatSolver:
 
         self.n_iterations = 0
 
-        self.c_curr_temperature = mpm_solver.c_curr_temperature
-        self.c_prev_temperature = mpm_solver.c_prev_temperature
         self.c_classification = mpm_solver.cell_classification
+        self.c_temperature = mpm_solver.cell_temperature
         self.cell_capacity = mpm_solver.cell_capacity
         self.cell_mass = mpm_solver.cell_mass
 
@@ -32,12 +31,12 @@ class HeatSolver:
         delta = 1.0  # relaxation
 
         # for i, j in ti.ndrange(self.n_grid, self.n_grid):
-        for i, j in self.c_prev_temperature:
+        for i, j in self.c_temperature:
             # Unraveled index.
             idx = (i * self.n_grid) + j
 
             # Set right-hand side to the cell temperature
-            T[idx] = self.c_prev_temperature[i, j]
+            T[idx] = self.c_temperature[i, j]
 
             # FIXME: these variables are just used to print everything and can be removed after debugging
             A_t = 0.0
@@ -133,9 +132,8 @@ class HeatSolver:
 
     @ti.kernel
     def fill_temperature_field(self, T: ti.types.ndarray()):  # pyright: ignore
-        for i, j in self.c_curr_temperature:
-            self.c_prev_temperature[i, j] = self.c_curr_temperature[i, j]
-            self.c_curr_temperature[i, j] = T[(i * self.n_grid) + j]
+        for i, j in self.c_temperature:
+            self.c_temperature[i, j] = T[(i * self.n_grid) + j]
 
     def solve(self):
         # TODO: max_num_triplets could be optimized to N * 5?

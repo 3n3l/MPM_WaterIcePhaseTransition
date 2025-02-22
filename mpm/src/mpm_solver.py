@@ -56,8 +56,7 @@ class MPM_Solver:
 
         # Properties on MAC-cells.
         self.cell_classification = ti.field(dtype=ti.int8, shape=(self.n_grid, self.n_grid))
-        self.c_curr_temperature = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.c_prev_temperature = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.cell_temperature = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.cell_inv_lambda = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.cell_capacity = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
@@ -102,7 +101,7 @@ class MPM_Solver:
         self.pressure_solver = PressureSolver(self)
         self.heat_solver = HeatSolver(self)
 
-        self.c_curr_temperature.fill(AMBIENT_TEMPERATURE)
+        self.cell_temperature.fill(AMBIENT_TEMPERATURE)
 
     @ti.kernel
     def reset_grids(self):
@@ -119,8 +118,7 @@ class MPM_Solver:
             self.face_mass_y[i, j] = 0
 
         for i, j in self.cell_classification:
-            self.c_prev_temperature[i, j] = 0
-            # self.c_curr_temperature[i, j] = 0
+            self.cell_temperature[i, j] = 0 # FIXME: do this or not?
             self.cell_inv_lambda[i, j] = 0
             self.cell_pressure[i, j] = 0
             self.cell_capacity[i, j] = 0
@@ -229,7 +227,7 @@ class MPM_Solver:
                 self.face_conductivity_y[y_base + offset] += y_weight * conductivity
 
                 # Rasterize to cell centers.
-                self.c_prev_temperature[c_base + offset] += c_weight * self.particle_temperature[p]
+                self.cell_temperature[c_base + offset] += c_weight * self.particle_temperature[p]
                 self.cell_capacity[c_base + offset] += c_weight * self.particle_capacity[p]
                 self.cell_mass[c_base + offset] += c_weight * self.particle_mass[p]
 
@@ -273,9 +271,8 @@ class MPM_Solver:
                     self.face_velocity_y[i, j] = 0
         for i, j in self.cell_mass:
             if self.cell_mass[i, j] > 0:  # No need for epsilon here
+                self.cell_temperature[i, j] *= 1 / self.cell_mass[i, j]
                 self.cell_inv_lambda[i, j] *= 1 / self.cell_mass[i, j]
-                # self.c_curr_temperature[i, j] *= 1 / self.cell_mass[i, j]
-                self.c_prev_temperature[i, j] *= 1 / self.cell_mass[i, j]
                 self.cell_capacity[i, j] *= 1 / self.cell_mass[i, j]
                 self.cell_JE[i, j] *= 1 / self.cell_mass[i, j]
                 self.cell_JP[i, j] *= 1 / self.cell_mass[i, j]
@@ -345,7 +342,7 @@ class MPM_Solver:
             self.cell_classification[i, j] = Classification.Empty
 
             # The ambient air temperature is recorded for empty cells.
-            self.c_prev_temperature[i, j] = AMBIENT_TEMPERATURE
+            self.cell_temperature[i, j] = AMBIENT_TEMPERATURE
 
     @ti.kernel
     def compute_volumes(self):
@@ -409,7 +406,7 @@ class MPM_Solver:
                 nv += [x_velocity, y_velocity]
                 bx += x_velocity * x_dpos
                 by += y_velocity * y_dpos
-                nt += c_weight * (self.c_curr_temperature[c_base + offset] - self.c_prev_temperature[c_base + offset])
+                nt += c_weight * self.cell_temperature[c_base + offset]
 
                 # print("prev ->", self.c_prev_temperature[c_base + offset])
                 # print("curr ->", self.c_curr_temperature[c_base + offset])
@@ -422,13 +419,12 @@ class MPM_Solver:
             self.particle_C[p] = ti.Matrix([[cx[0], cy[0]], [cx[1], cy[1]]])  # pyright: ignore
             self.particle_position[p] += self.dt * nv
             self.particle_temperature[p] = nt
-            # print(self.particle_temperature[p], nt)
             self.particle_velocity[p] = nv
 
             # DONE: set temperature for empty cells
-            # TODO: set temperature for particles, ideally per geometry
-            # TODO: set heat capacity per particle depending on phase
-            # TODO: set heat conductivity per particle depending on phase
+            # DONE: set temperature for particles, ideally per geometry
+            # DONE: set heat capacity per particle depending on phase
+            # DONE: set heat conductivity per particle depending on phase
             # TODO: apply latent heat
             # Update phase
             if nt > 0:
