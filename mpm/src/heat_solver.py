@@ -28,12 +28,10 @@ class HeatSolver:
 
     @ti.kernel
     def fill_linear_system(self, A: ti.types.sparse_matrix_builder(), T: ti.types.ndarray()):  # pyright: ignore
-        # delta = 1.0  # relaxation
-        delta = self.inv_dx * self.inv_dx
+        delta = 1.3  # relaxation
 
-        # for i, j in ti.ndrange(self.n_grid, self.n_grid):
         for i, j in self.c_temperature:
-            # Unraveled index.
+            # Raveled index.
             idx = (i * self.n_grid) + j
 
             # Set right-hand side to the cell temperature
@@ -48,18 +46,19 @@ class HeatSolver:
 
             # TODO: We enforce Dirichlet temperature boundary conditions at CELLS that are
             #       in contact with fixed temperature bodies (like a heated pan or air (-> empty cells)).
-            if self.c_classification[i, j] == Classification.Interior:
+            # if self.c_classification[i, j] == Classification.Interior:
+            if self.c_classification[i, j] != Classification.Empty:
                 # TODO: We enforce homogeneous Neumann boundary conditions at FACES adjacent to
                 #       cells that can be considered empty or corresponding to insulated objects.
                 # NOTE: dx^d is cancelled out by self.inv_dx^2 because d == 2
                 inv_mass_capacity = 1 / (self.cell_mass[i, j] * self.cell_capacity[i, j])
-                # A_c += delta
-                A_c += 1.0
+                A_c += delta
+                # A_c += 1.0
 
                 if i != 0 and self.c_classification[i - 1, j] == Classification.Interior:
-                    A[idx, idx - self.n_grid] += self.dt * delta * inv_mass_capacity * self.x_conductivity[i, j]
-                    A_l += self.dt * delta * inv_mass_capacity * self.x_conductivity[i, j]
-                    A_c -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i, j]
+                    A[idx, idx - self.n_grid] += self.dt * delta * inv_mass_capacity * self.x_conductivity[i - 1, j]
+                    A_l += self.dt * delta * inv_mass_capacity * self.x_conductivity[i - 1, j]
+                    A_c -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i - 1, j]
 
                 if i != self.n_grid - 1 and self.c_classification[i + 1, j] == Classification.Interior:
                     A[idx, idx + self.n_grid] += self.dt * delta * inv_mass_capacity * self.x_conductivity[i + 1, j]
@@ -67,9 +66,9 @@ class HeatSolver:
                     A_c -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i + 1, j]
 
                 if j != 0 and self.c_classification[i, j - 1] == Classification.Interior:
-                    A[idx, idx - 1] += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j]
-                    A_b += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j]
-                    A_c -= self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j]
+                    A[idx, idx - 1] += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j - 1]
+                    A_b += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j - 1]
+                    A_c -= self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j - 1]
 
                 if j != self.n_grid - 1 and self.c_classification[i, j + 1] == Classification.Interior:
                     A[idx, idx + 1] += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j + 1]
@@ -79,10 +78,10 @@ class HeatSolver:
                 A[idx, idx] += A_c
             else:  # Dirichlet boundary condition (not homogeneous)
                 A[idx, idx] += 1.0
-                # T[idx] = 10
+                T[idx] = 100.0  # TODO: set to proper ambient temperature
                 A_c = 1.0
 
-            # continue
+            continue
             if self.c_classification[i, j] != Classification.Interior:
                 continue
             # if not (cell_is_interior and not_adjacent_to_fixed_temperature):
@@ -152,20 +151,6 @@ class HeatSolver:
         solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
         solver.compute(A.build())
         _T = solver.solve(T)
-
-        # print("^" * 100)
-        # print()
-        # print(">>> A")
-        # print(L)
-        # print()
-        # print(">>> T^n")
-        # for i, bbb in enumerate(_T.to_numpy()):
-        #     if np.isnan(bbb):
-        #         print("NAN -> ", i, bbb)
-        # print()
-        # print(">>> T^{n+t}")
-        # for ppp in T.to_numpy():
-        #     print(ppp)
 
         # FIXME: remove this debugging statements or move to test file
         solver_succeeded, _temperature, temperature = solver.info(), _T.to_numpy(), T.to_numpy()
