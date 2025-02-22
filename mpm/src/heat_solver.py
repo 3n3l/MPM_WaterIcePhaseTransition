@@ -28,7 +28,8 @@ class HeatSolver:
 
     @ti.kernel
     def fill_linear_system(self, A: ti.types.sparse_matrix_builder(), T: ti.types.ndarray()):  # pyright: ignore
-        delta = 1.0  # relaxation
+        # delta = 1.0  # relaxation
+        delta = self.inv_dx * self.inv_dx
 
         # for i, j in ti.ndrange(self.n_grid, self.n_grid):
         for i, j in self.c_temperature:
@@ -52,7 +53,8 @@ class HeatSolver:
                 #       cells that can be considered empty or corresponding to insulated objects.
                 # NOTE: dx^d is cancelled out by self.inv_dx^2 because d == 2
                 inv_mass_capacity = 1 / (self.cell_mass[i, j] * self.cell_capacity[i, j])
-                A_c += delta
+                # A_c += delta
+                A_c += 1.0
 
                 if i != 0 and self.c_classification[i - 1, j] == Classification.Interior:
                     A[idx, idx - self.n_grid] += self.dt * delta * inv_mass_capacity * self.x_conductivity[i, j]
