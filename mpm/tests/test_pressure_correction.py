@@ -73,8 +73,8 @@ def reset_solver(solver: ti.template(), configuration: ti.template()):  # pyrigh
 def compute_divergence(solver: ti.template(), div: ti.types.ndarray()):  # pyright: ignore
     for i, j in solver.cell_pressure:
         if solver.cell_classification[i, j] == Classification.Interior:
-            x_divergence = solver.face_velocity_x[i, j] - solver.face_velocity_x[i + 1, j]
-            y_divergence = solver.face_velocity_y[i, j] - solver.face_velocity_y[i, j + 1]
+            x_divergence = solver.face_velocity_x[i + 1, j] - solver.face_velocity_x[i, j]
+            y_divergence = solver.face_velocity_y[i, j + 1] - solver.face_velocity_y[i, j]
             div[i, j] = x_divergence + y_divergence
         else:
             div[i, j] = 0
@@ -149,26 +149,7 @@ def main() -> None:
                 solver.momentum_to_velocity()
                 solver.classify_cells()
                 solver.compute_volumes()
-
-                print("+" * 200)
-                compute_divergence(solver, divergence)
-                print("BEFORE:")
-                pressure = solver.cell_pressure.to_numpy()
-                print("P ->", np.min(pressure), np.max(pressure))
-                print("D ->", np.min(divergence.to_numpy()), np.max(divergence.to_numpy()))
-
                 solver.pressure_solver.solve()
-                # FIXME: this shouldn't be needed, but keep this here for testing purposes ???
-                # solver.face_velocity_x.copy_from(solver.pressure_solver.face_velocity_x)
-                # solver.face_velocity_y.copy_from(solver.pressure_solver.face_velocity_y)
-
-                compute_divergence(solver, divergence)
-                pressure = solver.cell_pressure.to_numpy()
-                print("AFTER:")
-                print("P ->", np.min(pressure), np.max(pressure))
-                print("D ->", np.min(divergence.to_numpy()), np.max(divergence.to_numpy()))
-                print()
-
                 solver.grid_to_particle()
 
             compute_divergence(solver, divergence)
