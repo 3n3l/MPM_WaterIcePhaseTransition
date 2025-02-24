@@ -117,8 +117,8 @@ class MPM_Solver:
             self.cell_pressure[i, j] = 0
             self.cell_capacity[i, j] = 0
             self.cell_mass[i, j] = 0
-            self.cell_JE[i, j] = 1
-            self.cell_JP[i, j] = 1
+            self.cell_JE[i, j] = 0
+            self.cell_JP[i, j] = 0
 
     @ti.kernel
     def particle_to_grid(self):
