@@ -60,8 +60,8 @@ class MPM_Solver:
         self.cell_capacity = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.cell_pressure = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.cell_mass = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.cell_JE = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
-        self.cell_JP = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid + 1))
+        self.cell_JE = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.cell_JP = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
 
         # Properties on particles.
         self.particle_conductivity = ti.field(dtype=ti.float32, shape=max_particles)
@@ -350,6 +350,7 @@ class MPM_Solver:
                 if self.cell_classification[c_base + offset] == Classification.Interior:
                     self.face_volume_x[x_base + offset] += x_volume
                     self.face_volume_y[y_base + offset] += y_volume
+
     @ti.kernel
     def grid_to_particle(self):
         for p in ti.ndrange(self.n_particles[None]):
