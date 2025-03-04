@@ -6,8 +6,8 @@ import taichi as ti
 
 WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
 ICE_CONDUCTIVITY = 2.33
-LATENT_HEAT = 0.334  # J/kg
-AMBIENT_TEMPERATURE = 10  # degree Celcius # TODO: should be in configuration!?
+LATENT_HEAT = 0.334  # J/kg, L_p
+AMBIENT_TEMPERATURE = 1000.0  # degree Celcius # TODO: should be in configuration!?
 GRAVITY = -9.81
 
 
@@ -39,7 +39,7 @@ class MPM_Solver:
         #       so ideally they are functions of these two variables
         # self.heat_conductivity = 0.55  # Water: 0.55, Ice: 2.33
         # self.heat_capacity = 4.186  # Water: 4.186, Ice: 2.093 (j/dC)
-        self.latent_heat = 0.334  # in J/kg
+        # self.latent_heat = 0.334  # in J/kg
 
         # Properties on MAC-faces.
         self.face_classification_x = ti.field(dtype=int, shape=(self.n_grid + 1, self.n_grid))
@@ -64,8 +64,8 @@ class MPM_Solver:
         self.cell_JP = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
 
         # Properties on particles.
-        self.particle_conductivity = ti.field(dtype=ti.float32, shape=max_particles)
-        self.particle_temperature = ti.field(dtype=ti.float32, shape=max_particles)
+        self.p_conductivity = ti.field(dtype=ti.float32, shape=max_particles)
+        self.p_temperature = ti.field(dtype=ti.float32, shape=max_particles)
         # self.particle_lambda_0 = ti.field(dtype=ti.float32, shape=max_particles)
         # self.particle_mu_0 = ti.field(dtype=ti.float32, shape=max_particles)
         self.particle_inv_lambda = ti.field(dtype=ti.float32, shape=max_particles)
@@ -73,8 +73,8 @@ class MPM_Solver:
         self.particle_velocity = ti.Vector.field(2, dtype=float, shape=max_particles)
         self.particle_capacity = ti.field(dtype=ti.float32, shape=max_particles)
         self.particle_color = ti.Vector.field(3, dtype=float, shape=max_particles)
-        self.particle_phase = ti.field(dtype=ti.float32, shape=max_particles)
-        self.particle_mass = ti.field(dtype=ti.float32, shape=max_particles)
+        self.p_phase = ti.field(dtype=ti.float32, shape=max_particles)
+        self.p_mass = ti.field(dtype=ti.float32, shape=max_particles)
         self.particle_FE = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
         self.particle_JE = ti.field(dtype=float, shape=max_particles)
         self.particle_JP = ti.field(dtype=float, shape=max_particles)
@@ -86,6 +86,9 @@ class MPM_Solver:
         self.p_activation_threshold = ti.field(dtype=int, shape=max_particles)
         self.p_activation_state = ti.field(dtype=int, shape=max_particles)
         self.p_active_position = ti.Vector.field(2, dtype=ti.float32, shape=max_particles)
+
+        # Fields needed for the latent heat and phase change.
+        self.p_heat = ti.field(dtype=ti.float32, shape=max_particles)  # U_p
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
         self.stickiness = ti.field(dtype=float, shape=())
@@ -147,7 +150,7 @@ class MPM_Solver:
             for d in ti.static(range(self.n_dimensions)):
                 singular_value = float(sigma[d, d])
                 # Clamp singular values to [1 - theta_c, 1 + theta_s]
-                if self.particle_phase[p] == Phase.Ice:
+                if self.p_phase[p] == Phase.Ice:
                     clamped = singular_value
                     clamped = max(singular_value, 1 - self.theta_c[None])
                     clamped = min(clamped, 1 + self.theta_s[None])
@@ -160,13 +163,13 @@ class MPM_Solver:
 
             la = self.lambda_0[None]
             mu = self.mu_0[None]
-            if self.particle_phase[p] == Phase.Water:
+            if self.p_phase[p] == Phase.Water:
                 # TODO: Apply correction for dilational/deviatoric stresses?
                 # Reset elastic deformation gradient to avoid numerical instability.
                 self.particle_FE[p] = ti.Matrix.identity(float, self.n_dimensions) * JE ** (1 / self.n_dimensions)
                 # Set the viscosity to zero.
                 mu = 0
-            elif self.particle_phase[p] == Phase.Ice:
+            elif self.p_phase[p] == Phase.Ice:
                 # Reconstruct elastic deformation gradient after plasticity
                 self.particle_FE[p] = U @ sigma @ V.transpose()
                 # Apply ice hardening by adjusting Lame parameters
@@ -186,7 +189,7 @@ class MPM_Solver:
             stress *= -self.dt * self.particle_vol * D_inv
 
             # APIC momentum + MLS-MPM stress contribution [Hu et al. 2018, Eqn. 29].
-            affine = stress + self.particle_mass[p] * self.particle_C[p]
+            affine = stress + self.p_mass[p] * self.particle_C[p]
             x_affine = affine @ ti.Vector([1, 0])  # pyright: ignore
             y_affine = affine @ ti.Vector([0, 1])  # pyright: ignore
 
@@ -213,26 +216,26 @@ class MPM_Solver:
                 y_dpos = (offset.cast(float) - y_fx) * self.dx
 
                 # Rasterize mass to grid faces.
-                self.face_mass_x[x_base + offset] += x_weight * self.particle_mass[p]
-                self.face_mass_y[y_base + offset] += y_weight * self.particle_mass[p]
+                self.face_mass_x[x_base + offset] += x_weight * self.p_mass[p]
+                self.face_mass_y[y_base + offset] += y_weight * self.p_mass[p]
 
                 # Rasterize velocity to grid faces.
-                x_velocity = self.particle_mass[p] * self.particle_velocity[p][0] + x_affine @ x_dpos
-                y_velocity = self.particle_mass[p] * self.particle_velocity[p][1] + y_affine @ y_dpos
+                x_velocity = self.p_mass[p] * self.particle_velocity[p][0] + x_affine @ x_dpos
+                y_velocity = self.p_mass[p] * self.particle_velocity[p][1] + y_affine @ y_dpos
                 self.face_velocity_x[x_base + offset] += x_weight * x_velocity
                 self.face_velocity_y[y_base + offset] += y_weight * y_velocity
 
                 # Rasterize conductivity to grid faces.
-                conductivity = self.particle_mass[p] * self.particle_conductivity[p]
+                conductivity = self.p_mass[p] * self.p_conductivity[p]
                 self.face_conductivity_x[x_base + offset] += x_weight * conductivity
                 self.face_conductivity_y[y_base + offset] += y_weight * conductivity
 
                 # Rasterize to cell centers.
-                temperature = self.particle_mass[p] * self.particle_temperature[p]
+                temperature = self.p_mass[p] * self.p_temperature[p]
                 self.cell_temperature[c_base + offset] += c_weight * temperature
-                capacity = self.particle_mass[p] * self.particle_capacity[p]
+                capacity = self.p_mass[p] * self.particle_capacity[p]
                 self.cell_capacity[c_base + offset] += c_weight * capacity
-                self.cell_mass[c_base + offset] += c_weight * self.particle_mass[p]
+                self.cell_mass[c_base + offset] += c_weight * self.p_mass[p]
 
                 # t = self.cell_temperature[c_base + offset]
                 # if not (t < 0 or t > 0 or t == 0):
@@ -245,8 +248,8 @@ class MPM_Solver:
                 self.cell_inv_lambda[c_base + offset] += c_weight * self.particle_inv_lambda[p]
 
                 # NOTE: the old JE, JP values are used here to compute the cell values.
-                self.cell_JE[c_base + offset] += c_weight * self.particle_mass[p] * self.particle_JE[p]
-                self.cell_JP[c_base + offset] += c_weight * self.particle_mass[p] * self.particle_JP[p]
+                self.cell_JE[c_base + offset] += c_weight * self.p_mass[p] * self.particle_JE[p]
+                self.cell_JP[c_base + offset] += c_weight * self.p_mass[p] * self.particle_JP[p]
                 # FIXME: or do we need to use the new ones?
                 # self.cell_JE[c_base + offset] += c_weight * JE
                 # self.cell_JP[c_base + offset] += c_weight * JP
@@ -418,7 +421,6 @@ class MPM_Solver:
             cy = 4 * self.inv_dx * by  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos.
             self.particle_C[p] = ti.Matrix([[cx[0], cy[0]], [cx[1], cy[1]]])  # pyright: ignore
             self.particle_position[p] += self.dt * nv
-            self.particle_temperature[p] = nt
             self.particle_velocity[p] = nv
 
             # DONE: set temperature for empty cells
@@ -427,35 +429,54 @@ class MPM_Solver:
             # DONE: set heat conductivity per particle depending on phase
             # DONE: set particle mass per phase
             # TODO: set E and nu for each particle depending on phase
-            # TODO: apply latent heat
+            # DONE: apply latent heat
             # TODO: move this to a ti.func?
-            # Update phase
-            if nt > 0.9:
-                self.particle_conductivity[p] = Conductivity.Water
-                self.particle_capacity[p] = Capacity.Water
-                self.particle_color[p] = Color.Water
-                self.particle_phase[p] = Phase.Water
-                self.particle_mass[p] = self.particle_vol * Density.Water
-                # TODO: Lame parameters for each phase, something like:
-                # E = 3 * 1e-4
-                # nu = 0.45
-                # self.particle_lambda_0[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
-                # self.particle_mu_0[p] = E / (2 * (1 + nu))
-                # self.particle_inv_lambda[p] = 1 / self.lambda_0[None]
-                # TODO: inv_lambda could then be replaced with lambda_0
-            else:
-                self.particle_conductivity[p] = Conductivity.Ice
-                self.particle_capacity[p] = Capacity.Ice
-                self.particle_color[p] = Color.Ice
-                self.particle_phase[p] = Phase.Ice
-                self.particle_mass[p] = self.particle_vol * Density.Ice
-                # TODO: Lame parameters for each phase, something like:
-                # E = 7 * 1e-4
-                # nu = 0.3
-                # self.particle_lambda_0[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
-                # self.particle_mu_0[p] = E / (2 * (1 + nu))
-                # self.particle_inv_lambda[p] = 1 / self.lambda_0[None]
-                # TODO: inv_lambda could then be replaced with lambda_0
+
+            # Initially, we allow each particle to freely change its temperature according to the heat equation.
+            # But whenever the freezing point is reached, any additional temperature change is multiplied by
+            # conductivity and mass and added to the buffer, with the particle temperature kept unchanged.
+            if nt > 0:  # and (self.p_heat[p] < LATENT_HEAT):
+                # We passed the melting point, but have not yet reached the latent heat threshold.
+                self.p_heat[p] += self.p_conductivity[p] * self.p_mass[p] * (nt - self.p_temperature[p])
+                # if self.p_heat[p] > LATENT_HEAT:
+                if self.p_heat[p] > LATENT_HEAT:
+                    # TODO: Lame parameters for each phase, something like:
+                    # E = 3 * 1e-4
+                    # nu = 0.45
+                    # self.particle_mu_0[p] = ...
+                    # self.particle_lambda_0[p] = ...
+                    self.particle_capacity[p] = Capacity.Water
+                    self.p_conductivity[p] = Conductivity.Water
+                    self.particle_color[p] = Color.Water
+                    self.p_temperature[p] = 0.0
+                    self.p_phase[p] = Phase.Water
+                    self.p_mass[p] = self.particle_vol * Density.Water
+                    self.p_heat[p] = LATENT_HEAT
+                else:
+                    # Freely change the temperature according to the heat equation.
+                    self.p_temperature[p] = nt
+            elif nt <= 0:  # and (self.p_heat[p] > 0):
+                # We passed the freezing point, but have not yet reached the latent heat threshold.
+                self.p_heat[p] += self.p_conductivity[p] * self.p_mass[p] * (nt - self.p_temperature[p])
+                if self.p_heat[p] < 0:
+                    # TODO: Lame parameters for each phase, something like:
+                    # E = 7 * 1e-4
+                    # nu = 0.3
+                    # self.particle_mu_0[p] = ...
+                    # self.particle_lambda_0[p] = ...
+                    self.particle_capacity[p] = Capacity.Ice
+                    self.particle_color[p] = Color.Ice
+                    self.p_conductivity[p] = Conductivity.Ice
+                    self.p_temperature[p] = 0.0
+                    self.p_phase[p] = Phase.Ice
+                    self.p_mass[p] = self.particle_vol * Density.Ice
+                    self.p_heat[p] = 0.0
+                else:
+                    # Freely change the temperature according to the heat equation.
+                    self.p_temperature[p] = nt
+            # else:
+            #     # Freely change the temperature according to the heat equation.
+            #     self.p_temperature[p] = nt
 
             # The particle_position holds the positions for all particles, active and inactive,
             # only pushing the position into p_active_position will draw this particle.

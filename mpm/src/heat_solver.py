@@ -28,7 +28,7 @@ class HeatSolver:
 
     @ti.kernel
     def fill_linear_system(self, A: ti.types.sparse_matrix_builder(), T: ti.types.ndarray()):  # pyright: ignore
-        delta = 1.3  # relaxation
+        delta = 1.0  # relaxation
 
         for i, j in self.c_temperature:
             # Raveled index.
@@ -78,7 +78,7 @@ class HeatSolver:
                 A[idx, idx] += A_c
             else:  # Dirichlet boundary condition (not homogeneous)
                 A[idx, idx] += 1.0
-                T[idx] = 100.0  # TODO: set to proper ambient temperature
+                T[idx] = 1000.0  # TODO: set to proper ambient temperature
                 A_c = 1.0
 
             continue

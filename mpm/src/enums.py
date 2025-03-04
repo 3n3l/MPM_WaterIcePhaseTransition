@@ -10,9 +10,9 @@ class Phase:
 
 
 class Color:
-    Ice = (0.8156862745098039, 0.8862745098039215, 1.0)
-    Water = (0.27058823529411763, 0.3284671532846715, 1.0)
-    Background = (0.09019607843137255, 0.0784313725490196, 0.0784313725490196)
+    Ice = (0.81, 0.88, 1.0)
+    Water = (0.27, 0.32, 1.0)
+    Background = (0.09, 0.07, 0.07)
 
 
 class State:
@@ -22,6 +22,8 @@ class State:
 
 # TODO: Capacity should not be an enum!?
 class Capacity:
+    # Water = 4.186  # j/dC
+    # Ice = 2.093  # j/dC
     Water = 4186  # j/dC
     Ice = 2093  # j/dC
     Zero = 0

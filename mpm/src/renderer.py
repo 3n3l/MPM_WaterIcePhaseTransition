@@ -79,28 +79,28 @@ class Renderer:
                 phase = configuration.p_phase[p]
                 self.solver.particle_color[p] = Color.Water if phase == Phase.Water else Color.Ice
                 self.solver.particle_capacity[p] = Capacity.Water if phase == Phase.Water else Capacity.Ice
-                self.solver.particle_conductivity[p] = Conductivity.Water if phase == Phase.Water else Conductivity.Ice
+                self.solver.p_conductivity[p] = Conductivity.Water if phase == Phase.Water else Conductivity.Ice
                 self.solver.p_activation_threshold[p] = configuration.p_activity_bound[p]
                 self.solver.particle_position[p] = configuration.p_position[p] + self.solver.boundary_offset
-                self.solver.particle_temperature[p] = configuration.p_temperature[p]
+                self.solver.p_temperature[p] = configuration.p_temperature[p]
                 self.solver.particle_velocity[p] = configuration.p_velocity[p]
                 self.solver.p_activation_state[p] = configuration.p_state[p]
-                self.solver.particle_phase[p] = configuration.p_phase[p]
+                self.solver.p_phase[p] = configuration.p_phase[p]
             else:
                 # TODO: this might be completely irrelevant, as only the first n_particles are used anyway?
                 #       So work can be saved by just ignoring all the other particles and iterating only
                 #       over the configuration.n_particles?
                 self.solver.particle_color[p] = Color.Background
                 self.solver.particle_capacity[p] = Capacity.Zero
-                self.solver.particle_conductivity[p] = Conductivity.Zero
+                self.solver.p_conductivity[p] = Conductivity.Zero
                 self.solver.p_activation_threshold[p] = 0
-                self.solver.particle_temperature[p] = 0
+                self.solver.p_temperature[p] = 0
                 self.solver.particle_position[p] = [0, 0]
                 self.solver.particle_velocity[p] = [0, 0]
                 self.solver.p_activation_state[p] = State.Inactive
-                self.solver.particle_phase[p] = Phase.Water
+                self.solver.p_phase[p] = Phase.Water
 
-            self.solver.particle_mass[p] = self.solver.particle_vol * self.solver.rho_0
+            self.solver.p_mass[p] = self.solver.particle_vol * self.solver.rho_0
             self.solver.particle_inv_lambda[p] = 1 / self.solver.lambda_0[None]
             self.solver.particle_FE[p] = ti.Matrix([[1, 0], [0, 1]])
             self.solver.particle_C[p] = ti.Matrix.zero(float, 2, 2)
