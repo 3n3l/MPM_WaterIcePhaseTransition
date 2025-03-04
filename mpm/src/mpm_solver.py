@@ -105,10 +105,10 @@ class MPM_Solver:
         self.pressure_solver = PressureSolver(self)
         self.heat_solver = HeatSolver(self)
 
-        # Additional offsets for the staggered grids, used for the weight computations.
-        self.c_stagger = ti.Vector([0.5, 0.5])
+        # Additional offsets for the staggered grids (and for flooring), used for the weight computations.
         self.x_stagger = ti.Vector([(self.dx / 2) + 0.5, 0.5])
         self.y_stagger = ti.Vector([0.5, (self.dx / 2) + 0.5])
+        self.c_stagger = ti.Vector([0.5, 0.5])
 
     @ti.kernel
     def reset_grids(self):
