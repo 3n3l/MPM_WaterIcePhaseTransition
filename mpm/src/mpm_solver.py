@@ -105,7 +105,13 @@ class MPM_Solver:
         self.pressure_solver = PressureSolver(self)
         self.heat_solver = HeatSolver(self)
 
+        #
         self.cell_temperature.fill(AMBIENT_TEMPERATURE)
+
+        # Additional offsets for the staggered grids, used for the weight computations.
+        self.c_stagger = ti.Vector([0.5, 0.5])
+        self.x_stagger = ti.Vector([(self.dx / 2) + 0.5, 0.5])
+        self.y_stagger = ti.Vector([0.5, (self.dx / 2) + 0.5])
 
     @ti.kernel
     def reset_grids(self):
@@ -194,15 +200,13 @@ class MPM_Solver:
             y_affine = affine @ ti.Vector([0, 1])  # pyright: ignore
 
             # We use an additional offset of 0.5 for element-wise flooring.
-            x_stagger = ti.Vector([self.dx / 2, 0])
-            y_stagger = ti.Vector([0, self.dx / 2])
-            c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)  # pyright: ignore
-            x_base = (self.particle_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)  # pyright: ignore
-            y_base = (self.particle_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)  # pyright: ignore
-            c_fx = self.particle_position[p] * self.inv_dx - c_base.cast(float)
-            x_fx = self.particle_position[p] * self.inv_dx - x_base.cast(float)
-            y_fx = self.particle_position[p] * self.inv_dx - y_base.cast(float)
-            # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1,fx-2)
+            c_base = ti.floor(self.particle_position[p] * self.inv_dx - self.c_stagger, dtype=ti.int32)
+            x_base = ti.floor(self.particle_position[p] * self.inv_dx - self.x_stagger, dtype=ti.int32)
+            y_base = ti.floor(self.particle_position[p] * self.inv_dx - self.y_stagger, dtype=ti.int32)
+            c_fx = self.particle_position[p] * self.inv_dx - c_base.cast(ti.float32)  # pyright: ignore
+            x_fx = self.particle_position[p] * self.inv_dx - x_base.cast(ti.float32)  # pyright: ignore
+            y_fx = self.particle_position[p] * self.inv_dx - y_base.cast(ti.float32)  # pyright: ignore
+            # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1, fx-2)
             c_w = [0.5 * (1.5 - c_fx) ** 2, 0.75 - (c_fx - 1) ** 2, 0.5 * (c_fx - 0.5) ** 2]
             x_w = [0.5 * (1.5 - x_fx) ** 2, 0.75 - (x_fx - 1) ** 2, 0.5 * (x_fx - 0.5) ** 2]
             y_w = [0.5 * (1.5 - y_fx) ** 2, 0.75 - (y_fx - 1) ** 2, 0.5 * (y_fx - 0.5) ** 2]
@@ -378,16 +382,13 @@ class MPM_Solver:
             if self.p_activation_state[p] == State.Inactive:
                 continue
 
-            x_stagger = ti.Vector([self.dx / 2, 0])
-            y_stagger = ti.Vector([0, self.dx / 2])
-            c_base = (self.particle_position[p] * self.inv_dx - 0.5).cast(int)  # pyright: ignore
-            x_base = (self.particle_position[p] * self.inv_dx - (x_stagger + 0.5)).cast(int)  # pyright: ignore
-            y_base = (self.particle_position[p] * self.inv_dx - (y_stagger + 0.5)).cast(int)  # pyright: ignore
-            c_fx = self.particle_position[p] * self.inv_dx - c_base.cast(float)
-            x_fx = self.particle_position[p] * self.inv_dx - x_base.cast(float)
-
-            y_fx = self.particle_position[p] * self.inv_dx - y_base.cast(float)
-            # TODO: use the tighter quadratic weights?
+            c_base = ti.floor(self.particle_position[p] * self.inv_dx - self.c_stagger, dtype=ti.i32)
+            x_base = ti.floor(self.particle_position[p] * self.inv_dx - self.x_stagger, dtype=ti.i32)
+            y_base = ti.floor(self.particle_position[p] * self.inv_dx - self.y_stagger, dtype=ti.i32)
+            c_fx = self.particle_position[p] * self.inv_dx - c_base.cast(ti.f32)  # pyright: ignore
+            x_fx = self.particle_position[p] * self.inv_dx - x_base.cast(ti.f32)  # pyright: ignore
+            y_fx = self.particle_position[p] * self.inv_dx - y_base.cast(ti.f32)  # pyright: ignore
+            # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1, fx-2)
             c_w = [0.5 * (1.5 - c_fx) ** 2, 0.75 - (c_fx - 1) ** 2, 0.5 * (c_fx - 0.5) ** 2]
             x_w = [0.5 * (1.5 - x_fx) ** 2, 0.75 - (x_fx - 1) ** 2, 0.5 * (x_fx - 0.5) ** 2]
             y_w = [0.5 * (1.5 - y_fx) ** 2, 0.75 - (y_fx - 1) ** 2, 0.5 * (y_fx - 0.5) ** 2]
@@ -396,10 +397,6 @@ class MPM_Solver:
             by = ti.Vector.zero(float, 2)
             nv = ti.Vector.zero(float, 2)
             nt = 0.0
-
-            # print()
-            # print(">>>>>")
-
             for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
                 offset = ti.Vector([i, j])
                 c_weight = c_w[i][0] * c_w[j][1]
@@ -413,9 +410,6 @@ class MPM_Solver:
                 bx += x_velocity * x_dpos
                 by += y_velocity * y_dpos
                 nt += c_weight * self.cell_temperature[c_base + offset]
-
-                # print(nt)
-            # print("<<<<<")
 
             cx = 4 * self.inv_dx * bx  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos.
             cy = 4 * self.inv_dx * by  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos.
