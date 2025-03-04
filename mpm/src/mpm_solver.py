@@ -105,9 +105,6 @@ class MPM_Solver:
         self.pressure_solver = PressureSolver(self)
         self.heat_solver = HeatSolver(self)
 
-        #
-        self.cell_temperature.fill(AMBIENT_TEMPERATURE)
-
         # Additional offsets for the staggered grids, used for the weight computations.
         self.c_stagger = ti.Vector([0.5, 0.5])
         self.x_stagger = ti.Vector([(self.dx / 2) + 0.5, 0.5])
