@@ -54,6 +54,7 @@ class Renderer:
         Parameters:
             configuration: Configuration
         """
+        self.solver.ambient_temperature[None] = configuration.ambient_temperature
         self.solver.n_particles[None] = configuration.n_particles
         self.solver.stickiness[None] = configuration.stickiness
         self.solver.friction[None] = configuration.friction

@@ -7,7 +7,7 @@ import taichi as ti
 WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
 ICE_CONDUCTIVITY = 2.33
 LATENT_HEAT = 334.4  # kJ/kg, L_p
-AMBIENT_TEMPERATURE = 50.0  # degree Celcius # TODO: should be in configuration!?
+AMBIENT_TEMPERATURE = 500.0  # degree Celcius # TODO: should be in configuration!?
 GRAVITY = -9.81
 
 
@@ -81,6 +81,7 @@ class MPM_Solver:
 
         # Fields needed for the latent heat and phase change.
         self.p_heat = ti.field(dtype=ti.float32, shape=max_particles)  # U_p
+        self.ambient_temperature = ti.field(dtype=ti.float32, shape=())
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
         self.stickiness = ti.field(dtype=float, shape=())
@@ -342,7 +343,7 @@ class MPM_Solver:
             self.cell_classification[i, j] = Classification.Empty
 
             # The ambient air temperature is recorded for empty cells.
-            self.cell_temperature[i, j] = AMBIENT_TEMPERATURE
+            self.cell_temperature[i, j] = self.ambient_temperature[None]
 
     @ti.kernel
     def compute_volumes(self):
@@ -443,7 +444,7 @@ class MPM_Solver:
                 # Water particle reached the freezing point, additional temperature change is added to heat buffer.
                 self.p_heat[p] += self.p_conductivity[p] * self.p_mass[p] * (nt - self.p_temperature[p])
 
-                # If the heat buffer is empty the particle changes its phase to ice, 
+                # If the heat buffer is empty the particle changes its phase to ice,
                 # everything is then reset according to the new phase.
                 if self.p_heat[p] < 0:
                     # TODO: Lame parameters for each phase, something like:
