@@ -6,8 +6,8 @@ import taichi as ti
 
 WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
 ICE_CONDUCTIVITY = 2.33
-LATENT_HEAT = 0.334  # J/kg, L_p
-AMBIENT_TEMPERATURE = 1000.0  # degree Celcius # TODO: should be in configuration!?
+LATENT_HEAT = 334.4  # kJ/kg, L_p
+AMBIENT_TEMPERATURE = 50.0  # degree Celcius # TODO: should be in configuration!?
 GRAVITY = -9.81
 
 

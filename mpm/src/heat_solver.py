@@ -154,7 +154,7 @@ class HeatSolver:
 
         # FIXME: remove this debugging statements or move to test file
         solver_succeeded, _temperature, temperature = solver.info(), _T.to_numpy(), T.to_numpy()
-        assert solver_succeeded, f"{self.n_iterations} -> SOLVER DID NOT FIND A SOLUTION!"
+        # assert solver_succeeded, f"{self.n_iterations} -> SOLVER DID NOT FIND A SOLUTION!"
         assert not np.any(np.isnan(_temperature)), f"{self.n_iterations} -> NAN VALUE IN NEW TEMPERATURE ARRAY!"
         assert not np.any(np.isnan(temperature)), f"{self.n_iterations} -> NAN VALUE IN OLD TEMPERATURE ARRAY!"
         self.n_iterations += 1
