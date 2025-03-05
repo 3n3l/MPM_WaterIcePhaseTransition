@@ -39,10 +39,10 @@ def main():
             zeta=10,  # Hardening coefficient (10)
             theta_c=8.5e-2,  # Critical compression (2.5e-2)
             theta_s=5.0e-3,  # Critical stretch (7.5e-3)
-            ambient_temperature=-500.0,
+            ambient_temperature=-5000.0,
         ),
         Configuration(
-            name="Waterspout Hits Body of Water (Water)",
+            name="Waterspout Hits Body of Water",
             geometries=[
                 Rectangle(Phase.Water, 0.96, 0.1, 5_000, (0, 0), (0, 0), 0, 20.0),
                 *[Rectangle(Phase.Water, 0.1, 0.05, 10, (0, -1), (0.45, 0.45), i, 20.0) for i in range(10, 500)],
@@ -55,9 +55,9 @@ def main():
             ambient_temperature=20.0,
         ),
         Configuration(
-            name="Waterspout Hits Ice Cubes (Water, Ice)",
+            name="Waterspout Hits Ice Cubes",
             geometries=[
-                *[Rectangle(Phase.Water, 0.05, 0.05, 25, (2, -2), (0.1, 0.8), i, 100.0) for i in range(10, 250)],
+                *[Rectangle(Phase.Water, 0.05, 0.05, 25, (2, -2), (0.1, 0.8), i, 500.0) for i in range(10, 250)],
                 Rectangle(Phase.Ice, 0.1, 0.1, 1_000, (0, 0), (0.59, 0.0), 0, -10.0),
                 Rectangle(Phase.Ice, 0.1, 0.1, 1_000, (0, 0), (0.70, 0.0), 0, -10.0),
                 Rectangle(Phase.Ice, 0.1, 0.1, 1_000, (0, 0), (0.65, 0.1), 0, -10.0),
@@ -67,10 +67,10 @@ def main():
             zeta=20,  # Hardening coefficient (10)
             theta_c=3.5e-2,  # Critical compression (2.5e-2)
             theta_s=7.5e-3,  # Critical stretch (7.5e-3)
-            ambient_temperature=0.0,
+            ambient_temperature=20.0,
         ),
         Configuration(
-            name="Dropping Ice Cubes Into Body of Water (Water, Ice)",
+            name="Dropping Ice Cubes Into Body of Water",
             geometries=[
                 Rectangle(Phase.Water, 0.96, 0.1, 8_000, (0, 0), (0, 0), 0, 50.0),
                 Rectangle(Phase.Ice, 0.05, 0.05, 1_000, (0, -1), (0.25, 0.35), 10, -30.0),
@@ -85,7 +85,31 @@ def main():
             ambient_temperature=0.0,
         ),
         Configuration(
-            name="Simple Spout Source (Water)",
+            name="Freezing Lake",
+            geometries=[
+                Rectangle(Phase.Water, 0.96, 0.1, 20_000, (0, 0), (0, 0), 0, 1.0),
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+            ambient_temperature=-500.0,
+        ),
+        Configuration(
+            name="Freezing Waterspout",
+            geometries=[
+                *[Rectangle(Phase.Water, 0.05, 0.05, 10, (0, -2), (0.45, 0.85), i, 30.0) for i in range(10, 500)],
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+            ambient_temperature=-500.0,
+        ),
+        Configuration(
+            name="Simple Spout Source",
             geometries=[
                 *[Rectangle(Phase.Water, 0.05, 0.05, 10, (0, -2), (0.45, 0.85), i, 20.0) for i in range(10, 500)],
             ],
@@ -97,7 +121,7 @@ def main():
             ambient_temperature=20.0,
         ),
         Configuration(
-            name="Simple Blob Source (Ice)",
+            name="Simple Blob Source",
             geometries=[
                 *[Circle(Phase.Ice, 0.05, 1000, (5, 0), (0.1, 0.5), i, -20.0) for i in range(0, 250, 25)],
             ],
@@ -109,7 +133,7 @@ def main():
             ambient_temperature=-20.0,
         ),
         Configuration(
-            name="Spherefall (Water)",
+            name="Spherefall",
             geometries=[
                 Circle(Phase.Water, 0.06, 4000, (0, 0), (0.5, 0.5), 0, 10.0),
             ],
@@ -121,7 +145,7 @@ def main():
             ambient_temperature=20.0,
         ),
         Configuration(
-            name="Spherefall (Ice)",
+            name="Spherefall",
             geometries=[
                 Circle(Phase.Ice, 0.06, 4000, (0, 0), (0.5, 0.5), 0, -10.0),
             ],
