@@ -1,6 +1,6 @@
 from src.enums import Conductivity, Phase, Color, State, Capacity
 from src.configurations import Configuration
-from src.mpm_solver import MPM_Solver
+from src.mpm_solver import MPM_Solver, LATENT_HEAT
 from datetime import datetime
 
 import taichi as ti
@@ -87,6 +87,7 @@ class Renderer:
                 self.solver.particle_velocity[p] = configuration.p_velocity[p]
                 self.solver.p_activation_state[p] = configuration.p_state[p]
                 self.solver.p_phase[p] = configuration.p_phase[p]
+                self.solver.p_heat[p] = LATENT_HEAT if phase == Phase.Water else 0.0
             else:
                 # TODO: this might be completely irrelevant, as only the first n_particles are used anyway?
                 #       So work can be saved by just ignoring all the other particles and iterating only
@@ -100,6 +101,8 @@ class Renderer:
                 self.solver.particle_velocity[p] = [0, 0]
                 self.solver.p_activation_state[p] = State.Inactive
                 self.solver.p_phase[p] = Phase.Water
+                self.solver.p_heat[p] = 0
+                self.solver.p_heat[p] = 0
 
             self.solver.p_mass[p] = self.solver.particle_vol * self.solver.rho_0
             self.solver.particle_inv_lambda[p] = 1 / self.solver.lambda_0[None]
