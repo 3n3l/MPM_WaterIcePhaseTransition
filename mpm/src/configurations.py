@@ -45,7 +45,7 @@ class Configuration:
         self.p_state = ti.field(dtype=int, shape=self.n_particles)
 
         # Initialize fields.
-        self.p_temperature.from_numpy(np.concatenate([g.state for g in geometries], dtype=np.float32))
+        self.p_temperature.from_numpy(np.concatenate([g.temperature for g in geometries], dtype=np.float32).flatten())
         self.p_position.from_numpy(np.concatenate([g.position for g in geometries], dtype=np.float32))
         self.p_velocity.from_numpy(np.concatenate([g.velocity for g in geometries], dtype=np.float32))
         self.p_activity_bound.from_numpy(np.concatenate([g.frame_threshold for g in geometries], dtype=int))
