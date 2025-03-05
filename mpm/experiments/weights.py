@@ -2,10 +2,8 @@ import taichi as ti
 
 ti.init(arch=ti.cpu)
 
-# NOTE: this seems to be wrong on paper, but is the best working version in the simulation,
-#       right now we always apply properties to the same node and faces, meaning that
-#       the coordinates will always be the same for all nodes/faces, this shouldn't be right?
-# TODO: debug the simulation, there might be another reason for this?
+# NOTE: this seems to be wrong on paper, but is the best working version in the simulation?!
+# TODO: debug the simulation, there might be another reason for this?!
 # TODO: then try a version of this that adds to the closest nodes/faces
 
 
@@ -16,17 +14,26 @@ def compute_weights(x: float, y: float):
     dx = 1 / n_grid
     inv_dx = float(n_grid)
 
-    c_stagger = ti.Vector([0.0, 0.0])
-    c_base = (p_position * inv_dx - (c_stagger + 0.5)).cast(ti.i32)  # pyright: ignore
-    c_fx = p_position * inv_dx - c_base.cast(ti.f32)
+    additional_offset = 0.5
 
-    x_stagger = ti.Vector([dx / 2, 0])
-    x_base = (p_position * inv_dx - (x_stagger + 0.5)).cast(ti.i32)  # pyright: ignore
-    x_fx = p_position * inv_dx - x_base.cast(ti.f32)
+    c_stagger = ti.Vector([additional_offset, additional_offset])
+    x_stagger = ti.Vector([(dx / 2) + additional_offset, additional_offset])
+    y_stagger = ti.Vector([additional_offset, (dx / 2) + additional_offset])
 
-    y_stagger = ti.Vector([0, dx / 2])
-    y_base = (p_position * inv_dx - (y_stagger + 0.5)).cast(ti.i32)  # pyright: ignore
-    y_fx = p_position * inv_dx - y_base.cast(ti.f32)
+    # c_base = (p_position * inv_dx - c_stagger).cast(ti.i32)
+    # c_base = ti.floor(p_position * inv_dx - c_stagger, ti.i32)
+    c_base = ti.cast(p_position * inv_dx - c_stagger, ti.i32)
+    c_fx = p_position * inv_dx - ti.cast(c_base, ti.f32)
+
+    # x_base = (p_position * inv_dx - x_stagger).cast(ti.i32)
+    # x_base = ti.floor(p_position * inv_dx - x_stagger, ti.i32)
+    x_base = ti.cast(p_position * inv_dx - x_stagger, ti.i32)
+    x_fx = p_position * inv_dx - ti.cast(x_base - ti.Vector([dx / 2, 0.0]), ti.f32)
+
+    # y_base = (p_position * inv_dx - y_stagger).cast(ti.i32)
+    # y_base = ti.floor(p_position * inv_dx - y_stagger, ti.i32)
+    y_base = ti.cast(p_position * inv_dx - y_stagger, ti.i32)
+    y_fx = p_position * inv_dx - ti.cast(y_base - ti.Vector([0.0, dx / 2]), ti.f32)
 
     print("position:    ", p_position)
     print("c_base:      ", c_base)
@@ -38,10 +45,10 @@ def compute_weights(x: float, y: float):
 
 
 def main():
-    positions = [(0.1, 0.1), (0.4, 0.4), (0.5, 0.5), (0.6, 0.6), (0.9, 0.9)]
+    positions = [(0.0, 0.0), (0.1, 0.1), (0.4, 0.4), (0.5, 0.5), (0.6, 0.6), (0.9, 0.9), (1.0, 1.0)]
     for x, y in positions:
         print()
-        print("-" * 50)
+        print("=" * 50)
         compute_weights(x, y)
 
 
