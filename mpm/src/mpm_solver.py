@@ -33,14 +33,6 @@ class MPM_Solver:
         # added to each position vector when loading a new configuration.
         self.boundary_offset = 1 - ((self.n_grid - self.boundary_width) * self.dx)
 
-        # Parameters to control melting/freezing
-        # TODO: these are variables and need to be put into fields
-        # TODO: these depend not only on phase, but also on temperature,
-        #       so ideally they are functions of these two variables
-        # self.heat_conductivity = 0.55  # Water: 0.55, Ice: 2.33
-        # self.heat_capacity = 4.186  # Water: 4.186, Ice: 2.093 (j/dC)
-        # self.latent_heat = 0.334  # in J/kg
-
         # Properties on MAC-faces.
         self.face_classification_x = ti.field(dtype=int, shape=(self.n_grid + 1, self.n_grid))
         self.face_classification_y = ti.field(dtype=int, shape=(self.n_grid, self.n_grid + 1))
@@ -105,9 +97,10 @@ class MPM_Solver:
         self.pressure_solver = PressureSolver(self)
         self.heat_solver = HeatSolver(self)
 
-        # Additional offsets for the staggered grids (and for flooring), used for the weight computations.
-        self.x_stagger = ti.Vector([(self.dx / 2) + 0.5, 0.5])
-        self.y_stagger = ti.Vector([0.5, (self.dx / 2) + 0.5])
+        # Additional offsets for the staggered grids and additional 0.5 to force flooring,
+        # used for the weight computations.
+        self.x_stagger = ti.Vector([(self.dx * 0.5) + 0.5, 0.5])
+        self.y_stagger = ti.Vector([0.5, (self.dx * 0.5) + 0.5])
         self.c_stagger = ti.Vector([0.5, 0.5])
 
     @ti.kernel
@@ -125,7 +118,7 @@ class MPM_Solver:
             self.face_mass_y[i, j] = 0
 
         for i, j in self.cell_classification:
-            self.cell_temperature[i, j] = 0  # FIXME: do this or not?
+            self.cell_temperature[i, j] = 0
             self.cell_inv_lambda[i, j] = 0
             self.cell_pressure[i, j] = 0
             self.cell_capacity[i, j] = 0
@@ -426,10 +419,12 @@ class MPM_Solver:
             # Initially, we allow each particle to freely change its temperature according to the heat equation.
             # But whenever the freezing point is reached, any additional temperature change is multiplied by
             # conductivity and mass and added to the buffer, with the particle temperature kept unchanged.
-            if nt > 0:  # and (self.p_heat[p] < LATENT_HEAT):
-                # We passed the melting point, but have not yet reached the latent heat threshold.
+            if (self.p_phase[p] == Phase.Ice) and (nt >= 0):
+                # Ice reached the melting point, additional temperature change is added to heat buffer.
                 self.p_heat[p] += self.p_conductivity[p] * self.p_mass[p] * (nt - self.p_temperature[p])
-                # if self.p_heat[p] > LATENT_HEAT:
+
+                # If the heat buffer is full the particle changes its phase to water,
+                # everything is then reset according to the new phase.
                 if self.p_heat[p] > LATENT_HEAT:
                     # TODO: Lame parameters for each phase, something like:
                     # E = 3 * 1e-4
@@ -443,12 +438,13 @@ class MPM_Solver:
                     self.p_phase[p] = Phase.Water
                     self.p_mass[p] = self.particle_vol * Density.Water
                     self.p_heat[p] = LATENT_HEAT
-                else:
-                    # Freely change the temperature according to the heat equation.
-                    self.p_temperature[p] = nt
-            elif nt <= 0:  # and (self.p_heat[p] > 0):
-                # We passed the freezing point, but have not yet reached the latent heat threshold.
+
+            elif (self.p_phase[p] == Phase.Water) and (nt < 0):
+                # Water particle reached the freezing point, additional temperature change is added to heat buffer.
                 self.p_heat[p] += self.p_conductivity[p] * self.p_mass[p] * (nt - self.p_temperature[p])
+
+                # If the heat buffer is empty the particle changes its phase to ice, 
+                # everything is then reset according to the new phase.
                 if self.p_heat[p] < 0:
                     # TODO: Lame parameters for each phase, something like:
                     # E = 7 * 1e-4
@@ -462,12 +458,10 @@ class MPM_Solver:
                     self.p_phase[p] = Phase.Ice
                     self.p_mass[p] = self.particle_vol * Density.Ice
                     self.p_heat[p] = 0.0
-                else:
-                    # Freely change the temperature according to the heat equation.
-                    self.p_temperature[p] = nt
-            # else:
-            #     # Freely change the temperature according to the heat equation.
-            #     self.p_temperature[p] = nt
+
+            else:
+                # Freely change temperature according to heat equation.
+                self.p_temperature[p] = nt
 
             # The particle_position holds the positions for all particles, active and inactive,
             # only pushing the position into p_active_position will draw this particle.
