@@ -53,32 +53,30 @@ class HeatSolver:
                 # NOTE: dx^d is cancelled out by self.inv_dx^2 because d == 2
                 inv_mass_capacity = 1 / (self.cell_mass[i, j] * self.cell_capacity[i, j])
                 A_c += delta
-                # A_c += 1.0
 
                 if i != 0 and self.c_classification[i - 1, j] == Classification.Interior:
-                    A[idx, idx - self.n_grid] += self.dt * delta * inv_mass_capacity * self.x_conductivity[i - 1, j]
-                    A_l += self.dt * delta * inv_mass_capacity * self.x_conductivity[i - 1, j]
-                    A_c -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i - 1, j]
+                    A[idx, idx - self.n_grid] -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i, j]
+                    A_l -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i, j]
+                    A_c += self.dt * delta * inv_mass_capacity * self.x_conductivity[i, j]
 
                 if i != self.n_grid - 1 and self.c_classification[i + 1, j] == Classification.Interior:
-                    A[idx, idx + self.n_grid] += self.dt * delta * inv_mass_capacity * self.x_conductivity[i + 1, j]
-                    A_r += self.dt * delta * inv_mass_capacity * self.x_conductivity[i + 1, j]
-                    A_c -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i + 1, j]
+                    A[idx, idx + self.n_grid] -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i + 1, j]
+                    A_r -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i + 1, j]
+                    A_c += self.dt * delta * inv_mass_capacity * self.x_conductivity[i + 1, j]
 
                 if j != 0 and self.c_classification[i, j - 1] == Classification.Interior:
-                    A[idx, idx - 1] += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j - 1]
-                    A_b += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j - 1]
-                    A_c -= self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j - 1]
+                    A[idx, idx - 1] -= self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j]
+                    A_b -= self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j]
+                    A_c += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j]
 
                 if j != self.n_grid - 1 and self.c_classification[i, j + 1] == Classification.Interior:
-                    A[idx, idx + 1] += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j + 1]
-                    A_t += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j + 1]
-                    A_c -= self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j + 1]
+                    A[idx, idx + 1] -= self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j + 1]
+                    A_t -= self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j + 1]
+                    A_c += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j + 1]
 
                 A[idx, idx] += A_c
             else:  # Dirichlet boundary condition (not homogeneous)
                 A[idx, idx] += 1.0
-                T[idx] = 1000.0  # TODO: set to proper ambient temperature
                 A_c = 1.0
 
             continue
@@ -154,7 +152,7 @@ class HeatSolver:
 
         # FIXME: remove this debugging statements or move to test file
         solver_succeeded, _temperature, temperature = solver.info(), _T.to_numpy(), T.to_numpy()
-        # assert solver_succeeded, f"{self.n_iterations} -> SOLVER DID NOT FIND A SOLUTION!"
+        assert solver_succeeded, f"{self.n_iterations} -> SOLVER DID NOT FIND A SOLUTION!"
         assert not np.any(np.isnan(_temperature)), f"{self.n_iterations} -> NAN VALUE IN NEW TEMPERATURE ARRAY!"
         assert not np.any(np.isnan(temperature)), f"{self.n_iterations} -> NAN VALUE IN OLD TEMPERATURE ARRAY!"
         self.n_iterations += 1
