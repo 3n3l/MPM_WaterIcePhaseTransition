@@ -190,12 +190,12 @@ class MPM_Solver:
             y_affine = affine @ ti.Vector([0, 1])  # pyright: ignore
 
             # We use an additional offset of 0.5 for element-wise flooring.
-            c_base = ti.floor(self.particle_position[p] * self.inv_dx - self.c_stagger, dtype=ti.int32)
-            x_base = ti.floor(self.particle_position[p] * self.inv_dx - self.x_stagger, dtype=ti.int32)
-            y_base = ti.floor(self.particle_position[p] * self.inv_dx - self.y_stagger, dtype=ti.int32)
-            c_fx = self.particle_position[p] * self.inv_dx - c_base.cast(ti.float32)  # pyright: ignore
-            x_fx = self.particle_position[p] * self.inv_dx - x_base.cast(ti.float32)  # pyright: ignore
-            y_fx = self.particle_position[p] * self.inv_dx - y_base.cast(ti.float32)  # pyright: ignore
+            c_base = ti.floor((self.particle_position[p] * self.inv_dx - self.c_stagger), dtype=ti.i32)
+            x_base = ti.floor((self.particle_position[p] * self.inv_dx - self.x_stagger), dtype=ti.i32)
+            y_base = ti.floor((self.particle_position[p] * self.inv_dx - self.y_stagger), dtype=ti.i32)
+            c_fx = self.particle_position[p] * self.inv_dx - ti.cast(c_base, ti.f32)
+            x_fx = self.particle_position[p] * self.inv_dx - ti.cast(x_base, ti.f32)
+            y_fx = self.particle_position[p] * self.inv_dx - ti.cast(y_base, ti.f32)
             # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1, fx-2)
             c_w = [0.5 * (1.5 - c_fx) ** 2, 0.75 - (c_fx - 1) ** 2, 0.5 * (c_fx - 0.5) ** 2]
             x_w = [0.5 * (1.5 - x_fx) ** 2, 0.75 - (x_fx - 1) ** 2, 0.5 * (x_fx - 0.5) ** 2]
@@ -325,6 +325,7 @@ class MPM_Solver:
             cell_is_colliding &= self.face_classification_y[i, j] == Classification.Colliding
             cell_is_colliding &= self.face_classification_y[i, j + 1] == Classification.Colliding
             if cell_is_colliding:
+                # self.cell_temperature[i, j] = self.ambient_temperature[None]
                 self.cell_classification[i, j] = Classification.Colliding
                 continue
 
@@ -349,11 +350,11 @@ class MPM_Solver:
         for p in ti.ndrange(self.n_particles[None]):
             # We use an additional offset of 0.5 for element-wise flooring.
             position = self.particle_position[p]
-            c_base = (position * self.inv_dx - 0.5).cast(int)  # pyright: ignore
-            x_base = (position * self.inv_dx - (ti.Vector([self.dx / 2, 0]) + 0.5)).cast(int)  # pyright: ignore
-            y_base = (position * self.inv_dx - (ti.Vector([0, self.dx / 2]) + 0.5)).cast(int)  # pyright: ignore
-            x_fx = position * self.inv_dx - x_base.cast(float)
-            y_fx = position * self.inv_dx - y_base.cast(float)
+            c_base = ti.cast(position * self.inv_dx - self.c_stagger, ti.i32)
+            x_base = ti.cast(position * self.inv_dx - self.x_stagger, ti.i32)
+            y_base = ti.cast(position * self.inv_dx - self.y_stagger, ti.i32)
+            x_fx = position * self.inv_dx - ti.cast(x_base, ti.f32)
+            y_fx = position * self.inv_dx - ti.cast(y_base, ti.f32)
             x_v = [0.167 * (1.5 - x_fx) ** 3, 0.25 - (x_fx - 1) ** 3, 0.167 * (x_fx - 0.5) ** 3]
             y_v = [0.167 * (1.5 - y_fx) ** 3, 0.25 - (y_fx - 1) ** 3, 0.167 * (y_fx - 0.5) ** 3]
 
@@ -372,12 +373,12 @@ class MPM_Solver:
             if self.p_activation_state[p] == State.Inactive:
                 continue
 
-            c_base = ti.floor(self.particle_position[p] * self.inv_dx - self.c_stagger, dtype=ti.i32)
-            x_base = ti.floor(self.particle_position[p] * self.inv_dx - self.x_stagger, dtype=ti.i32)
-            y_base = ti.floor(self.particle_position[p] * self.inv_dx - self.y_stagger, dtype=ti.i32)
-            c_fx = self.particle_position[p] * self.inv_dx - c_base.cast(ti.f32)  # pyright: ignore
-            x_fx = self.particle_position[p] * self.inv_dx - x_base.cast(ti.f32)  # pyright: ignore
-            y_fx = self.particle_position[p] * self.inv_dx - y_base.cast(ti.f32)  # pyright: ignore
+            c_base = ti.floor((self.particle_position[p] * self.inv_dx - self.c_stagger), dtype=ti.i32)
+            x_base = ti.floor((self.particle_position[p] * self.inv_dx - self.x_stagger), dtype=ti.i32)
+            y_base = ti.floor((self.particle_position[p] * self.inv_dx - self.y_stagger), dtype=ti.i32)
+            c_fx = self.particle_position[p] * self.inv_dx - ti.cast(c_base, ti.f32)
+            x_fx = self.particle_position[p] * self.inv_dx - ti.cast(x_base, ti.f32)
+            y_fx = self.particle_position[p] * self.inv_dx - ti.cast(y_base, ti.f32)
             # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1, fx-2)
             c_w = [0.5 * (1.5 - c_fx) ** 2, 0.75 - (c_fx - 1) ** 2, 0.5 * (c_fx - 0.5) ** 2]
             x_w = [0.5 * (1.5 - x_fx) ** 2, 0.75 - (x_fx - 1) ** 2, 0.5 * (x_fx - 0.5) ** 2]
