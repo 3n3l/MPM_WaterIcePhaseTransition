@@ -137,23 +137,24 @@ class HeatSolver:
         # TODO: max_num_triplets could be optimized to N * 5?
         A = SparseMatrixBuilder(
             max_num_triplets=(self.n_cells * self.n_cells),
+            # max_num_triplets=(5 * self.n_cells),
             num_rows=self.n_cells,
             num_cols=self.n_cells,
             dtype=ti.f32,
         )
-        T = ti.ndarray(ti.f32, shape=self.n_cells)
-        self.fill_linear_system(A, T)
+        b = ti.ndarray(ti.f32, shape=self.n_cells)
+        self.fill_linear_system(A, b)
 
         # Solve the linear system.
         solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
         solver.compute(A.build())
-        _T = solver.solve(T)
+        T = solver.solve(b)
 
         # FIXME: remove this debugging statements or move to test file
-        solver_succeeded, _temperature, temperature = solver.info(), _T.to_numpy(), T.to_numpy()
+        solver_succeeded, _temperature, temperature = solver.info(), T.to_numpy(), b.to_numpy()
         assert solver_succeeded, f"{self.n_iterations} -> SOLVER DID NOT FIND A SOLUTION!"
         assert not np.any(np.isnan(_temperature)), f"{self.n_iterations} -> NAN VALUE IN NEW TEMPERATURE ARRAY!"
         assert not np.any(np.isnan(temperature)), f"{self.n_iterations} -> NAN VALUE IN OLD TEMPERATURE ARRAY!"
         self.n_iterations += 1
 
-        self.fill_temperature_field(_T)
+        self.fill_temperature_field(T)
