@@ -22,10 +22,10 @@ class State:
 
 # TODO: Capacity should not be an enum!?
 class Capacity:
-    # Water = 4.186  # j/dC
-    # Ice = 2.093  # j/dC
-    Water = 4186  # j/dC
-    Ice = 2093  # j/dC
+    Water = 4.186  # j/dC
+    Ice = 2.093  # j/dC
+    # Water = 4186  # j/dC
+    # Ice = 2093  # j/dC
     Zero = 0
 
 
