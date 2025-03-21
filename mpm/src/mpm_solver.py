@@ -400,10 +400,15 @@ class MPM_Solver:
                 nv += [x_velocity, y_velocity]
                 bx += x_velocity * x_dpos
                 by += y_velocity * y_dpos
-                nt += c_weight * self.cell_temperature[c_base + offset]
 
-            cx = 4 * self.inv_dx * bx  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos.
-            cy = 4 * self.inv_dx * by  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos.
+                # FIXME: is this not incorporating values from the left and bottom cells?
+                nt += c_weight * self.cell_temperature[c_base + offset]
+                # FIXME: This will incorporate values from left and bottom cell,
+                # but not from top and right cells
+                # nt += c_weight * self.cell_temperature[c_base + offset - 1]
+
+            cx = 4 * self.inv_dx * bx  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Quadratic kernels
+            cy = 4 * self.inv_dx * by  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Quadratic kernels
             self.particle_C[p] = ti.Matrix([[cx[0], cy[0]], [cx[1], cy[1]]])  # pyright: ignore
             self.particle_position[p] += self.dt * nv
             self.particle_velocity[p] = nv
