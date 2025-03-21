@@ -350,9 +350,9 @@ class MPM_Solver:
         for p in ti.ndrange(self.n_particles[None]):
             # We use an additional offset of 0.5 for element-wise flooring.
             position = self.particle_position[p]
-            c_base = ti.cast(position * self.inv_dx - self.c_stagger, ti.i32)
-            x_base = ti.cast(position * self.inv_dx - self.x_stagger, ti.i32)
-            y_base = ti.cast(position * self.inv_dx - self.y_stagger, ti.i32)
+            c_base = ti.floor(position * self.inv_dx - self.c_stagger, ti.i32)
+            x_base = ti.floor(position * self.inv_dx - self.x_stagger, ti.i32)
+            y_base = ti.floor(position * self.inv_dx - self.y_stagger, ti.i32)
             x_fx = position * self.inv_dx - ti.cast(x_base, ti.f32)
             y_fx = position * self.inv_dx - ti.cast(y_base, ti.f32)
             x_v = [0.167 * (1.5 - x_fx) ** 3, 0.25 - (x_fx - 1) ** 3, 0.167 * (x_fx - 0.5) ** 3]
