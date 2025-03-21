@@ -55,6 +55,19 @@ def main():
             ambient_temperature=20.0,
         ),
         Configuration(
+            name="Waterspout Hits Ice Cube",
+            geometries=[
+                *[Rectangle(Phase.Water, 0.02, 0.02, 20, (0, -2), (0.48, 0.55), i, 100000.0) for i in range(5, 300)],
+                Rectangle(Phase.Ice, 0.1, 0.1, 3000, (0, 0), (0.45, 0.0), 0, -0.5),
+            ],
+            E=1.4e5,  # Young's modulus (1.4e5)
+            nu=0.2,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=8.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+            ambient_temperature=10.0,
+        ),
+        Configuration(
             name="Waterspout Hits Ice Cubes",
             geometries=[
                 *[Rectangle(Phase.Water, 0.05, 0.05, 25, (2, -2), (0.1, 0.8), i, 500.0) for i in range(10, 250)],
