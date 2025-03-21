@@ -28,8 +28,6 @@ class HeatSolver:
 
     @ti.kernel
     def fill_linear_system(self, A: ti.types.sparse_matrix_builder(), T: ti.types.ndarray()):  # pyright: ignore
-        delta = 1.0  # relaxation
-
         for i, j in self.c_temperature:
             # Raveled index.
             idx = (i * self.n_grid) + j
@@ -48,30 +46,30 @@ class HeatSolver:
             # with fixed temperature bodies (like a heated pan (-> colliding cells) or air (-> empty cells)).
             if self.c_classification[i, j] == Classification.Interior:
                 inv_mass_capacity = 1 / (self.cell_mass[i, j] * self.cell_capacity[i, j])
-                A_c += delta
+                A_c += 1.0
 
                 # We enforce homogeneous Neumann boundary conditions at FACES adjacent to
                 # cells that can be considered empty or corresponding to insulated objects.
                 # NOTE: dx^d is cancelled out by self.inv_dx^2 because d == 2
                 if self.x_classification[i, j] != Classification.Empty:
-                    A[idx, idx - self.n_grid] -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i, j]
-                    A_l -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i, j]
-                    A_c += self.dt * delta * inv_mass_capacity * self.x_conductivity[i, j]
+                    A[idx, idx - self.n_grid] -= self.dt * inv_mass_capacity * self.x_conductivity[i, j]
+                    A_l -= self.dt * inv_mass_capacity * self.x_conductivity[i, j]
+                    A_c += self.dt * inv_mass_capacity * self.x_conductivity[i, j]
 
                 if self.n_grid - 1 and self.x_classification[i + 1, j] != Classification.Empty:
-                    A[idx, idx + self.n_grid] -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i + 1, j]
-                    A_r -= self.dt * delta * inv_mass_capacity * self.x_conductivity[i + 1, j]
-                    A_c += self.dt * delta * inv_mass_capacity * self.x_conductivity[i + 1, j]
+                    A[idx, idx + self.n_grid] -= self.dt * inv_mass_capacity * self.x_conductivity[i + 1, j]
+                    A_r -= self.dt * inv_mass_capacity * self.x_conductivity[i + 1, j]
+                    A_c += self.dt * inv_mass_capacity * self.x_conductivity[i + 1, j]
 
                 if self.y_classification[i, j] != Classification.Empty:
-                    A[idx, idx - 1] -= self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j]
-                    A_b -= self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j]
-                    A_c += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j]
+                    A[idx, idx - 1] -= self.dt * inv_mass_capacity * self.y_conductivity[i, j]
+                    A_b -= self.dt * inv_mass_capacity * self.y_conductivity[i, j]
+                    A_c += self.dt * inv_mass_capacity * self.y_conductivity[i, j]
 
                 if self.y_classification[i, j + 1] != Classification.Empty:
-                    A[idx, idx + 1] -= self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j + 1]
-                    A_t -= self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j + 1]
-                    A_c += self.dt * delta * inv_mass_capacity * self.y_conductivity[i, j + 1]
+                    A[idx, idx + 1] -= self.dt * inv_mass_capacity * self.y_conductivity[i, j + 1]
+                    A_t -= self.dt * inv_mass_capacity * self.y_conductivity[i, j + 1]
+                    A_c += self.dt * inv_mass_capacity * self.y_conductivity[i, j + 1]
 
                 A[idx, idx] += A_c
             else:  # Dirichlet boundary condition (not homogeneous)
