@@ -28,12 +28,12 @@ def compute_weights(x: float, y: float):
     # x_base = (p_position * inv_dx - x_stagger).cast(ti.i32)
     # x_base = ti.floor(p_position * inv_dx - x_stagger, ti.i32)
     x_base = ti.cast(p_position * inv_dx - x_stagger, ti.i32)
-    x_fx = p_position * inv_dx - ti.cast(x_base - ti.Vector([dx / 2, 0.0]), ti.f32)
+    x_fx = p_position * inv_dx - ti.cast(x_base, ti.f32)
 
     # y_base = (p_position * inv_dx - y_stagger).cast(ti.i32)
     # y_base = ti.floor(p_position * inv_dx - y_stagger, ti.i32)
     y_base = ti.cast(p_position * inv_dx - y_stagger, ti.i32)
-    y_fx = p_position * inv_dx - ti.cast(y_base - ti.Vector([0.0, dx / 2]), ti.f32)
+    y_fx = p_position * inv_dx - ti.cast(y_base, ti.f32)
 
     print("position:    ", p_position)
     print("c_base:      ", c_base)
