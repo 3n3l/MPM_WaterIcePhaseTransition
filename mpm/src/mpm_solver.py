@@ -393,8 +393,8 @@ class MPM_Solver:
                 c_weight = c_w[i][0] * c_w[j][1]
                 x_weight = x_w[i][0] * x_w[j][1]
                 y_weight = y_w[i][0] * y_w[j][1]
-                x_dpos = offset.cast(float) - x_fx
-                y_dpos = offset.cast(float) - y_fx
+                x_dpos = ti.cast(offset, ti.f32) - x_fx
+                y_dpos = ti.cast(offset, ti.f32) - y_fx
                 x_velocity = x_weight * self.face_velocity_x[x_base + offset]
                 y_velocity = y_weight * self.face_velocity_y[y_base + offset]
                 nv += [x_velocity, y_velocity]
