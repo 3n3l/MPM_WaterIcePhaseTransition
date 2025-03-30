@@ -1,4 +1,4 @@
-from taichi.linalg import SparseMatrixBuilder, SparseSolver
+from taichi.linalg import SparseMatrixBuilder, SparseCG, SparseSolver
 from src.enums import Classification
 
 import taichi as ti
@@ -52,12 +52,12 @@ class HeatSolver:
                 # cells that can be considered empty or corresponding to insulated objects.
                 # NOTE: dx^d is cancelled out by self.inv_dx^2 because d == 2
                 if self.x_classification[i, j] != Classification.Empty:
-                    A[idx, idx - self.n_grid] -= self.dt * inv_mass_capacity * self.x_conductivity[i, j]
+                    A[idx - 1, idx] -= self.dt * inv_mass_capacity * self.x_conductivity[i, j]
                     A_l -= self.dt * inv_mass_capacity * self.x_conductivity[i, j]
                     A_c += self.dt * inv_mass_capacity * self.x_conductivity[i, j]
 
-                if self.n_grid - 1 and self.x_classification[i + 1, j] != Classification.Empty:
-                    A[idx, idx + self.n_grid] -= self.dt * inv_mass_capacity * self.x_conductivity[i + 1, j]
+                if self.x_classification[i + 1, j] != Classification.Empty:
+                    A[idx + 1, idx] -= self.dt * inv_mass_capacity * self.x_conductivity[i + 1, j]
                     A_r -= self.dt * inv_mass_capacity * self.x_conductivity[i + 1, j]
                     A_c += self.dt * inv_mass_capacity * self.x_conductivity[i + 1, j]
 
@@ -144,15 +144,17 @@ class HeatSolver:
         self.fill_linear_system(A, b)
 
         # Solve the linear system.
-        solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
+        solver = SparseSolver()
         solver.compute(A.build())
         T = solver.solve(b)
+        # solver = SparseCG(A.build(), b, max_iter=1000)
+        # T, _ = solver.solve()
 
         # FIXME: remove this debugging statements or move to test file
-        solver_succeeded, _temperature, temperature = solver.info(), T.to_numpy(), b.to_numpy()
-        assert solver_succeeded, f"{self.n_iterations} -> SOLVER DID NOT FIND A SOLUTION!"
-        assert not np.any(np.isnan(_temperature)), f"{self.n_iterations} -> NAN VALUE IN NEW TEMPERATURE ARRAY!"
-        assert not np.any(np.isnan(temperature)), f"{self.n_iterations} -> NAN VALUE IN OLD TEMPERATURE ARRAY!"
-        self.n_iterations += 1
+        # solver_succeeded, _temperature, temperature = solver.info(), T.to_numpy(), b.to_numpy()
+        # assert solver_succeeded, f"{self.n_iterations} -> SOLVER DID NOT FIND A SOLUTION!"
+        # assert not np.any(np.isnan(_temperature)), f"{self.n_iterations} -> NAN VALUE IN NEW TEMPERATURE ARRAY!"
+        # assert not np.any(np.isnan(temperature)), f"{self.n_iterations} -> NAN VALUE IN OLD TEMPERATURE ARRAY!"
+        # self.n_iterations += 1
 
         self.fill_temperature_field(T)
