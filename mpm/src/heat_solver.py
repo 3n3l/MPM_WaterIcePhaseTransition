@@ -1,4 +1,4 @@
-from taichi.linalg import SparseMatrixBuilder, SparseSolver
+from taichi.linalg import SparseMatrixBuilder, SparseSolver, SparseCG
 from src.enums import Classification
 
 import taichi as ti
@@ -13,8 +13,6 @@ class HeatSolver:
         self.n_grid = mpm_solver.n_grid
         self.dx = mpm_solver.dx
         self.dt = mpm_solver.dt
-
-        self.n_iterations = 0
 
         self.c_classification = mpm_solver.cell_classification
         self.c_temperature = mpm_solver.cell_temperature
@@ -144,15 +142,16 @@ class HeatSolver:
         self.fill_linear_system(A, b)
 
         # Solve the linear system.
-        solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
-        solver.compute(A.build())
-        T = solver.solve(b)
+        # solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
+        # solver.compute(A.build())
+        # T = solver.solve(b)
+        solver = SparseCG(A.build(), b)
+        T, _ = solver.solve()
 
         # FIXME: remove this debugging statements or move to test file
-        solver_succeeded, _temperature, temperature = solver.info(), T.to_numpy(), b.to_numpy()
-        assert solver_succeeded, f"{self.n_iterations} -> SOLVER DID NOT FIND A SOLUTION!"
-        assert not np.any(np.isnan(_temperature)), f"{self.n_iterations} -> NAN VALUE IN NEW TEMPERATURE ARRAY!"
-        assert not np.any(np.isnan(temperature)), f"{self.n_iterations} -> NAN VALUE IN OLD TEMPERATURE ARRAY!"
-        self.n_iterations += 1
+        # solver_succeeded, _temperature, temperature = solver.info(), T.to_numpy(), b.to_numpy()
+        # assert solver_succeeded, f"{self.n_iterations} -> SOLVER DID NOT FIND A SOLUTION!"
+        # assert not np.any(np.isnan(_temperature)), f"{self.n_iterations} -> NAN VALUE IN NEW TEMPERATURE ARRAY!"
+        # assert not np.any(np.isnan(temperature)), f"{self.n_iterations} -> NAN VALUE IN OLD TEMPERATURE ARRAY!"
 
         self.fill_temperature_field(T)
