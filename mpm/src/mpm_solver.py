@@ -1,5 +1,6 @@
 from src.enums import Capacity, Classification, Color, Conductivity, Density, Phase, State, Density
 from src.pressure_solver import PressureSolver
+from src.MGPCG import Pressure_MGPCGSolver
 from src.heat_solver import HeatSolver
 
 import taichi as ti
@@ -94,7 +95,8 @@ class MPM_Solver:
         self.E = ti.field(dtype=float, shape=())
 
         # The solver for the Poisson pressure equation.
-        self.pressure_solver = PressureSolver(self)
+        # self.pressure_solver = PressureSolver(self)
+        self.pressure_solver = Pressure_MGPCGSolver(self)
         self.heat_solver = HeatSolver(self)
 
         # Additional offsets for the staggered grids and additional 0.5 to force flooring,
@@ -481,6 +483,6 @@ class MPM_Solver:
             self.momentum_to_velocity()
             self.classify_cells()
             self.compute_volumes()
-            # self.pressure_solver.solve()
-            self.heat_solver.solve()
+            self.pressure_solver.solve()
+            # self.heat_solver.solve()
             self.grid_to_particle()
