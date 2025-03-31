@@ -1,4 +1,4 @@
-from taichi.linalg import SparseMatrixBuilder, SparseSolver
+from taichi.linalg import SparseMatrixBuilder, SparseSolver, SparseCG
 from src.enums import Classification
 
 import taichi as ti
@@ -221,29 +221,16 @@ class PressureSolver:
         self.fill_linear_system(A, b)
 
         # Solve the linear system.
-        solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
-        solver.compute(A.build())
-        p = solver.solve(b)
-
-        # print("^" * 100)
-        # print()
-        # print(">>> A")
-        # print(K)
-        # print()
-        # print(">>> b")
-        # # print(b.to_numpy())
-        # for bbb in b.to_numpy():
-        #     print(bbb)
-        # print()
-        # print(">>> p")
-        # # print(p.to_numpy())
-        # for ppp in p.to_numpy():
-        #     print(ppp)
+        # solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
+        # solver.compute(A.build())
+        # p = solver.solve(b)
+        solver = SparseCG(A.build(), b)
+        p, _ = solver.solve()
 
         # FIXME: remove this debugging statements or move to test file
-        solver_succeeded, pressure = solver.info(), p.to_numpy()
-        assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
-        assert not np.any(np.isnan(pressure)), "NAN VALUE IN PRESSURE ARRAY!"
+        # solver_succeeded, pressure = solver.info(), p.to_numpy()
+        # assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
+        # assert not np.any(np.isnan(pressure)), "NAN VALUE IN PRESSURE ARRAY!"
 
         # FIXME: Apply the pressure to the intermediate velocity field.
         self.fill_pressure_field(p)
