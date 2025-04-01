@@ -82,17 +82,22 @@ class Renderer:
         self.solver.current_frame[None] = 0
         for p in self.solver.particle_position:
             if p < configuration.n_particles:
-                phase = configuration.p_phase[p]
-                self.solver.particle_color[p] = Color.Water if phase == Phase.Water else Color.Ice
-                self.solver.particle_capacity[p] = Capacity.Water if phase == Phase.Water else Capacity.Ice
-                self.solver.p_conductivity[p] = Conductivity.Water if phase == Phase.Water else Conductivity.Ice
+                p_is_water = configuration.p_phase[p] == Phase.Water
+                self.solver.particle_capacity[p] = Capacity.Water if p_is_water else Capacity.Ice
+                self.solver.p_conductivity[p] = Conductivity.Water if p_is_water else Conductivity.Ice
+                self.solver.particle_color[p] = Color.Water if p_is_water else Color.Ice
+                self.solver.p_heat[p] = LATENT_HEAT if p_is_water else 0.0
+
                 self.solver.p_activation_threshold[p] = configuration.p_activity_bound[p]
-                self.solver.particle_position[p] = configuration.p_position[p] + self.solver.boundary_offset
-                self.solver.p_temperature[p] = configuration.p_temperature[p]
                 self.solver.particle_velocity[p] = configuration.p_velocity[p]
+                self.solver.p_temperature[p] = configuration.p_temperature[p]
                 self.solver.p_activation_state[p] = configuration.p_state[p]
                 self.solver.p_phase[p] = configuration.p_phase[p]
-                self.solver.p_heat[p] = LATENT_HEAT if phase == Phase.Water else 0.0
+
+                offset_position = configuration.p_position[p] + self.solver.boundary_offset
+                p_is_active = configuration.p_state[p] == State.Active
+                self.solver.p_active_position[p] = offset_position if p_is_active else [0, 0]
+                self.solver.particle_position[p] = offset_position
             else:
                 # TODO: this might be completely irrelevant, as only the first n_particles are used anyway?
                 #       So work can be saved by just ignoring all the other particles and iterating only
@@ -108,12 +113,12 @@ class Renderer:
                 self.solver.p_phase[p] = Phase.Water
                 self.solver.p_heat[p] = 0
                 self.solver.p_heat[p] = 0
+                self.solver.p_active_position[p] = [0, 0]
 
             self.solver.p_mass[p] = self.solver.particle_vol * self.solver.rho_0
             self.solver.particle_inv_lambda[p] = 1 / self.solver.lambda_0[None]
             self.solver.particle_FE[p] = ti.Matrix([[1, 0], [0, 1]])
             self.solver.particle_C[p] = ti.Matrix.zero(float, 2, 2)
-            self.solver.p_active_position[p] = [0, 0]
             self.solver.particle_JE[p] = 1
             self.solver.particle_JP[p] = 1
 

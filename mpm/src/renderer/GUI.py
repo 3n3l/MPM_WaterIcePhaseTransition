@@ -29,9 +29,6 @@ class GUI_Renderer(Renderer):
         # GUI.
         self.gui = ti.GUI(name, res=res, background_color=Color._Background)
 
-        # State.
-        self.is_paused = False
-
     def render(self) -> None:
         """Renders the simulation with the data from the MLS-MPM solver."""
         # TODO: write frames to disk?
