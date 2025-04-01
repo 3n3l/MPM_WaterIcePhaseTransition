@@ -11,13 +11,13 @@ class Phase:
 
 class Color:
     Ice = (0.81, 0.88, 1.0)
-    Water = (0.27, 0.32, 1.0)
+    Water = (0.27, 0.35, 1.0)
     Background = (0.09, 0.07, 0.07)
     # TODO: GUI and GGUI expect the colors in different forms
     #       unify this somehow
-    _Ice = 0xD0E2FF
-    _Water = 0x0043CE
-    _Background = 0x161616
+    _Ice = 0xEDF5FF
+    _Water = 0x4589FF
+    _Background = 0x171414
 
 
 class State:
