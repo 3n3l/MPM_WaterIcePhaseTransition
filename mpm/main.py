@@ -1,6 +1,8 @@
+from argparse import ArgumentParser, RawTextHelpFormatter
 from src.configurations import Configuration
 from src.geometries import Circle, Rectangle
-from src.renderer import Renderer
+from src.renderer.GGUI import GGUI_Renderer
+from src.renderer.GUI import GUI_Renderer
 from src.mpm_solver import MPM_Solver
 from src.enums import Phase
 
@@ -12,10 +14,6 @@ ti.init(arch=ti.cpu, debug=True)
 
 
 def main():
-    print("-" * 150)
-    print("[Hint] Press R to [R]eset, P|SPACE to [P]ause/un[P]ause and S|BACKSPACE to [S]tart recording!")
-    print("-" * 150)
-
     configurations = [
         Configuration(
             name="Melting Ice Cube",
@@ -171,16 +169,37 @@ def main():
         ),
     ]
 
+    print("\n", "-" * 150)
+    epilog = "[Hint] Press R to reset, SPACE to pause/unpause the simulation!"
+    parser = ArgumentParser(prog="main.py", epilog=epilog, formatter_class=RawTextHelpFormatter)
+
+    ggui_help = "Use GGUI (depends on Vulkan) or GUI system for the simulation."
+    parser.add_argument("-g", "--gui", default="GGUI", nargs="?", choices=["GGUI", "GUI"], help=ggui_help)
+
+    configuration_help = "\n".join([f"{i}: {c.name}" for i, c in enumerate(configurations)])
+    parser.add_argument("-c", "--configuration", default=0, nargs="?", help=configuration_help, type=int)
+    args = parser.parse_args()
+
     quality = 1
     max_particles = max([c.n_particles for c in configurations])
     solver = MPM_Solver(quality=quality, max_particles=max_particles)
-    renderer = Renderer(
-        name="MPM - Water and Ice with Phase Transition",
-        configurations=configurations,
-        res=(720, 720),
-        solver=solver,
-    )
-    renderer.run()
+
+    if args.gui == "GGUI":
+        renderer = GGUI_Renderer(
+            name="MPM - Water and Ice with Phase Transition",
+            configurations=configurations,
+            res=(720, 720),
+            solver=solver,
+        )
+        renderer.run()
+    elif args.gui == "GUI":
+        renderer = GUI_Renderer(
+            name="MPM - Water and Ice with Phase Transition",
+            configuration=configurations[args.configuration],
+            solver=solver,
+            res=720,
+        )
+        renderer.run()
 
 
 if __name__ == "__main__":
