@@ -1,4 +1,4 @@
-from taichi.linalg import SparseMatrixBuilder, SparseSolver, SparseCG
+from taichi.linalg import SparseMatrixBuilder, SparseSolver
 from src.enums import Classification
 
 import taichi as ti
@@ -29,6 +29,14 @@ class PressureSolver:
         self.y_volume = mpm_solver.face_volume_y
         self.x_mass = mpm_solver.face_mass_x
         self.y_mass = mpm_solver.face_mass_y
+    
+    @ti.func
+    def flatten_gpos_row_major(self, i, j): # pyright: ignore
+        return i * self.n_grid + j
+    
+    @ti.func
+    def fold_index_row_major(self, idx): # pyright: ignore
+        return (idx // self.n_grid, idx % self.n_grid)
 
     @ti.kernel
     def fill_linear_system(self, A: ti.types.sparse_matrix_builder(), b: ti.types.ndarray()):  # pyright: ignore
@@ -36,7 +44,7 @@ class PressureSolver:
 
         for i, j in ti.ndrange(self.n_grid, self.n_grid):
             # Unraveled index.
-            idx = (i * self.n_grid) + j
+            idx = self.flatten_gpos_row_major(i, j)
 
             # b[idx] = (1 - self.cell_JE[i, j]) / (self.dt * self.cell_JE[i, j])
             b[idx] = -((self.cell_JE[i, j] - 1) / (self.dt * self.cell_JE[i, j]))
@@ -60,7 +68,7 @@ class PressureSolver:
             # if self.c_classification[i, j] != Classification.Empty:
             if self.c_classification[i, j] == Classification.Interior:
                 # TODO: save lambda in field instead of inverse (but compute inverse for stability)
-                cell_lambda = 1 / self.cell_inv_lambda[i, j]
+                cell_lambda = 1. / self.cell_inv_lambda[i, j]
                 # A[idx, idx] += delta * self.cell_JP[i, j] / (self.cell_JE[i, j] * cell_lambda * self.dt)
                 A_c += self.cell_JP[i, j] / (self.cell_JE[i, j] * cell_lambda * self.dt)
 
@@ -68,7 +76,7 @@ class PressureSolver:
                 # to guarantee zero flux into colliding cells, by just not adding these
                 # face values in the Laplacian for the off-diagonal values.
                 if (
-                    i != 0
+                    i >= self.boundary_width
                     and self.x_classification[i - 1, j] != Classification.Colliding
                     # FIXME: that the adjacent cell is empty shouldn't matter,
                     #        but without this the solver won't converge
@@ -76,26 +84,28 @@ class PressureSolver:
                 ):
                     # inv_rho = self.x_volume[i - 1, j] / self.x_mass[i - 1, j]
                     inv_rho = self.x_volume[i, j] / self.x_mass[i, j]
-                    A[idx, idx - self.n_grid] -= self.dt * Gic * inv_rho
+                    # A[idx, idx - self.n_grid] -= self.dt * Gic * inv_rho
+                    A[idx, self.flatten_gpos_row_major(i-1, j)] -= self.dt * Gic * inv_rho
                     A_l -= self.dt * Gic * inv_rho
                     # A[idx, idx] += self.dt * Gic * inv_rho
                     A_c += self.dt * Gic * inv_rho
 
                 if (
-                    i != self.n_grid - 1
+                    i <= self.n_grid - self.boundary_width
                     and self.x_classification[i + 1, j] != Classification.Colliding
                     # FIXME: that the adjacent cell is empty shouldn't matter,
                     #        but without this the solver won't converge
                     and self.c_classification[i + 1, j] != Classification.Empty
                 ):
                     inv_rho = self.x_volume[i + 1, j] / self.x_mass[i + 1, j]
-                    A[idx, idx + self.n_grid] -= self.dt * Gic * inv_rho
+                    # A[idx, idx + self.n_grid] -= self.dt * Gic * inv_rho
+                    A[idx, self.flatten_gpos_row_major(i+1, j)] -= self.dt * Gic * inv_rho
                     A_r -= self.dt * Gic * inv_rho
                     # A[idx, idx] += self.dt * Gic * inv_rho
                     A_c += self.dt * Gic * inv_rho
 
                 if (
-                    j != 0
+                    j >= self.boundary_width
                     and self.y_classification[i, j - 1] != Classification.Colliding
                     # FIXME: that the adjacent cell is empty shouldn't matter,
                     #        but without this the solver won't converge
@@ -103,20 +113,22 @@ class PressureSolver:
                 ):
                     # inv_rho = self.y_volume[i, j - 1] / self.y_mass[i, j - 1]
                     inv_rho = self.y_volume[i, j] / self.y_mass[i, j]
-                    A[idx, idx - 1] -= self.dt * Gic * inv_rho
+                    # A[idx, idx - 1] -= self.dt * Gic * inv_rho
+                    A[idx, self.flatten_gpos_row_major(i, j-1)] -= self.dt * Gic * inv_rho
                     A_b -= self.dt * Gic * inv_rho
                     # A[idx, idx] += self.dt * Gic * inv_rho
                     A_c += self.dt * Gic * inv_rho
 
                 if (
-                    j != self.n_grid - 1
+                    j <= self.n_grid - self.boundary_width
                     and self.y_classification[i, j + 1] != Classification.Colliding
                     # FIXME: that the adjacent cell is empty shouldn't matter,
                     #        but without this the solver won't converge
                     and self.c_classification[i, j + 1] != Classification.Empty
                 ):
                     inv_rho = self.y_volume[i, j + 1] / self.y_mass[i, j + 1]
-                    A[idx, idx + 1] -= self.dt * Gic * inv_rho
+                    # A[idx, idx + 1] -= self.dt * Gic * inv_rho
+                    A[idx, self.flatten_gpos_row_major(i, j+1)] -= self.dt * Gic * inv_rho
                     A_t -= self.dt * Gic * inv_rho
                     # A[idx, idx] += self.dt * Gic * inv_rho
                     A_c += self.dt * Gic * inv_rho
@@ -126,7 +138,7 @@ class PressureSolver:
             else:  # Homogeneous Dirichlet boundary condition.
                 A[idx, idx] += 1.0
                 b[idx] = 0.0
-                A_c += 1.0
+                # A_c += 1.0
 
             continue
             if self.c_classification[i, j] != Classification.Interior:
@@ -170,8 +182,9 @@ class PressureSolver:
     def fill_pressure_field(self, p: ti.types.ndarray()):  # pyright: ignore
         # TODO: move this to apply_pressure, delete self.cell_pressure (IF POSSIBLE)
         for i, j in self.c_pressure:
-            row = (i * self.n_grid) + j
-            self.c_pressure[i, j] = p[row]
+            # row = (i * self.n_grid) + j
+            idx = self.flatten_gpos_row_major(i, j)
+            self.c_pressure[i, j] = p[idx]
 
     @ti.kernel
     def apply_pressure(self):
@@ -204,7 +217,7 @@ class PressureSolver:
             if y_face_is_colliding:
                 self.y_velocity[i, j] = 0
                 continue
-
+            
             # Backward difference between the two adjacent cells.
             inv_rho = self.y_volume[i, j] / self.y_mass[i, j]
             self.y_velocity[i, j] -= z * inv_rho * (self.c_pressure[i, j] - self.c_pressure[i, j - 1])
@@ -221,16 +234,29 @@ class PressureSolver:
         self.fill_linear_system(A, b)
 
         # Solve the linear system.
-        # solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
-        # solver.compute(A.build())
-        # p = solver.solve(b)
-        solver = SparseCG(A.build(), b)
-        p, _ = solver.solve()
+        solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
+        solver.compute(A.build())
+        p = solver.solve(b)
+
+        # print("^" * 100)
+        # print()
+        # print(">>> A")
+        # print(K)
+        # print()
+        # print(">>> b")
+        # # print(b.to_numpy())
+        # for bbb in b.to_numpy():
+        #     print(bbb)
+        # print()
+        # print(">>> p")
+        # # print(p.to_numpy())
+        # for ppp in p.to_numpy():
+        #     print(ppp)
 
         # FIXME: remove this debugging statements or move to test file
-        # solver_succeeded, pressure = solver.info(), p.to_numpy()
-        # assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
-        # assert not np.any(np.isnan(pressure)), "NAN VALUE IN PRESSURE ARRAY!"
+        solver_succeeded, pressure = solver.info(), p.to_numpy()
+        assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
+        assert not np.any(np.isnan(pressure)), "NAN VALUE IN PRESSURE ARRAY!"
 
         # FIXME: Apply the pressure to the intermediate velocity field.
         self.fill_pressure_field(p)

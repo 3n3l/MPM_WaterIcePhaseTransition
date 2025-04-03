@@ -243,7 +243,7 @@ class MPM_Solver:
     def momentum_to_velocity(self):
         for i, j in self.face_mass_x:
             if self.face_mass_x[i, j] > 0:  # No need for epsilon here
-                self.face_velocity_x[i, j] *= 1 / self.face_mass_x[i, j]
+                self.face_velocity_x[i, j] *= 1. / self.face_mass_x[i, j]
                 # TODO: as the boundary is classified as colliding later on, this could done while applying pressure?
                 collision_left = i < self.boundary_width and self.face_velocity_x[i, j] < 0
                 collision_right = i > (self.n_grid - self.boundary_width) and self.face_velocity_x[i, j] > 0
@@ -251,7 +251,7 @@ class MPM_Solver:
                     self.face_velocity_x[i, j] = 0
         for i, j in self.face_mass_y:
             if self.face_mass_y[i, j] > 0:  # No need for epsilon here
-                self.face_velocity_y[i, j] *= 1 / self.face_mass_y[i, j]
+                self.face_velocity_y[i, j] *= 1. / self.face_mass_y[i, j]
                 self.face_velocity_y[i, j] += self.dt * GRAVITY
                 # TODO: as the boundary is classified as colliding later on, this could done while applying pressure?
                 collision_top = j > (self.n_grid - self.boundary_width) and self.face_velocity_y[i, j] > 0

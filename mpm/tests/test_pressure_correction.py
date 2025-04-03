@@ -75,7 +75,7 @@ def compute_divergence(solver: ti.template(), div: ti.types.ndarray()):  # pyrig
         if solver.cell_classification[i, j] == Classification.Interior:
             x_divergence = solver.face_velocity_x[i + 1, j] - solver.face_velocity_x[i, j]
             y_divergence = solver.face_velocity_y[i, j + 1] - solver.face_velocity_y[i, j]
-            div[i, j] = x_divergence + y_divergence
+            div[i, j] = (x_divergence + y_divergence) / solver.dx
         else:
             div[i, j] = 0
 
@@ -142,6 +142,7 @@ def main() -> None:
         load_configuration(solver, configuration)
         reset_solver(solver, configuration)
         for i in range(1, 301):
+            print(f"# Iteration: {i}")
             solver.current_frame[None] += 1
             for _ in range(int(2e-3 // solver.dt)):
                 solver.reset_grids()
