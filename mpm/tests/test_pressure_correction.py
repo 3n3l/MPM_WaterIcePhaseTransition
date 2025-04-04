@@ -1,9 +1,9 @@
 import utils  # import first to append parent directory to path
 
-from src.enums import Phase, Color, State, Classification
+from src.enums import Phase, Color, State, Classification, Capacity, Conductivity
+from src.mpm_solver import MPM_Solver, LATENT_HEAT
 from src.configurations import Configuration
 from src.geometries import Circle, Rectangle
-from src.mpm_solver import MPM_Solver
 
 import taichi as ti
 import numpy as np
@@ -43,28 +43,43 @@ def reset_solver(solver: ti.template(), configuration: ti.template()):  # pyrigh
     solver.current_frame[None] = 0
     for p in solver.particle_position:
         if p < configuration.n_particles:
-            solver.particle_color[p] = Color.Water if configuration.p_phase[p] == Phase.Water else Color.Ice
+            p_is_water = configuration.p_phase[p] == Phase.Water
+            solver.particle_capacity[p] = Capacity.Water if p_is_water else Capacity.Ice
+            solver.p_conductivity[p] = Conductivity.Water if p_is_water else Conductivity.Ice
+            solver.particle_color[p] = Color.Water if p_is_water else Color.Ice
+            solver.p_heat[p] = LATENT_HEAT if p_is_water else 0.0
+
             solver.p_activation_threshold[p] = configuration.p_activity_bound[p]
-            solver.particle_position[p] = configuration.p_position[p] + solver.boundary_offset
             solver.particle_velocity[p] = configuration.p_velocity[p]
+            solver.p_temperature[p] = configuration.p_temperature[p]
             solver.p_activation_state[p] = configuration.p_state[p]
-            solver.particle_phase[p] = configuration.p_phase[p]
+            solver.p_phase[p] = configuration.p_phase[p]
+
+            offset_position = configuration.p_position[p] + solver.boundary_offset
+            p_is_active = configuration.p_state[p] == State.Active
+            solver.p_active_position[p] = offset_position if p_is_active else [0, 0]
+            solver.particle_position[p] = offset_position
         else:
             # TODO: this might be completely irrelevant, as only the first n_particles are used anyway?
             #       So work can be saved by just ignoring all the other particles and iterating only
             #       over the configuration.n_particles?
             solver.particle_color[p] = Color.Background
+            solver.particle_capacity[p] = Capacity.Zero
+            solver.p_conductivity[p] = Conductivity.Zero
             solver.p_activation_threshold[p] = 0
+            solver.p_temperature[p] = 0
             solver.particle_position[p] = [0, 0]
             solver.particle_velocity[p] = [0, 0]
             solver.p_activation_state[p] = State.Inactive
-            solver.particle_phase[p] = Phase.Water
+            solver.p_phase[p] = Phase.Water
+            solver.p_heat[p] = 0
+            solver.p_heat[p] = 0
+            solver.p_active_position[p] = [0, 0]
 
-        solver.particle_mass[p] = solver.particle_vol * solver.rho_0
+        solver.p_mass[p] = solver.particle_vol * solver.rho_0
         solver.particle_inv_lambda[p] = 1 / solver.lambda_0[None]
         solver.particle_FE[p] = ti.Matrix([[1, 0], [0, 1]])
         solver.particle_C[p] = ti.Matrix.zero(float, 2, 2)
-        solver.p_active_position[p] = [0, 0]
         solver.particle_JE[p] = 1
         solver.particle_JP[p] = 1
 
