@@ -8,9 +8,9 @@ from src.enums import Phase
 
 import taichi as ti
 
+# TODO: use args for arch and debug values?
 ti.init(arch=ti.cpu, debug=True)
 # ti.init(arch=ti.cuda, debug=True)
-# ti.init(arch=ti.gpu)
 
 
 def main():
@@ -173,14 +173,6 @@ def main():
 
     simulation_name = "MPM - Water and Ice with Phase Transition"
     epilog = "Press R to reset, SPACE to pause/unpause the simulation!"
-
-    print("\n", "#" * 100, sep="")
-    print("###", simulation_name)
-    print("#" * 100)
-    print(">>> R        -> [R]eset the simulation.")
-    print(">>> P|SPACE  -> [P]ause/Un[P]ause the simulation.")
-    print()
-
     parser = ArgumentParser(prog="main.py", epilog=epilog, formatter_class=RawTextHelpFormatter)
     ggui_help = "Use GGUI (depends on Vulkan) or GUI system for the simulation."
     parser.add_argument(
@@ -223,6 +215,14 @@ def main():
     )
 
     args = parser.parse_args()
+
+    print("\n", "#" * 100, sep="")
+    print("###", simulation_name)
+    print("#" * 100)
+    print(">>> R        -> [R]eset the simulation.")
+    print(">>> P|SPACE  -> [P]ause/Un[P]ause the simulation.")
+    print()
+
     solver = MPM_Solver(
         quality=args.quality,
         max_particles=max([c.n_particles for c in configurations]),
