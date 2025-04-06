@@ -97,11 +97,14 @@ class MPM_Solver:
         self.pressure_solver = PressureSolver(self)
         self.heat_solver = HeatSolver(self)
 
-        # Additional offsets for the staggered grids and additional 0.5 to force flooring,
-        # used for the weight computations.
+        # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
         self.x_stagger = ti.Vector([(self.dx * 0.5) + 0.5, 0.5])
         self.y_stagger = ti.Vector([0.5, (self.dx * 0.5) + 0.5])
         self.c_stagger = ti.Vector([0.5, 0.5])
+
+        # Additional offsets for the grid, used for the distance (fx) computations.
+        self.x_offset = ti.Vector([(self.dx * 0.5), 0.0])
+        self.y_offset = ti.Vector([0.0, (self.dx * 0.5)])
 
     @ti.kernel
     def reset_grids(self):
@@ -194,8 +197,8 @@ class MPM_Solver:
             x_base = ti.floor((self.particle_position[p] * self.inv_dx - self.x_stagger), dtype=ti.i32)
             y_base = ti.floor((self.particle_position[p] * self.inv_dx - self.y_stagger), dtype=ti.i32)
             c_fx = self.particle_position[p] * self.inv_dx - ti.cast(c_base, ti.f32)
-            x_fx = self.particle_position[p] * self.inv_dx - ti.cast(x_base, ti.f32)
-            y_fx = self.particle_position[p] * self.inv_dx - ti.cast(y_base, ti.f32)
+            x_fx = self.particle_position[p] * self.inv_dx - ti.cast(x_base, ti.f32) - self.x_offset
+            y_fx = self.particle_position[p] * self.inv_dx - ti.cast(y_base, ti.f32) - self.y_offset
             # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1, fx-2)
             c_w = [0.5 * (1.5 - c_fx) ** 2, 0.75 - (c_fx - 1) ** 2, 0.5 * (c_fx - 0.5) ** 2]
             x_w = [0.5 * (1.5 - x_fx) ** 2, 0.75 - (x_fx - 1) ** 2, 0.5 * (x_fx - 0.5) ** 2]
@@ -348,13 +351,11 @@ class MPM_Solver:
     @ti.kernel
     def compute_volumes(self):
         for p in ti.ndrange(self.n_particles[None]):
-            # We use an additional offset of 0.5 for element-wise flooring.
-            position = self.particle_position[p]
-            c_base = ti.floor(position * self.inv_dx - self.c_stagger, ti.i32)
-            x_base = ti.floor(position * self.inv_dx - self.x_stagger, ti.i32)
-            y_base = ti.floor(position * self.inv_dx - self.y_stagger, ti.i32)
-            x_fx = position * self.inv_dx - ti.cast(x_base, ti.f32)
-            y_fx = position * self.inv_dx - ti.cast(y_base, ti.f32)
+            c_base = ti.floor(self.particle_position[p] * self.inv_dx - self.c_stagger, ti.i32)
+            x_base = ti.floor(self.particle_position[p] * self.inv_dx - self.x_stagger, ti.i32)
+            y_base = ti.floor(self.particle_position[p] * self.inv_dx - self.y_stagger, ti.i32)
+            x_fx = self.particle_position[p] * self.inv_dx - ti.cast(x_base, ti.f32) - self.x_offset
+            y_fx = self.particle_position[p] * self.inv_dx - ti.cast(y_base, ti.f32) - self.y_offset
             x_v = [0.167 * (1.5 - x_fx) ** 3, 0.25 - (x_fx - 1) ** 3, 0.167 * (x_fx - 0.5) ** 3]
             y_v = [0.167 * (1.5 - y_fx) ** 3, 0.25 - (y_fx - 1) ** 3, 0.167 * (y_fx - 0.5) ** 3]
 
@@ -377,8 +378,8 @@ class MPM_Solver:
             x_base = ti.floor((self.particle_position[p] * self.inv_dx - self.x_stagger), dtype=ti.i32)
             y_base = ti.floor((self.particle_position[p] * self.inv_dx - self.y_stagger), dtype=ti.i32)
             c_fx = self.particle_position[p] * self.inv_dx - ti.cast(c_base, ti.f32)
-            x_fx = self.particle_position[p] * self.inv_dx - ti.cast(x_base, ti.f32)
-            y_fx = self.particle_position[p] * self.inv_dx - ti.cast(y_base, ti.f32)
+            x_fx = self.particle_position[p] * self.inv_dx - ti.cast(x_base, ti.f32) - self.x_offset
+            y_fx = self.particle_position[p] * self.inv_dx - ti.cast(y_base, ti.f32) - self.y_offset
             # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1, fx-2)
             c_w = [0.5 * (1.5 - c_fx) ** 2, 0.75 - (c_fx - 1) ** 2, 0.5 * (c_fx - 0.5) ** 2]
             x_w = [0.5 * (1.5 - x_fx) ** 2, 0.75 - (x_fx - 1) ** 2, 0.5 * (x_fx - 0.5) ** 2]
