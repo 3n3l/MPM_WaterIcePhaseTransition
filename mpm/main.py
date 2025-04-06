@@ -42,7 +42,9 @@ def main():
         Configuration(
             name="Waterspout Hits Body of Water",
             geometries=[
-                Rectangle(Phase.Water, 0.96, 0.1, 5_000, (0, 0), (0, 0), 0, 20.0),
+                # TODO: width is set with boundary_offset in mind, change this to absolute values,
+                #       or even find a cleaner solution for this?
+                Rectangle(Phase.Water, 0.953, 0.08, 5_000, (0, 0), (0, 0), 0, 20.0),
                 *[Rectangle(Phase.Water, 0.1, 0.05, 10, (0, -1), (0.45, 0.45), i, 20.0) for i in range(10, 500)],
             ],
             E=1.4e5,  # Young's modulus (1.4e5)
