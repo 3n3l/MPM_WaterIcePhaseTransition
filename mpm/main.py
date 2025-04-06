@@ -211,13 +211,21 @@ def main():
         choices=["Direct", "Iterative"],
         help=solver_type_help,
     )
-    args = parser.parse_args()
 
-    quality = 1
-    max_particles = max([c.n_particles for c in configurations])
+    quality_help = "Choose a quality multiplicator for the simulation (higher is better)."
+    parser.add_argument(
+        "-q",
+        "--quality",
+        default=1,
+        nargs="?",
+        help=quality_help,
+        type=int,
+    )
+
+    args = parser.parse_args()
     solver = MPM_Solver(
-        quality=quality,
-        max_particles=max_particles,
+        quality=args.quality,
+        max_particles=max([c.n_particles for c in configurations]),
         should_use_direct_solver=(args.solverType.lower() == "direct"),
     )
 
