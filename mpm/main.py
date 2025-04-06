@@ -171,10 +171,17 @@ def main():
         ),
     ]
 
-    print("\n", "-" * 150)
-    epilog = "[Hint] Press R to reset, SPACE to pause/unpause the simulation!"
-    parser = ArgumentParser(prog="main.py", epilog=epilog, formatter_class=RawTextHelpFormatter)
+    simulation_name = "MPM - Water and Ice with Phase Transition"
+    epilog = "Press R to reset, SPACE to pause/unpause the simulation!"
 
+    print("\n", "#" * 100, sep="")
+    print("###", simulation_name)
+    print("#" * 100)
+    print(">>> R        -> [R]eset the simulation.")
+    print(">>> P|SPACE  -> [P]ause/Un[P]ause the simulation.")
+    print()
+
+    parser = ArgumentParser(prog="main.py", epilog=epilog, formatter_class=RawTextHelpFormatter)
     ggui_help = "Use GGUI (depends on Vulkan) or GUI system for the simulation."
     parser.add_argument(
         "-g",
