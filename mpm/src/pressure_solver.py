@@ -7,7 +7,7 @@ import numpy as np
 
 @ti.data_oriented
 class PressureSolver:
-    def __init__(self, mpm_solver) -> None:
+    def __init__(self, mpm_solver, should_use_direct_solver: bool = True) -> None:
         self.n_cells = mpm_solver.n_grid * mpm_solver.n_grid
         self.boundary_width = mpm_solver.boundary_width
         self.inv_dx = mpm_solver.inv_dx
@@ -30,6 +30,7 @@ class PressureSolver:
         self.x_mass = mpm_solver.face_mass_x
         self.y_mass = mpm_solver.face_mass_y
 
+        self.should_use_direct_solver = should_use_direct_solver
     @ti.kernel
     def fill_linear_system(self, A: ti.types.sparse_matrix_builder(), b: ti.types.ndarray()):  # pyright: ignore
         Gic = self.inv_dx * self.inv_dx
@@ -221,16 +222,20 @@ class PressureSolver:
         self.fill_linear_system(A, b)
 
         # Solve the linear system.
-        # solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
-        # solver.compute(A.build())
-        # p = solver.solve(b)
-        solver = SparseCG(A.build(), b)
-        p, _ = solver.solve()
+        # TODO: create boolean and cli argument to control this
 
-        # FIXME: remove this debugging statements or move to test file
-        # solver_succeeded, pressure = solver.info(), p.to_numpy()
-        # assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
-        # assert not np.any(np.isnan(pressure)), "NAN VALUE IN PRESSURE ARRAY!"
+        # Solve the linear system.
+        if self.should_use_direct_solver:
+            solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
+            solver.compute(A.build())
+            p = solver.solve(b)
+            # FIXME: remove this debugging statements or move to test file
+            solver_succeeded, pressure = solver.info(), p.to_numpy()
+            assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
+            assert not np.any(np.isnan(pressure)), "NAN VALUE IN PRESSURE ARRAY!"
+        else:
+            solver = SparseCG(A.build(), b)
+            p, _ = solver.solve()
 
         # FIXME: Apply the pressure to the intermediate velocity field.
         self.fill_pressure_field(p)

@@ -176,27 +176,55 @@ def main():
     parser = ArgumentParser(prog="main.py", epilog=epilog, formatter_class=RawTextHelpFormatter)
 
     ggui_help = "Use GGUI (depends on Vulkan) or GUI system for the simulation."
-    parser.add_argument("-g", "--gui", default="GGUI", nargs="?", choices=["GGUI", "GUI"], help=ggui_help)
+    parser.add_argument(
+        "-g",
+        "--gui",
+        default="GGUI",
+        nargs="?",
+        choices=["GGUI", "GUI"],
+        help=ggui_help,
+    )
 
     configuration_help = "\n".join([f"{i}: {c.name}" for i, c in enumerate(configurations)])
-    parser.add_argument("-c", "--configuration", default=0, nargs="?", help=configuration_help, type=int)
+    parser.add_argument(
+        "-c",
+        "--configuration",
+        default=0,
+        nargs="?",
+        help=configuration_help,
+        type=int,
+    )
+
+    solver_type_help = "Choose whether to use a direct or iterative solver for the pressure and heat systems."
+    parser.add_argument(
+        "-s",
+        "--solverType",
+        default="Direct",
+        nargs="?",
+        choices=["Direct", "Iterative"],
+        help=solver_type_help,
+    )
     args = parser.parse_args()
 
     quality = 1
     max_particles = max([c.n_particles for c in configurations])
-    solver = MPM_Solver(quality=quality, max_particles=max_particles)
+    solver = MPM_Solver(
+        quality=quality,
+        max_particles=max_particles,
+        should_use_direct_solver=(args.solverType.lower() == "direct"),
+    )
 
-    if args.gui == "GGUI":
+    if args.gui.lower() == "ggui":
         renderer = GGUI_Renderer(
-            name="MPM - Water and Ice with Phase Transition",
+            name=simulation_name,
             configurations=configurations,
             res=(720, 720),
             solver=solver,
         )
         renderer.run()
-    elif args.gui == "GUI":
+    elif args.gui.lower() == "gui":
         renderer = GUI_Renderer(
-            name="MPM - Water and Ice with Phase Transition",
+            name=simulation_name,
             configuration=configurations[args.configuration],
             solver=solver,
             res=720,

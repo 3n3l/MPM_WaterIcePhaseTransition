@@ -12,7 +12,7 @@ GRAVITY = -9.81
 
 @ti.data_oriented
 class MPM_Solver:
-    def __init__(self, quality: int, max_particles: int):
+    def __init__(self, quality: int, max_particles: int, should_use_direct_solver: bool = True):
         # MPM Parameters that are configuration independent
         self.n_particles = ti.field(dtype=ti.int32, shape=())
         self.current_frame = ti.field(dtype=ti.int32, shape=())
@@ -94,8 +94,8 @@ class MPM_Solver:
         self.E = ti.field(dtype=float, shape=())
 
         # The solver for the Poisson pressure equation.
-        self.pressure_solver = PressureSolver(self)
-        self.heat_solver = HeatSolver(self)
+        self.pressure_solver = PressureSolver(self, should_use_direct_solver)
+        self.heat_solver = HeatSolver(self, should_use_direct_solver)
 
         # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
         self.x_stagger = ti.Vector([(self.dx * 0.5) + 0.5, 0.5])

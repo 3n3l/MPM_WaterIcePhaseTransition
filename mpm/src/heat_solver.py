@@ -7,7 +7,7 @@ import numpy as np
 
 @ti.data_oriented
 class HeatSolver:
-    def __init__(self, mpm_solver) -> None:
+    def __init__(self, mpm_solver, should_use_direct_solver: bool = True) -> None:
         self.n_cells = mpm_solver.n_grid * mpm_solver.n_grid
         self.inv_dx = mpm_solver.inv_dx
         self.n_grid = mpm_solver.n_grid
@@ -23,6 +23,8 @@ class HeatSolver:
         self.y_classification = mpm_solver.face_classification_y
         self.x_conductivity = mpm_solver.face_conductivity_x
         self.y_conductivity = mpm_solver.face_conductivity_y
+
+        self.should_use_direct_solver = should_use_direct_solver
 
     @ti.kernel
     def fill_linear_system(self, A: ti.types.sparse_matrix_builder(), T: ti.types.ndarray()):  # pyright: ignore
@@ -142,16 +144,16 @@ class HeatSolver:
         self.fill_linear_system(A, b)
 
         # Solve the linear system.
-        # solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
-        # solver.compute(A.build())
-        # T = solver.solve(b)
-        solver = SparseCG(A.build(), b)
-        T, _ = solver.solve()
-
-        # FIXME: remove this debugging statements or move to test file
-        # solver_succeeded, _temperature, temperature = solver.info(), T.to_numpy(), b.to_numpy()
-        # assert solver_succeeded, f"{self.n_iterations} -> SOLVER DID NOT FIND A SOLUTION!"
-        # assert not np.any(np.isnan(_temperature)), f"{self.n_iterations} -> NAN VALUE IN NEW TEMPERATURE ARRAY!"
-        # assert not np.any(np.isnan(temperature)), f"{self.n_iterations} -> NAN VALUE IN OLD TEMPERATURE ARRAY!"
+        if self.should_use_direct_solver:
+            solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
+            solver.compute(A.build())
+            T = solver.solve(b)
+            # FIXME: remove this debugging statements or move to test file
+            solver_succeeded, temperature = solver.info(), T.to_numpy()
+            assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
+            assert not np.any(np.isnan(temperature)), "NAN VALUE IN NEW TEMPERATURE ARRAY!"
+        else:
+            solver = SparseCG(A.build(), b)
+            T, _ = solver.solve()
 
         self.fill_temperature_field(T)
