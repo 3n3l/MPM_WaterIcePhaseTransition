@@ -48,23 +48,23 @@ class HeatSolver:
 
                 # We enforce homogeneous Neumann boundary conditions at FACES adjacent to
                 # cells that can be considered empty or corresponding to insulated objects.
-                # NOTE: dx^d is cancelled out by self.inv_dx^2 because d == 2
-                if self.x_classification[i, j] != Classification.Empty:
+                # NOTE: dx^d is cancelled out by 1 / dx^2 because d == 2.
+                if i != 0 and self.c_classification[i - 1, j] != Classification.Empty:
                     A[idx, idx - self.n_grid] -= self.dt * inv_mass_capacity * self.x_conductivity[i, j]
                     A_l -= self.dt * inv_mass_capacity * self.x_conductivity[i, j]
                     A_c += self.dt * inv_mass_capacity * self.x_conductivity[i, j]
 
-                if self.n_grid - 1 and self.x_classification[i + 1, j] != Classification.Empty:
+                if i != self.n_grid - 1 and self.c_classification[i + 1, j] != Classification.Empty:
                     A[idx, idx + self.n_grid] -= self.dt * inv_mass_capacity * self.x_conductivity[i + 1, j]
                     A_r -= self.dt * inv_mass_capacity * self.x_conductivity[i + 1, j]
                     A_c += self.dt * inv_mass_capacity * self.x_conductivity[i + 1, j]
 
-                if self.y_classification[i, j] != Classification.Empty:
+                if j != 0 and self.c_classification[i, j - 1] != Classification.Empty:
                     A[idx, idx - 1] -= self.dt * inv_mass_capacity * self.y_conductivity[i, j]
                     A_b -= self.dt * inv_mass_capacity * self.y_conductivity[i, j]
                     A_c += self.dt * inv_mass_capacity * self.y_conductivity[i, j]
 
-                if self.y_classification[i, j + 1] != Classification.Empty:
+                if j != self.n_grid - 1 and self.c_classification[i, j + 1] != Classification.Empty:
                     A[idx, idx + 1] -= self.dt * inv_mass_capacity * self.y_conductivity[i, j + 1]
                     A_t -= self.dt * inv_mass_capacity * self.y_conductivity[i, j + 1]
                     A_c += self.dt * inv_mass_capacity * self.y_conductivity[i, j + 1]
