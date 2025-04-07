@@ -14,15 +14,15 @@ class HeatSolver:
         self.dx = mpm_solver.dx
         self.dt = mpm_solver.dt
 
-        self.c_classification = mpm_solver.cell_classification
-        self.c_temperature = mpm_solver.cell_temperature
-        self.cell_capacity = mpm_solver.cell_capacity
-        self.cell_mass = mpm_solver.cell_mass
+        self.c_classification = mpm_solver.classification_c
+        self.c_temperature = mpm_solver.temperature_c
+        self.cell_capacity = mpm_solver.capacity_c
+        self.cell_mass = mpm_solver.mass_c
 
-        self.x_classification = mpm_solver.face_classification_x
-        self.y_classification = mpm_solver.face_classification_y
-        self.x_conductivity = mpm_solver.face_conductivity_x
-        self.y_conductivity = mpm_solver.face_conductivity_y
+        self.x_classification = mpm_solver.classification_x
+        self.y_classification = mpm_solver.classification_y
+        self.x_conductivity = mpm_solver.conductivity_x
+        self.y_conductivity = mpm_solver.conductivity_y
 
         self.should_use_direct_solver = should_use_direct_solver
 

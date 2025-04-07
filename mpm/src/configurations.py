@@ -20,7 +20,7 @@ class Configuration:
         friction=1.0,  # Higher value means the border has more friction
         theta_c=2.5e-2,  # Critical compression (2.5e-2)
         theta_s=7.5e-3,  # Critical stretch (7.5e-3)
-        ambient_temperature=0.0, # temperature of empty (air) cells
+        ambient_temperature=0.0,  # temperature of empty (air) cells
     ):
         self.E = E
         self.nu = nu
@@ -38,18 +38,17 @@ class Configuration:
         self.n_particles = reduce(lambda sum, g: sum + g.n_particles, geometries, 0)
 
         # Declare fields.
-        self.p_position = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
-        self.p_velocity = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
-        self.p_temperature = ti.field(dtype=ti.f32, shape=self.n_particles)
-        # TODO: rename p_activity_bound to something more meaningful
-        self.p_activity_bound = ti.field(dtype=int, shape=self.n_particles)
-        self.p_phase = ti.field(dtype=ti.f32, shape=self.n_particles)
-        self.p_state = ti.field(dtype=int, shape=self.n_particles)
+        self.position_p = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
+        self.velocity_p = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
+        self.temperature_p = ti.field(dtype=ti.f32, shape=self.n_particles)
+        self.activity_threshold_p = ti.field(dtype=int, shape=self.n_particles)
+        self.phase_p = ti.field(dtype=ti.f32, shape=self.n_particles)
+        self.state_p = ti.field(dtype=int, shape=self.n_particles)
 
         # Initialize fields.
-        self.p_temperature.from_numpy(np.concatenate([g.temperature for g in geometries], dtype=np.float32).flatten())
-        self.p_position.from_numpy(np.concatenate([g.position for g in geometries], dtype=np.float32))
-        self.p_velocity.from_numpy(np.concatenate([g.velocity for g in geometries], dtype=np.float32))
-        self.p_activity_bound.from_numpy(np.concatenate([g.frame_threshold for g in geometries], dtype=int))
-        self.p_phase.from_numpy(np.concatenate([g.phase for g in geometries], dtype=np.float32).flatten())
-        self.p_state.from_numpy(np.concatenate([g.state for g in geometries], dtype=int))
+        self.temperature_p.from_numpy(np.concatenate([g.temperature for g in geometries], dtype=np.float32).flatten())
+        self.position_p.from_numpy(np.concatenate([g.position for g in geometries], dtype=np.float32))
+        self.velocity_p.from_numpy(np.concatenate([g.velocity for g in geometries], dtype=np.float32))
+        self.activity_threshold_p.from_numpy(np.concatenate([g.frame_threshold for g in geometries], dtype=int))
+        self.phase_p.from_numpy(np.concatenate([g.phase for g in geometries], dtype=np.float32).flatten())
+        self.state_p.from_numpy(np.concatenate([g.state for g in geometries], dtype=int))

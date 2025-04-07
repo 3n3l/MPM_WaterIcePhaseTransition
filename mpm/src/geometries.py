@@ -7,13 +7,13 @@ from abc import ABC
 
 class Geometry(ABC):
     def __init__(self, n_particles, phase, temperature) -> None:
-        self.n_particles = n_particles
+        self.temperature = np.full(shape=n_particles, fill_value=temperature, dtype=np.float32)
+        self.phase = np.full(shape=n_particles, fill_value=phase, dtype=int)
         self.position = np.zeros(shape=(n_particles, 2), dtype=np.float32)
         self.velocity = np.zeros(shape=(n_particles, 2), dtype=np.float32)
-        self.phase = np.full(shape=n_particles, fill_value=phase, dtype=int)
-        self.temperature = np.full(shape=n_particles, fill_value=temperature, dtype=np.float32)
         self.frame_threshold = np.zeros(shape=n_particles, dtype=int)
         self.state = np.zeros(shape=n_particles, dtype=int)
+        self.n_particles = n_particles
 
 
 class Circle(Geometry):

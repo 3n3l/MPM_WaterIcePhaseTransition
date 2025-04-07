@@ -33,8 +33,8 @@ class GUI_Renderer(Renderer):
         """Renders the simulation with the data from the MLS-MPM solver."""
         # TODO: write frames to disk?
         # TODO: colors?
-        indices = [0 if p == Phase.Ice else 1 for p in self.solver.p_phase.to_numpy()]
-        position = self.solver.p_active_position.to_numpy()
+        indices = [0 if p == Phase.Ice else 1 for p in self.solver.phase_p.to_numpy()]
+        position = self.solver.active_position_p.to_numpy()
         palette = [Color._Ice, Color._Water]
         radius = 1.5
         self.gui.circles(position, radius, palette=palette, palette_indices=indices)  # pyright: ignore

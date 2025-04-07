@@ -41,58 +41,56 @@ def reset_solver(solver: ti.template(), configuration: ti.template()):  # pyrigh
         configuration: Configuration
     """
     solver.current_frame[None] = 0
-    for p in solver.particle_position:
+    for p in solver.position_p:
         if p < configuration.n_particles:
-            p_is_water = configuration.p_phase[p] == Phase.Water
-            solver.particle_capacity[p] = Capacity.Water if p_is_water else Capacity.Ice
-            solver.p_conductivity[p] = Conductivity.Water if p_is_water else Conductivity.Ice
-            solver.particle_color[p] = Color.Water if p_is_water else Color.Ice
-            solver.p_heat[p] = LATENT_HEAT if p_is_water else 0.0
+            p_is_water = configuration.phase_p[p] == Phase.Water
+            solver.capacity_p[p] = Capacity.Water if p_is_water else Capacity.Ice
+            solver.conductivity_p[p] = Conductivity.Water if p_is_water else Conductivity.Ice
+            solver.color_p[p] = Color.Water if p_is_water else Color.Ice
+            solver.heat_p[p] = LATENT_HEAT if p_is_water else 0.0
 
-            solver.p_activation_threshold[p] = configuration.p_activity_bound[p]
-            solver.particle_velocity[p] = configuration.p_velocity[p]
-            solver.p_temperature[p] = configuration.p_temperature[p]
-            solver.p_activation_state[p] = configuration.p_state[p]
-            solver.p_phase[p] = configuration.p_phase[p]
+            solver.activation_threshold_p[p] = configuration.activity_threshold_p[p]
+            solver.velocity_p[p] = configuration.velocity_p[p]
+            solver.temperature_p[p] = configuration.temperature_p[p]
+            solver.activation_state_p[p] = configuration.state_p[p]
+            solver.phase_p[p] = configuration.phase_p[p]
 
-            offset_position = configuration.p_position[p] + solver.boundary_offset
-            p_is_active = configuration.p_state[p] == State.Active
-            solver.p_active_position[p] = offset_position if p_is_active else [0, 0]
-            solver.particle_position[p] = offset_position
+            offset_position = configuration.position_p[p] + solver.boundary_offset
+            p_is_active = configuration.state_p[p] == State.Active
+            solver.active_position_p[p] = offset_position if p_is_active else [0, 0]
+            solver.position_p[p] = offset_position
         else:
             # TODO: this might be completely irrelevant, as only the first n_particles are used anyway?
             #       So work can be saved by just ignoring all the other particles and iterating only
             #       over the configuration.n_particles?
-            solver.particle_color[p] = Color.Background
-            solver.particle_capacity[p] = Capacity.Zero
-            solver.p_conductivity[p] = Conductivity.Zero
-            solver.p_activation_threshold[p] = 0
-            solver.p_temperature[p] = 0
-            solver.particle_position[p] = [0, 0]
-            solver.particle_velocity[p] = [0, 0]
-            solver.p_activation_state[p] = State.Inactive
-            solver.p_phase[p] = Phase.Water
-            solver.p_heat[p] = 0
-            solver.p_heat[p] = 0
-            solver.p_active_position[p] = [0, 0]
+            solver.color_p[p] = Color.Background
+            solver.capacity_p[p] = Capacity.Zero
+            solver.conductivity_p[p] = Conductivity.Zero
+            solver.activation_threshold_p[p] = 0
+            solver.temperature_p[p] = 0
+            solver.position_p[p] = [0, 0]
+            solver.velocity_p[p] = [0, 0]
+            solver.activation_state_p[p] = State.Inactive
+            solver.phase_p[p] = Phase.Water
+            solver.heat_p[p] = 0
+            solver.heat_p[p] = 0
+            solver.active_position_p[p] = [0, 0]
 
-        solver.p_mass[p] = solver.particle_vol * solver.rho_0
-        solver.particle_inv_lambda[p] = 1 / solver.lambda_0[None]
-        solver.particle_FE[p] = ti.Matrix([[1, 0], [0, 1]])
-        solver.particle_C[p] = ti.Matrix.zero(float, 2, 2)
-        solver.particle_JE[p] = 1
-        solver.particle_JP[p] = 1
+        solver.mass_p[p] = solver.particle_vol * solver.rho_0
+        solver.inv_lambda_p[p] = 1 / solver.lambda_0[None]
+        solver.FE_p[p] = ti.Matrix([[1, 0], [0, 1]])
+        solver.C_p[p] = ti.Matrix.zero(float, 2, 2)
+        solver.JE_p[p] = 1
+        solver.JP_p[p] = 1
 
 
 @ti.kernel
 def compute_divergence(solver: ti.template(), div: ti.types.ndarray()):  # pyright: ignore
-    for i, j in solver.cell_pressure:
-        if solver.cell_classification[i, j] == Classification.Interior:
-            x_divergence = solver.face_velocity_x[i + 1, j] - solver.face_velocity_x[i, j]
-            y_divergence = solver.face_velocity_y[i, j + 1] - solver.face_velocity_y[i, j]
-            div[i, j] = x_divergence + y_divergence
-        else:
-            div[i, j] = 0
+    for i, j in solver.pressure_c:
+        div[i, j] = 0
+        if solver.classification_c[i, j] == Classification.Interior:
+            div[i, j] += solver.velocity_x[i + 1, j] - solver.velocity_x[i, j]
+            div[i, j] += solver.velocity_y[i, j + 1] - solver.velocity_y[i, j]
 
 
 def main() -> None:

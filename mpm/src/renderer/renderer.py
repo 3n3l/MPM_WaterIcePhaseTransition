@@ -1,6 +1,8 @@
 from src.enums import Conductivity, Phase, Color, State, Capacity
 from src.mpm_solver import MPM_Solver, LATENT_HEAT
 from src.configurations import Configuration
+
+from abc import ABC, abstractmethod
 from datetime import datetime
 
 import taichi as ti
@@ -8,7 +10,7 @@ import os
 
 
 @ti.data_oriented
-class Renderer:
+class Renderer(ABC):
     def __init__(
         self,
         name: str,
@@ -45,11 +47,13 @@ class Renderer:
         self.load_configuration(self.configuration)
         self.reset_solver(self.configuration)
 
+    @abstractmethod
     def render(self) -> None:
-        print("Implement me :(")
+        pass
 
+    @abstractmethod
     def run(self) -> None:
-        print("Implement me :(")
+        pass
 
     @ti.kernel
     def load_configuration(self, configuration: ti.template()):  # pyright: ignore
@@ -80,47 +84,47 @@ class Renderer:
             configuration: Configuration
         """
         self.solver.current_frame[None] = 0
-        for p in self.solver.particle_position:
+        for p in self.solver.position_p:
             if p < configuration.n_particles:
-                p_is_water = configuration.p_phase[p] == Phase.Water
-                self.solver.particle_capacity[p] = Capacity.Water if p_is_water else Capacity.Ice
-                self.solver.p_conductivity[p] = Conductivity.Water if p_is_water else Conductivity.Ice
-                self.solver.particle_color[p] = Color.Water if p_is_water else Color.Ice
-                self.solver.p_heat[p] = LATENT_HEAT if p_is_water else 0.0
+                particle_is_water = configuration.phase_p[p] == Phase.Water
+                self.solver.conductivity_p[p] = Conductivity.Water if particle_is_water else Conductivity.Ice
+                self.solver.capacity_p[p] = Capacity.Water if particle_is_water else Capacity.Ice
+                self.solver.color_p[p] = Color.Water if particle_is_water else Color.Ice
+                self.solver.heat_p[p] = LATENT_HEAT if particle_is_water else 0.0
 
-                self.solver.p_activation_threshold[p] = configuration.p_activity_bound[p]
-                self.solver.particle_velocity[p] = configuration.p_velocity[p]
-                self.solver.p_temperature[p] = configuration.p_temperature[p]
-                self.solver.p_activation_state[p] = configuration.p_state[p]
-                self.solver.p_phase[p] = configuration.p_phase[p]
+                self.solver.activation_threshold_p[p] = configuration.activity_threshold_p[p]
+                self.solver.temperature_p[p] = configuration.temperature_p[p]
+                self.solver.activation_state_p[p] = configuration.state_p[p]
+                self.solver.velocity_p[p] = configuration.velocity_p[p]
+                self.solver.phase_p[p] = configuration.phase_p[p]
 
-                offset_position = configuration.p_position[p] + self.solver.boundary_offset
-                p_is_active = configuration.p_state[p] == State.Active
-                self.solver.p_active_position[p] = offset_position if p_is_active else [0, 0]
-                self.solver.particle_position[p] = offset_position
+                offset_position = configuration.position_p[p] + self.solver.boundary_offset
+                p_is_active = configuration.state_p[p] == State.Active
+                self.solver.active_position_p[p] = offset_position if p_is_active else [0, 0]
+                self.solver.position_p[p] = offset_position
             else:
                 # TODO: this might be completely irrelevant, as only the first n_particles are used anyway?
                 #       So work can be saved by just ignoring all the other particles and iterating only
                 #       over the configuration.n_particles?
-                self.solver.particle_color[p] = Color.Background
-                self.solver.particle_capacity[p] = Capacity.Zero
-                self.solver.p_conductivity[p] = Conductivity.Zero
-                self.solver.p_activation_threshold[p] = 0
-                self.solver.p_temperature[p] = 0
-                self.solver.particle_position[p] = [0, 0]
-                self.solver.particle_velocity[p] = [0, 0]
-                self.solver.p_activation_state[p] = State.Inactive
-                self.solver.p_phase[p] = Phase.Water
-                self.solver.p_heat[p] = 0
-                self.solver.p_heat[p] = 0
-                self.solver.p_active_position[p] = [0, 0]
+                self.solver.activation_state_p[p] = State.Inactive
+                self.solver.conductivity_p[p] = Conductivity.Zero
+                self.solver.active_position_p[p] = [0, 0]
+                self.solver.color_p[p] = Color.Background
+                self.solver.capacity_p[p] = Capacity.Zero
+                self.solver.activation_threshold_p[p] = 0
+                self.solver.phase_p[p] = Phase.Water
+                self.solver.position_p[p] = [0, 0]
+                self.solver.velocity_p[p] = [0, 0]
+                self.solver.temperature_p[p] = 0
+                self.solver.heat_p[p] = 0
+                self.solver.heat_p[p] = 0
 
-            self.solver.p_mass[p] = self.solver.particle_vol * self.solver.rho_0
-            self.solver.particle_inv_lambda[p] = 1 / self.solver.lambda_0[None]
-            self.solver.particle_FE[p] = ti.Matrix([[1, 0], [0, 1]])
-            self.solver.particle_C[p] = ti.Matrix.zero(float, 2, 2)
-            self.solver.particle_JE[p] = 1
-            self.solver.particle_JP[p] = 1
+            self.solver.mass_p[p] = self.solver.particle_vol * self.solver.rho_0
+            self.solver.inv_lambda_p[p] = 1 / self.solver.lambda_0[None]
+            self.solver.FE_p[p] = ti.Matrix([[1, 0], [0, 1]])
+            self.solver.C_p[p] = ti.Matrix.zero(float, 2, 2)
+            self.solver.JE_p[p] = 1
+            self.solver.JP_p[p] = 1
 
     def dump_frames(self) -> None:
         """Creates an output directory, a VideoManager in this directory and then dumps frames to this directory."""
