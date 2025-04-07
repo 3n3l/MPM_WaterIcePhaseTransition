@@ -243,7 +243,7 @@ class MPM_Solver:
     def momentum_to_velocity(self):
         for i, j in self.face_mass_x:
             if self.face_mass_x[i, j] > 0:  # No need for epsilon here
-                self.face_velocity_x[i, j] *= 1. / self.face_mass_x[i, j]
+                self.face_velocity_x[i, j] *= 1.0 / self.face_mass_x[i, j]
                 # TODO: as the boundary is classified as colliding later on, this could done while applying pressure?
                 collision_left = i < self.boundary_width and self.face_velocity_x[i, j] < 0
                 collision_right = i > (self.n_grid - self.boundary_width) and self.face_velocity_x[i, j] > 0
@@ -251,7 +251,7 @@ class MPM_Solver:
                     self.face_velocity_x[i, j] = 0
         for i, j in self.face_mass_y:
             if self.face_mass_y[i, j] > 0:  # No need for epsilon here
-                self.face_velocity_y[i, j] *= 1. / self.face_mass_y[i, j]
+                self.face_velocity_y[i, j] *= 1.0 / self.face_mass_y[i, j]
                 self.face_velocity_y[i, j] += self.dt * GRAVITY
                 # TODO: as the boundary is classified as colliding later on, this could done while applying pressure?
                 collision_top = j > (self.n_grid - self.boundary_width) and self.face_velocity_y[i, j] > 0
@@ -332,24 +332,13 @@ class MPM_Solver:
 
     @ti.kernel
     def compute_volumes(self):
-        for p in ti.ndrange(self.n_particles[None]):
-            # We use an additional offset of 0.5 for element-wise flooring.
-            position = self.particle_position[p]
-            c_base = (position * self.inv_dx - 0.5).cast(int)  # pyright: ignore
-            x_base = (position * self.inv_dx - (ti.Vector([self.dx / 2, 0]) + 0.5)).cast(int)  # pyright: ignore
-            y_base = (position * self.inv_dx - (ti.Vector([0, self.dx / 2]) + 0.5)).cast(int)  # pyright: ignore
-            x_fx = position * self.inv_dx - x_base.cast(float)
-            y_fx = position * self.inv_dx - y_base.cast(float)
-            x_v = [0.167 * (1.5 - x_fx) ** 3, 0.25 - (x_fx - 1) ** 3, 0.167 * (x_fx - 0.5) ** 3]
-            y_v = [0.167 * (1.5 - y_fx) ** 3, 0.25 - (y_fx - 1) ** 3, 0.167 * (y_fx - 0.5) ** 3]
-
-            for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
-                offset = ti.Vector([i, j])
-                x_volume = x_v[i][0] * x_v[j][1]
-                y_volume = y_v[i][0] * y_v[j][1]
-                if self.cell_classification[c_base + offset] == Classification.Interior:
-                    self.face_volume_x[x_base + offset] += x_volume
-                    self.face_volume_y[y_base + offset] += y_volume
+        for i, j in self.cell_classification:
+            if self.cell_classification[i, j] == Classification.Interior:
+                control_volume = 0.5 * self.dx * self.dx
+                self.face_volume_x[i + 1, j] += control_volume
+                self.face_volume_y[i, j + 1] += control_volume
+                self.face_volume_x[i, j] += control_volume
+                self.face_volume_y[i, j] += control_volume
 
     @ti.kernel
     def grid_to_particle(self):
