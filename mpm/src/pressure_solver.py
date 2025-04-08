@@ -37,18 +37,13 @@ class PressureSolver:
         inv_dx_squared = self.inv_dx * self.inv_dx
 
         for i, j in ti.ndrange(self.n_grid, self.n_grid):
-            # Unraveled index.
+            # Raveled index.
             idx = (i * self.n_grid) + j
 
-            # b[idx] = (1 - self.cell_JE[i, j]) / (self.dt * self.cell_JE[i, j])
-            b[idx] = -((self.JE_c[i, j] - 1) / (self.dt * self.JE_c[i, j]))
-
-            if i != self.n_grid - 1:
-                # b[idx] -= 2 * self.inv_dx * (self.x_velocity[i + 1, j] - self.x_velocity[i, j])
-                b[idx] -= self.inv_dx * (self.velocity_x[i + 1, j] - self.velocity_x[i, j])
-            if j != self.n_grid - 1:
-                # b[idx] -= 2 * self.inv_dx * (self.y_velocity[i, j + 1] - self.y_velocity[i, j])
-                b[idx] -= self.inv_dx * (self.velocity_y[i, j + 1] - self.velocity_y[i, j])
+            # Build the right-hand side of the linear system.
+            b[idx] = (1 - self.JE_c[i, j]) / (self.dt * self.JE_c[i, j])
+            b[idx] -= self.inv_dx * (self.velocity_x[i + 1, j] - self.velocity_x[i, j])
+            b[idx] -= self.inv_dx * (self.velocity_y[i, j + 1] - self.velocity_y[i, j])
 
             # FIXME: these variables are just used to print everything and can be removed after debugging
             A_t = 0.0
