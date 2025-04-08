@@ -349,24 +349,13 @@ class MPM_Solver:
 
     @ti.kernel
     def compute_volumes(self):
-        for p in ti.ndrange(self.n_particles[None]):
-            # We use an additional offset of 0.5 for element-wise flooring.
-            position = self.particle_position[p]
-            c_base = ti.floor(position * self.inv_dx - self.c_stagger, ti.i32)
-            x_base = ti.floor(position * self.inv_dx - self.x_stagger, ti.i32)
-            y_base = ti.floor(position * self.inv_dx - self.y_stagger, ti.i32)
-            x_fx = position * self.inv_dx - ti.cast(x_base, ti.f32)
-            y_fx = position * self.inv_dx - ti.cast(y_base, ti.f32)
-            x_v = [0.167 * (1.5 - x_fx) ** 3, 0.25 - (x_fx - 1) ** 3, 0.167 * (x_fx - 0.5) ** 3]
-            y_v = [0.167 * (1.5 - y_fx) ** 3, 0.25 - (y_fx - 1) ** 3, 0.167 * (y_fx - 0.5) ** 3]
-
-            for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
-                offset = ti.Vector([i, j])
-                x_volume = x_v[i][0] * x_v[j][1]
-                y_volume = y_v[i][0] * y_v[j][1]
-                if self.cell_classification[c_base + offset] == Classification.Interior:
-                    self.face_volume_x[x_base + offset] += x_volume
-                    self.face_volume_y[y_base + offset] += y_volume
+        for i, j in self.cell_classification:
+            if self.cell_classification[i, j] == Classification.Interior:
+                control_volume = 0.5 * self.dx * self.dx
+                self.face_volume_x[i + 1, j] += control_volume
+                self.face_volume_y[i, j + 1] += control_volume
+                self.face_volume_x[i, j] += control_volume
+                self.face_volume_y[i, j] += control_volume
 
     @ti.kernel
     def grid_to_particle(self):
