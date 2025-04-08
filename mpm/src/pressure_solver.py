@@ -34,7 +34,7 @@ class PressureSolver:
 
     @ti.kernel
     def fill_linear_system(self, A: ti.types.sparse_matrix_builder(), b: ti.types.ndarray()):  # pyright: ignore
-        Gic = self.inv_dx * self.inv_dx
+        inv_dx_squared = self.inv_dx * self.inv_dx
 
         for i, j in ti.ndrange(self.n_grid, self.n_grid):
             # Unraveled index.
@@ -78,10 +78,10 @@ class PressureSolver:
                 ):
                     # inv_rho = self.x_volume[i - 1, j] / self.x_mass[i - 1, j]
                     inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
-                    A[idx, idx - self.n_grid] -= self.dt * Gic * inv_rho
-                    A_l -= self.dt * Gic * inv_rho
+                    A[idx, idx - self.n_grid] -= self.dt * inv_dx_squared * inv_rho
+                    A_l -= self.dt * inv_dx_squared * inv_rho
                     # A[idx, idx] += self.dt * Gic * inv_rho
-                    A_c += self.dt * Gic * inv_rho
+                    A_c += self.dt * inv_dx_squared * inv_rho
 
                 if (
                     i != self.n_grid - 1
@@ -91,10 +91,10 @@ class PressureSolver:
                     and self.classification_c[i + 1, j] != Classification.Empty
                 ):
                     inv_rho = self.volume_x[i + 1, j] / self.mass_x[i + 1, j]
-                    A[idx, idx + self.n_grid] -= self.dt * Gic * inv_rho
-                    A_r -= self.dt * Gic * inv_rho
+                    A[idx, idx + self.n_grid] -= self.dt * inv_dx_squared * inv_rho
+                    A_r -= self.dt * inv_dx_squared * inv_rho
                     # A[idx, idx] += self.dt * Gic * inv_rho
-                    A_c += self.dt * Gic * inv_rho
+                    A_c += self.dt * inv_dx_squared * inv_rho
 
                 if (
                     j != 0
@@ -105,10 +105,10 @@ class PressureSolver:
                 ):
                     # inv_rho = self.y_volume[i, j - 1] / self.y_mass[i, j - 1]
                     inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
-                    A[idx, idx - 1] -= self.dt * Gic * inv_rho
-                    A_b -= self.dt * Gic * inv_rho
+                    A[idx, idx - 1] -= self.dt * inv_dx_squared * inv_rho
+                    A_b -= self.dt * inv_dx_squared * inv_rho
                     # A[idx, idx] += self.dt * Gic * inv_rho
-                    A_c += self.dt * Gic * inv_rho
+                    A_c += self.dt * inv_dx_squared * inv_rho
 
                 if (
                     j != self.n_grid - 1
@@ -118,10 +118,10 @@ class PressureSolver:
                     and self.classification_c[i, j + 1] != Classification.Empty
                 ):
                     inv_rho = self.volume_y[i, j + 1] / self.mass_y[i, j + 1]
-                    A[idx, idx + 1] -= self.dt * Gic * inv_rho
-                    A_t -= self.dt * Gic * inv_rho
+                    A[idx, idx + 1] -= self.dt * inv_dx_squared * inv_rho
+                    A_t -= self.dt * inv_dx_squared * inv_rho
                     # A[idx, idx] += self.dt * Gic * inv_rho
-                    A_c += self.dt * Gic * inv_rho
+                    A_c += self.dt * inv_dx_squared * inv_rho
 
                 A[idx, idx] += A_c
 
