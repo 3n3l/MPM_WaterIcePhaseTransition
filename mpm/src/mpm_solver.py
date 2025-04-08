@@ -240,14 +240,15 @@ class MPM_Solver:
 
                 # Rasterize lambda (inverse) to cell centers.
                 # TODO: use particle_inv_lambda, set different lambda for each phase?
-                self.inv_lambda_c[base_c + offset] += weight_c * self.inv_lambda_p[p]
+                # self.inv_lambda_c[base_c + offset] += weight_c * self.inv_lambda_p[p]
+                self.inv_lambda_c[base_c + offset] += weight_c * self.lambda_0[None]
 
-                # NOTE: the old JE, JP values are used here to compute the cell values.
+                # We use JE^n, JP^n from the last timestep for the transfers, the updated
+                # values will be assigned to the corresponding field at the end of P2G.
                 self.JE_c[base_c + offset] += weight_c * self.mass_p[p] * self.JE_p[p]
                 self.JP_c[base_c + offset] += weight_c * self.mass_p[p] * self.JP_p[p]
-                # FIXME: or do we need to use the new ones?
-                # self.cell_JE[c_base + offset] += c_weight * JE
-                # self.cell_JP[c_base + offset] += c_weight * JP
+
+            # Update field values with JE^(n+1), JP^(n+1).
             self.JE_p[p] = JE_p
             self.JP_p[p] = JP_p
 
