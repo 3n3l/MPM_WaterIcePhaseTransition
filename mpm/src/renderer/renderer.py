@@ -117,10 +117,14 @@ class Renderer(ABC):
                 self.solver.velocity_p[p] = [0, 0]
                 self.solver.temperature_p[p] = 0
                 self.solver.heat_p[p] = 0
-                self.solver.heat_p[p] = 0
 
             self.solver.mass_p[p] = self.solver.particle_vol * self.solver.rho_0
-            self.solver.inv_lambda_p[p] = 1 / self.solver.lambda_0[None]
+
+            # FIXME: this is just for testing
+            # TODO: set lambda depending on phase
+            # self.solver.inv_lambda_p[p] = 1 / self.solver.lambda_0[None]
+            self.solver.inv_lambda_p[p] = 1 / 9999999999.0
+
             self.solver.FE_p[p] = ti.Matrix([[1, 0], [0, 1]])
             self.solver.C_p[p] = ti.Matrix.zero(float, 2, 2)
             self.solver.JE_p[p] = 1

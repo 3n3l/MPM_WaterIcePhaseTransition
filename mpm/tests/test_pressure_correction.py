@@ -78,6 +78,7 @@ def reset_solver(solver: ti.template(), configuration: ti.template()):  # pyrigh
 
         solver.mass_p[p] = solver.particle_vol * solver.rho_0
         solver.inv_lambda_p[p] = 1 / solver.lambda_0[None]
+        # solver.inv_lambda_p[p] = 1 / 9999999999.0
         solver.FE_p[p] = ti.Matrix([[1, 0], [0, 1]])
         solver.C_p[p] = ti.Matrix.zero(float, 2, 2)
         solver.JE_p[p] = 1

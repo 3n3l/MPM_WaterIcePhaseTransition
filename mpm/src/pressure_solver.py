@@ -34,7 +34,7 @@ class PressureSolver:
 
     @ti.kernel
     def fill_linear_system(self, A: ti.types.sparse_matrix_builder(), b: ti.types.ndarray()):  # pyright: ignore
-        Gic = self.inv_dx * self.inv_dx
+        inv_dx_squared = self.inv_dx * self.inv_dx
 
         for i, j in ti.ndrange(self.n_grid, self.n_grid):
             # Unraveled index.
@@ -57,71 +57,56 @@ class PressureSolver:
             A_r = 0.0
             A_b = 0.0
 
+            # TODO: save lambda in field instead of inverse (but compute inverse for stability)
+            lambda_c = 1 / self.inv_lambda_c[i, j]
+            # A[idx, idx] += delta * self.cell_JP[i, j] / (self.cell_JE[i, j] * cell_lambda * self.dt)
+            A_c += self.JP_c[i, j] / (self.JE_c[i, j] * lambda_c * self.dt)
+
             # FIXME: this should be on non empty cells, but then the colliding
             #        simulation boundary results in underdetermined linear system
             # if self.c_classification[i, j] != Classification.Empty:
             if self.classification_c[i, j] == Classification.Interior:
-                # TODO: save lambda in field instead of inverse (but compute inverse for stability)
-                lambda_c = 1 / self.inv_lambda_c[i, j]
-                # A[idx, idx] += delta * self.cell_JP[i, j] / (self.cell_JE[i, j] * cell_lambda * self.dt)
-                A_c += self.JP_c[i, j] / (self.JE_c[i, j] * lambda_c * self.dt)
 
                 # We will apply a Neumann boundary condition on the colliding faces,
                 # to guarantee zero flux into colliding cells, by just not adding these
                 # face values in the Laplacian for the off-diagonal values.
-                if (
-                    i != 0
-                    and self.classification_x[i - 1, j] != Classification.Colliding
-                    # FIXME: that the adjacent cell is empty shouldn't matter,
-                    #        but without this the solver won't converge
-                    and self.classification_c[i - 1, j] != Classification.Empty
-                ):
+                if i != 0 and self.classification_c[i - 1, j] != Classification.Colliding:
+                    inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
+                    A_c -= self.dt * inv_dx_squared * inv_rho
+                if i != 0 and self.classification_c[i - 1, j] == Classification.Interior:
                     # inv_rho = self.x_volume[i - 1, j] / self.x_mass[i - 1, j]
                     inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
-                    A[idx, idx - self.n_grid] -= self.dt * Gic * inv_rho
-                    A_l -= self.dt * Gic * inv_rho
+                    A[idx, idx - self.n_grid] += self.dt * inv_dx_squared * inv_rho
+                    # A_l -= self.dt * Gic * inv_rho
                     # A[idx, idx] += self.dt * Gic * inv_rho
-                    A_c += self.dt * Gic * inv_rho
 
-                if (
-                    i != self.n_grid - 1
-                    and self.classification_x[i + 1, j] != Classification.Colliding
-                    # FIXME: that the adjacent cell is empty shouldn't matter,
-                    #        but without this the solver won't converge
-                    and self.classification_c[i + 1, j] != Classification.Empty
-                ):
+                if i != self.n_grid - 1 and self.classification_c[i + 1, j] != Classification.Colliding:
                     inv_rho = self.volume_x[i + 1, j] / self.mass_x[i + 1, j]
-                    A[idx, idx + self.n_grid] -= self.dt * Gic * inv_rho
-                    A_r -= self.dt * Gic * inv_rho
+                    A_c -= self.dt * inv_dx_squared * inv_rho
+                if i != self.n_grid - 1 and self.classification_c[i + 1, j] == Classification.Interior:
+                    inv_rho = self.volume_x[i + 1, j] / self.mass_x[i + 1, j]
+                    A[idx, idx + self.n_grid] += self.dt * inv_dx_squared * inv_rho
+                    # A_r -= self.dt * Gic * inv_rho
                     # A[idx, idx] += self.dt * Gic * inv_rho
-                    A_c += self.dt * Gic * inv_rho
 
-                if (
-                    j != 0
-                    and self.classification_y[i, j - 1] != Classification.Colliding
-                    # FIXME: that the adjacent cell is empty shouldn't matter,
-                    #        but without this the solver won't converge
-                    and self.classification_c[i, j - 1] != Classification.Empty
-                ):
+                if j != 0 and self.classification_c[i, j - 1] != Classification.Colliding:
+                    inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
+                    A_c -= self.dt * inv_dx_squared * inv_rho
+                if j != 0 and self.classification_c[i, j - 1] == Classification.Interior:
                     # inv_rho = self.y_volume[i, j - 1] / self.y_mass[i, j - 1]
                     inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
-                    A[idx, idx - 1] -= self.dt * Gic * inv_rho
-                    A_b -= self.dt * Gic * inv_rho
+                    A[idx, idx - 1] += self.dt * inv_dx_squared * inv_rho
+                    # A_b -= self.dt * Gic * inv_rho
                     # A[idx, idx] += self.dt * Gic * inv_rho
-                    A_c += self.dt * Gic * inv_rho
 
-                if (
-                    j != self.n_grid - 1
-                    and self.classification_y[i, j + 1] != Classification.Colliding
-                    # FIXME: that the adjacent cell is empty shouldn't matter,
-                    #        but without this the solver won't converge
-                    and self.classification_c[i, j + 1] != Classification.Empty
-                ):
+                if j != self.n_grid - 1 and self.classification_c[i, j + 1] != Classification.Colliding:
                     inv_rho = self.volume_y[i, j + 1] / self.mass_y[i, j + 1]
-                    A[idx, idx + 1] -= self.dt * Gic * inv_rho
-                    A_t -= self.dt * Gic * inv_rho
+                    A_c -= self.dt * inv_dx_squared * inv_rho
+                if j != self.n_grid - 1 and self.classification_c[i, j + 1] == Classification.Interior:
+                    inv_rho = self.volume_y[i, j + 1] / self.mass_y[i, j + 1]
+                    A[idx, idx + 1] += self.dt * inv_dx_squared * inv_rho
+                    # A_t -= self.dt * Gic * inv_rho
                     # A[idx, idx] += self.dt * Gic * inv_rho
-                    A_c += self.dt * Gic * inv_rho
 
                 A[idx, idx] += A_c
 
