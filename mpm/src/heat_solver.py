@@ -52,24 +52,24 @@ class HeatSolver:
                 # cells that can be considered empty or corresponding to insulated objects.
                 # NOTE: dx^d is cancelled out by 1 / dx^2 because d == 2.
                 if i != 0 and self.classification_c[i - 1, j] != Classification.Empty:
-                    A[idx, idx - self.n_grid] -= self.dt * inv_mass_capacity * self.conductivity_x[i, j]
-                    A_l -= self.dt * inv_mass_capacity * self.conductivity_x[i, j]
-                    A_c += self.dt * inv_mass_capacity * self.conductivity_x[i, j]
+                    A_c -= self.dt * inv_mass_capacity * self.conductivity_x[i, j]
+                if i != 0 and self.classification_c[i - 1, j] == Classification.Interior:
+                    A[idx, idx - self.n_grid] += self.dt * inv_mass_capacity * self.conductivity_x[i, j]
 
                 if i != self.n_grid - 1 and self.classification_c[i + 1, j] != Classification.Empty:
-                    A[idx, idx + self.n_grid] -= self.dt * inv_mass_capacity * self.conductivity_x[i + 1, j]
-                    A_r -= self.dt * inv_mass_capacity * self.conductivity_x[i + 1, j]
-                    A_c += self.dt * inv_mass_capacity * self.conductivity_x[i + 1, j]
+                    A_c -= self.dt * inv_mass_capacity * self.conductivity_x[i + 1, j]
+                if i != self.n_grid - 1 and self.classification_c[i + 1, j] == Classification.Interior:
+                    A[idx, idx + self.n_grid] += self.dt * inv_mass_capacity * self.conductivity_x[i + 1, j]
 
                 if j != 0 and self.classification_c[i, j - 1] != Classification.Empty:
-                    A[idx, idx - 1] -= self.dt * inv_mass_capacity * self.conductivity_y[i, j]
-                    A_b -= self.dt * inv_mass_capacity * self.conductivity_y[i, j]
-                    A_c += self.dt * inv_mass_capacity * self.conductivity_y[i, j]
+                    A_c -= self.dt * inv_mass_capacity * self.conductivity_y[i, j]
+                if j != 0 and self.classification_c[i, j - 1] == Classification.Interior:
+                    A[idx, idx - 1] += self.dt * inv_mass_capacity * self.conductivity_y[i, j]
 
                 if j != self.n_grid - 1 and self.classification_c[i, j + 1] != Classification.Empty:
-                    A[idx, idx + 1] -= self.dt * inv_mass_capacity * self.conductivity_y[i, j + 1]
-                    A_t -= self.dt * inv_mass_capacity * self.conductivity_y[i, j + 1]
-                    A_c += self.dt * inv_mass_capacity * self.conductivity_y[i, j + 1]
+                    A_c -= self.dt * inv_mass_capacity * self.conductivity_y[i, j + 1]
+                if j != self.n_grid - 1 and self.classification_c[i, j + 1] == Classification.Interior:
+                    A[idx, idx + 1] += self.dt * inv_mass_capacity * self.conductivity_y[i, j + 1]
 
                 A[idx, idx] += A_c
             else:  # Dirichlet boundary condition (not homogeneous)
