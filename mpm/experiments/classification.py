@@ -1,19 +1,17 @@
-import utils
+import utils  # import first to append parent directory to path
 
 from src.enums import Classification
+
 import taichi as ti
+import numpy as np
 
 ti.init(arch=ti.cpu)
 
-# NOTE: this seems to be wrong on paper, but is the best working version in the simulation?!
-# TODO: debug the simulation, there might be another reason for this?!
-# TODO: then try a version of this that adds to the closest nodes/faces
-
-n_grid = 6
+n_grid = 32
 dx = 1 / n_grid
 inv_dx = float(n_grid)
 additional_offset = 0.5
-boundary_width = 0
+boundary_width = 3
 
 classification_c = ti.field(dtype=ti.int8, shape=(n_grid, n_grid))
 classification_x = ti.field(dtype=ti.int8, shape=(n_grid + 1, n_grid))
@@ -91,7 +89,8 @@ def classify_cells():
         # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
 
         # The simulation boundary is always colliding.
-        x_face_is_colliding = i > (n_grid - boundary_width) or i < boundary_width
+        x_face_is_colliding = i >= (n_grid - boundary_width) or i <= boundary_width
+        x_face_is_colliding |= j >= (n_grid - boundary_width) or j <= boundary_width
         if x_face_is_colliding:
             classification_x[i, j] = Classification.Colliding
             continue
@@ -108,7 +107,8 @@ def classify_cells():
         # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
 
         # The simulation boundary is always colliding.
-        y_face_is_colliding = j > (n_grid - boundary_width) or j < boundary_width
+        y_face_is_colliding = i >= (n_grid - boundary_width) or i <= boundary_width
+        y_face_is_colliding |= j >= (n_grid - boundary_width) or j <= boundary_width
         if y_face_is_colliding:
             classification_y[i, j] = Classification.Colliding
             continue
@@ -154,18 +154,37 @@ def classify_cells():
         # temperature_c[i, j] = ambient_temperature[None]
 
 
+def print_classification(classification: np.ndarray) -> None:
+    cls_to_str = {
+        Classification.Interior: "I",
+        Classification.Colliding: "C",
+        Classification.Empty: "E",
+    }
+    for i in range(n_grid):
+        for j in range(n_grid):
+            print(cls_to_str[classification[i, j]], end="  ")
+        print()
+    # for i, j in zip(range(n_grid), range(n_grid)):
+    #     print(i,j)
+    # print(i, j, classification[i, j])
+    # print(cls_to_str[classification[i, j]], sep="\n" if i % n_grid == 0 else "n")
+
+
 def main():
     # positions = [(0.0, 0.0), (0.1, 0.1), (0.4, 0.4), (0.5, 0.5), (0.6, 0.6), (0.9, 0.9), (1.0, 1.0)]
     positions = [ti.Vector([0.52, 0.52])]
     for position in positions:
         print()
-        print("=" * 50)
+        print("~" * 100)
         particle_to_grid(position)
         classify_cells()
 
-        print(classification_c)
-        print(classification_x)
-        print(classification_y)
+        print("CELL CLASSIFICATION:")
+        print_classification(classification_c.to_numpy())
+        print("\nX-FACE CLASSIFICATION:")
+        print_classification(classification_x.to_numpy())
+        print("\nY-FACE CLASSIFICATION:")
+        print_classification(classification_y.to_numpy())
 
 
 if __name__ == "__main__":
