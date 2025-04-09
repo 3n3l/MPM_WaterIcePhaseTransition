@@ -306,7 +306,8 @@ class MPM_Solver:
             # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
 
             # The simulation boundary is always colliding.
-            x_face_is_colliding = i > (self.n_grid - self.boundary_width) or i < self.boundary_width
+            x_face_is_colliding = i >= (self.n_grid - self.boundary_width) or i <= self.boundary_width
+            x_face_is_colliding |= j >= (self.n_grid - self.boundary_width) or j <= self.boundary_width
             if x_face_is_colliding:
                 self.classification_x[i, j] = Classification.Colliding
                 continue
@@ -323,7 +324,8 @@ class MPM_Solver:
             # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
 
             # The simulation boundary is always colliding.
-            y_face_is_colliding = j > (self.n_grid - self.boundary_width) or j < self.boundary_width
+            y_face_is_colliding = i >= (self.n_grid - self.boundary_width) or i <= self.boundary_width
+            y_face_is_colliding |= j >= (self.n_grid - self.boundary_width) or j <= self.boundary_width
             if y_face_is_colliding:
                 self.classification_y[i, j] = Classification.Colliding
                 continue
