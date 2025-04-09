@@ -215,29 +215,40 @@ def main():
         particle_to_grid(x, y)
         classify_cells()
 
-        # NOTE: ndarrays need to be flipped to represent what it would look like on the screen.
+        # print(mass_x.to_numpy().T.shape)
+        # print()
+        # print(np.flip(mass_x.to_numpy(), 0).shape)
+        # print()
+        # print(np.flip(mass_x.to_numpy(), 1).shape)
+        # print()
+        # print(np.flip(mass_x.to_numpy(), None).shape)
+        # continue
+
+        # NOTE: ndarrays need to be flipped to represent what they would look like on the screen.
+        # NOTE: ndarrays must also be transposed to represent what they would look like on the screen.
+        # FIXME: surely both operations can be replaced with one that does both? 
         print("~" * 100)
         print("CELL:")
         print("\nMASS:")
-        print_mass(np.flip(mass_c.to_numpy(), 0))
+        print_mass(np.flip(mass_c.to_numpy().T, 0))
         print("\nCLASSIFICATION:")
-        print_classification(np.flip(classification_c.to_numpy(), 0))
+        print_classification(np.flip(classification_c.to_numpy().T, 0))
         print()
 
         print("~" * 100)
         print("X-FACE:")
         print("\nMASS:")
-        print_mass(np.flip(mass_x.to_numpy(), 0))
+        print_mass(np.flip(mass_x.to_numpy().T, 0))
         print("\nCLASSIFICATION:")
-        print_classification(np.flip(classification_x.to_numpy(), 0))
+        print_classification(np.flip(classification_x.to_numpy().T, 0))
         print()
 
         print("~" * 100)
         print("Y-FACE:")
         print("\nMASS:")
-        print_mass(np.flip(mass_y.to_numpy(), 0))
+        print_mass(np.flip(mass_y.to_numpy().T, 0))
         print("\nCLASSIFICATION:")
-        print_classification(np.flip(classification_y.to_numpy(), 0))
+        print_classification(np.flip(classification_y.to_numpy().T, 0))
         print()
 
 
