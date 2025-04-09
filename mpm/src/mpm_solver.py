@@ -141,7 +141,7 @@ class MPM_Solver:
                 continue
 
             # Deformation gradient update.
-            self.FE_p[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C_p[p]) @ self.FE_p[p]
+            self.FE_p[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
 
             # Clamp singular values to simulate plasticity and elasticity.
             U, sigma, V = ti.svd(self.FE_p[p])
