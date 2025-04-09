@@ -182,7 +182,8 @@ class MPM_Solver:
             stress += ti.Matrix.identity(float, 2) * la * JE_p * (JE_p - 1)
 
             # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
-            D_inv = 4 * self.inv_dx * self.inv_dx  # Quadratic interpolation
+            # D_inv = 4 * self.inv_dx * self.inv_dx  # Quadratic interpolation
+            D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
 
             # TODO: What happens here exactly? Something with Cauchy-stress?
             stress *= -self.dt * self.particle_vol * D_inv
@@ -199,10 +200,30 @@ class MPM_Solver:
             dist_c = self.position_p[p] * self.inv_dx - ti.cast(base_c, ti.f32)
             dist_x = self.position_p[p] * self.inv_dx - ti.cast(base_x, ti.f32) - self.x_offset
             dist_y = self.position_p[p] * self.inv_dx - ti.cast(base_y, ti.f32) - self.y_offset
+
             # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1, fx-2)
-            w_c = [0.5 * (1.5 - dist_c) ** 2, 0.75 - (dist_c - 1) ** 2, 0.5 * (dist_c - 0.5) ** 2]
-            w_x = [0.5 * (1.5 - dist_x) ** 2, 0.75 - (dist_x - 1) ** 2, 0.5 * (dist_x - 0.5) ** 2]
-            w_y = [0.5 * (1.5 - dist_y) ** 2, 0.75 - (dist_y - 1) ** 2, 0.5 * (dist_y - 0.5) ** 2]
+            # w_c = [0.5 * (1.5 - dist_c) ** 2, 0.75 - (dist_c - 1) ** 2, 0.5 * (dist_c - 0.5) ** 2]
+            # w_x = [0.5 * (1.5 - dist_x) ** 2, 0.75 - (dist_x - 1) ** 2, 0.5 * (dist_x - 0.5) ** 2]
+            # w_y = [0.5 * (1.5 - dist_y) ** 2, 0.75 - (dist_y - 1) ** 2, 0.5 * (dist_y - 0.5) ** 2]
+
+            # Cubic kernels (JST16 Eqn. 122 with x=fx, abs(fx-1), abs(fx-2))
+            # Taken from https://github.com/taichi-dev/advanced_examples/blob/main/mpm/mpm99_cubic.py
+            # TODO: calculate own weights for x=fx, fx-1, fx-2, or at least simplify these terms here?
+            w_c = [
+                0.5 * dist_c**3 - dist_c**2 + 2.0 / 3.0,
+                0.5 * (-(dist_c - 1.0)) ** 3 - (-(dist_c - 1.0)) ** 2 + 2.0 / 3.0,
+                1.0 / 6.0 * (2.0 + (dist_c - 2.0)) ** 3,
+            ]
+            w_x = [
+                0.5 * dist_x**3 - dist_x**2 + 2.0 / 3.0,
+                0.5 * (-(dist_x - 1.0)) ** 3 - (-(dist_x - 1.0)) ** 2 + 2.0 / 3.0,
+                1.0 / 6.0 * (2.0 + (dist_x - 2.0)) ** 3,
+            ]
+            w_y = [
+                0.5 * dist_y**3 - dist_y**2 + 2.0 / 3.0,
+                0.5 * (-(dist_y - 1.0)) ** 3 - (-(dist_y - 1.0)) ** 2 + 2.0 / 3.0,
+                1.0 / 6.0 * (2.0 + (dist_y - 2.0)) ** 3,
+            ]
 
             for i, j in ti.static(ti.ndrange(3, 3)):
                 offset = ti.Vector([i, j])
@@ -398,8 +419,10 @@ class MPM_Solver:
                 # but not from top and right cells
                 # nt += c_weight * self.cell_temperature[c_base + offset - 1]
 
-            cx = 4 * self.inv_dx * bx  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Quadratic kernels
-            cy = 4 * self.inv_dx * by  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Quadratic kernels
+            # cx = 4 * self.inv_dx * bx  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Quadratic kernels in P2G
+            # cy = 4 * self.inv_dx * by  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Quadratic kernels in P2G
+            cx = 3 * self.inv_dx * bx  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
+            cy = 3 * self.inv_dx * by  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
             self.C_p[p] = ti.Matrix([[cx[0], cy[0]], [cx[1], cy[1]]])  # pyright: ignore
             self.position_p[p] += self.dt * nv
             self.velocity_p[p] = nv
