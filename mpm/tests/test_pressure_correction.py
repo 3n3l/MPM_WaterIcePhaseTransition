@@ -166,11 +166,23 @@ def main() -> None:
                 solver.pressure_solver.solve()
                 solver.grid_to_particle()
 
+            prev_min, prev_max = np.abs(np.min(divergence.to_numpy())), np.abs(np.max(divergence.to_numpy()))
             compute_divergence(solver, divergence)
+            curr_min, curr_max = np.abs(np.min(divergence.to_numpy())), np.abs(np.max(divergence.to_numpy()))
+
             print(".", end=("\n" if i % 10 == 0 else " "), flush=True)
+
             if np.any(np.round(divergence.to_numpy(), 2) != 0):  # pyright: ignore
+                print("\n\nDivergence too big :(")
                 we_succeeded = False
                 break
+
+            if curr_min > prev_min or curr_max > prev_max:
+                # The solver actually increased the divergence :(
+                print("\n\nDivergence increased :(")
+                we_succeeded = False
+                break
+
         if not we_succeeded:
             break
 
