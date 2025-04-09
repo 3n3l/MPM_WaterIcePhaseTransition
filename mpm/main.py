@@ -83,6 +83,20 @@ def main():
             ambient_temperature=20.0,
         ),
         Configuration(
+            name="Stationary Pool of Water",
+            geometries=[
+                # TODO: width is set with boundary_offset in mind, change this to absolute values,
+                #       or even find a cleaner solution for this?
+                Rectangle(Phase.Water, 0.953, 0.05, 5_000, (0, 0), (0, 0), 0, 20.0),
+            ],
+            E=1e4,  # Young's modulus (1.4e5)
+            nu=0.49,  # Poisson's ratio (0.2)
+            zeta=10,  # Hardening coefficient (10)
+            theta_c=2.5e-2,  # Critical compression (2.5e-2)
+            theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+            ambient_temperature=20.0,
+        ),
+        Configuration(
             name="Dropping Ice Cubes Into Body of Water",
             geometries=[
                 Rectangle(Phase.Water, 0.96, 0.1, 8_000, (0, 0), (0, 0), 0, 50.0),
