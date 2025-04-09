@@ -1,3 +1,4 @@
+from operator import concat
 import utils  # import first to append parent directory to path
 
 from src.enums import Classification
@@ -7,18 +8,42 @@ import numpy as np
 
 ti.init(arch=ti.cpu)
 
-n_grid = 32
+
+class TextColor:
+    Cyan = "\033[96m"
+    Yellow = "\033[93m"
+    Red = "\033[91m"
+    End = "\033[0m"
+
+
+def print_colored_text(text: str, color: str) -> str:
+    return f"{color}{text}{TextColor.End}"
+
+
+def print_cyan(text: str) -> str:
+    return print_colored_text(text, TextColor.Cyan)
+
+
+def print_yellow(text: str) -> str:
+    return print_colored_text(text, TextColor.Yellow)
+
+
+def print_red(text: str) -> str:
+    return print_colored_text(text, TextColor.Red)
+
+
+n_grid = 6
 dx = 1 / n_grid
 inv_dx = float(n_grid)
 additional_offset = 0.5
-boundary_width = 3
+boundary_width = 0
 
 classification_c = ti.field(dtype=ti.int8, shape=(n_grid, n_grid))
 classification_x = ti.field(dtype=ti.int8, shape=(n_grid + 1, n_grid))
-classification_y = ti.field(dtype=ti.int8, shape=(n_grid, n_grid))
+classification_y = ti.field(dtype=ti.int8, shape=(n_grid, n_grid + 1))
 
-mass_c = ti.field(dtype=ti.float32, shape=(n_grid + 1, n_grid))
-mass_x = ti.field(dtype=ti.float32, shape=(n_grid, n_grid + 1))
+mass_c = ti.field(dtype=ti.float32, shape=(n_grid, n_grid))
+mass_x = ti.field(dtype=ti.float32, shape=(n_grid + 1, n_grid))
 mass_y = ti.field(dtype=ti.float32, shape=(n_grid, n_grid + 1))
 
 # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
@@ -36,14 +61,18 @@ mass_p = particle_vol * rho_0
 
 
 @ti.kernel
-def particle_to_grid(position_p: ti.template()):  # pyright: ignore
+# def particle_to_grid(position_p: ti.template()):  # pyright: ignore
+def particle_to_grid(x: float, y: float):  # pyright: ignore
     # We use an additional offset of 0.5 for element-wise flooring.
+    position_p = ti.Vector([x, y])
     base_c = ti.floor((position_p * inv_dx - c_stagger), dtype=ti.i32)
     base_x = ti.floor((position_p * inv_dx - x_stagger), dtype=ti.i32)
     base_y = ti.floor((position_p * inv_dx - y_stagger), dtype=ti.i32)
     dist_c = position_p * inv_dx - ti.cast(base_c, ti.f32)
     dist_x = position_p * inv_dx - ti.cast(base_x, ti.f32) - x_offset
     dist_y = position_p * inv_dx - ti.cast(base_y, ti.f32) - y_offset
+
+    print("BASE:", base_c)
 
     # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1, fx-2)
     # w_c = [0.5 * (1.5 - dist_c) ** 2, 0.75 - (dist_c - 1) ** 2, 0.5 * (dist_c - 0.5) ** 2]
@@ -75,6 +104,8 @@ def particle_to_grid(position_p: ti.template()):  # pyright: ignore
         weight_x = w_x[i][0] * w_x[j][1]
         weight_y = w_y[i][0] * w_y[j][1]
 
+        print("BASE + OFFSET:", base_c + offset, "MASS:", weight_c * mass_p)
+
         # Rasterize mass to grid faces.
         mass_x[base_x + offset] += weight_x * mass_p
         mass_y[base_y + offset] += weight_y * mass_p
@@ -89,11 +120,11 @@ def classify_cells():
         # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
 
         # The simulation boundary is always colliding.
-        x_face_is_colliding = i >= (n_grid - boundary_width) or i <= boundary_width
-        x_face_is_colliding |= j >= (n_grid - boundary_width) or j <= boundary_width
-        if x_face_is_colliding:
-            classification_x[i, j] = Classification.Colliding
-            continue
+        # x_face_is_colliding = i >= (n_grid - boundary_width) or i <= boundary_width
+        # x_face_is_colliding |= j >= (n_grid - boundary_width) or j <= boundary_width
+        # if x_face_is_colliding:
+        #     classification_x[i, j] = Classification.Colliding
+        #     continue
 
         # For convenience later on: a face is marked interior if it has mass.
         if mass_x[i, j] > 0:
@@ -107,11 +138,11 @@ def classify_cells():
         # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
 
         # The simulation boundary is always colliding.
-        y_face_is_colliding = i >= (n_grid - boundary_width) or i <= boundary_width
-        y_face_is_colliding |= j >= (n_grid - boundary_width) or j <= boundary_width
-        if y_face_is_colliding:
-            classification_y[i, j] = Classification.Colliding
-            continue
+        # y_face_is_colliding = i >= (n_grid - boundary_width) or i <= boundary_width
+        # y_face_is_colliding |= j >= (n_grid - boundary_width) or j <= boundary_width
+        # if y_face_is_colliding:
+        #     classification_y[i, j] = Classification.Colliding
+        #     continue
 
         # For convenience later on: a face is marked interior if it has mass.
         if mass_y[i, j] > 0:
@@ -154,37 +185,60 @@ def classify_cells():
         # temperature_c[i, j] = ambient_temperature[None]
 
 
+def print_mass(mass: np.ndarray) -> None:
+    nx, ny = mass.shape
+    for i in range(nx):
+        for j in range(ny):
+            colorizer = print_yellow if mass[i, j] == 0 else print_red
+            print(colorizer("%.1f" % mass[i, j]), end=" ")
+        print()
+
+
 def print_classification(classification: np.ndarray) -> None:
     cls_to_str = {
-        Classification.Interior: "I",
-        Classification.Colliding: "C",
-        Classification.Empty: "E",
+        Classification.Colliding: print_cyan("c"),
+        Classification.Empty: print_yellow("x"),
+        Classification.Interior: print_red("i"),
     }
-    for i in range(n_grid):
-        for j in range(n_grid):
+    nx, ny = classification.shape
+    for i in range(nx):
+        for j in range(ny):
             print(cls_to_str[classification[i, j]], end="  ")
         print()
-    # for i, j in zip(range(n_grid), range(n_grid)):
-    #     print(i,j)
-    # print(i, j, classification[i, j])
-    # print(cls_to_str[classification[i, j]], sep="\n" if i % n_grid == 0 else "n")
 
 
 def main():
     # positions = [(0.0, 0.0), (0.1, 0.1), (0.4, 0.4), (0.5, 0.5), (0.6, 0.6), (0.9, 0.9), (1.0, 1.0)]
-    positions = [ti.Vector([0.52, 0.52])]
-    for position in positions:
+    positions = [(0.55, 0.45)]
+    for x, y in positions:
         print()
-        print("~" * 100)
-        particle_to_grid(position)
+        particle_to_grid(x, y)
         classify_cells()
 
-        print("CELL CLASSIFICATION:")
-        print_classification(classification_c.to_numpy())
-        print("\nX-FACE CLASSIFICATION:")
-        print_classification(classification_x.to_numpy())
-        print("\nY-FACE CLASSIFICATION:")
-        print_classification(classification_y.to_numpy())
+        # NOTE: ndarrays need to be flipped to represent what it would look like on the screen.
+        print("~" * 100)
+        print("CELL:")
+        print("\nMASS:")
+        print_mass(np.flip(mass_c.to_numpy(), 0))
+        print("\nCLASSIFICATION:")
+        print_classification(np.flip(classification_c.to_numpy(), 0))
+        print()
+
+        print("~" * 100)
+        print("X-FACE:")
+        print("\nMASS:")
+        print_mass(np.flip(mass_x.to_numpy(), 0))
+        print("\nCLASSIFICATION:")
+        print_classification(np.flip(classification_x.to_numpy(), 0))
+        print()
+
+        print("~" * 100)
+        print("Y-FACE:")
+        print("\nMASS:")
+        print_mass(np.flip(mass_y.to_numpy(), 0))
+        print("\nCLASSIFICATION:")
+        print_classification(np.flip(classification_y.to_numpy(), 0))
+        print()
 
 
 if __name__ == "__main__":
