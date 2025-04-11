@@ -234,14 +234,23 @@ def main():
         help=solver_type_help,
     )
 
+    solver_type_help = "Turn on debugging."
+    parser.add_argument(
+        "-d",
+        "--debug",
+        default=True,
+        action="store_false",
+        help=solver_type_help,
+    )
+
     args = parser.parse_args()
 
     if args.arch.lower() == "cpu":
-        ti.init(arch=ti.cpu, debug=True)
+        ti.init(arch=ti.cpu, debug=args.debug)
     elif args.arch.lower() == "gpu":
-        ti.init(arch=ti.gpu, debug=True)
+        ti.init(arch=ti.gpu, debug=args.debug)
     else:
-        ti.init(arch=ti.cuda, debug=True)
+        ti.init(arch=ti.cuda, debug=args.debug)
 
     print("\n", "#" * 100, sep="")
     print("###", simulation_name)
