@@ -44,7 +44,7 @@ def main():
             geometries=[
                 # TODO: width is set with boundary_offset in mind, change this to absolute values,
                 #       or even find a cleaner solution for this?
-                Rectangle(Phase.Water, 0.953, 0.05, 5_000, (0, 0), (0, 0), 0, 20.0),
+                Rectangle(Phase.Water, 0.9375, 0.05, 5_000, (0, 0), (0, 0), 0, 20.0),
                 *[Rectangle(Phase.Water, 0.08, 0.04, 50, (0, -2), (0.45, 0.45), i, 20.0) for i in range(10, 300)],
             ],
             E=1e4,  # Young's modulus (1.4e5)
@@ -87,7 +87,7 @@ def main():
             geometries=[
                 # TODO: width is set with boundary_offset in mind, change this to absolute values,
                 #       or even find a cleaner solution for this?
-                Rectangle(Phase.Water, 0.953, 0.05, 5_000, (0, 0), (0, 0), 0, 20.0),
+                Rectangle(Phase.Water, 0.9375, 0.05, 5_000, (0, 0), (0, 0), 0, 20.0),
             ],
             E=1e4,  # Young's modulus (1.4e5)
             nu=0.49,  # Poisson's ratio (0.2)

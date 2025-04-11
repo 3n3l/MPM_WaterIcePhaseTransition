@@ -26,7 +26,7 @@ class MPM_Solver:
         self.n_dimensions = 2
 
         # The width of the simulation boundary in grid nodes.
-        self.boundary_width = 3
+        self.boundary_width = 4
 
         # Offset to correct coordinates such that the origin lies within the boundary,
         # added to each position vector when loading a new configuration.
