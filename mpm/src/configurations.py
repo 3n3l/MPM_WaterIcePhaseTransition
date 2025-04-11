@@ -37,12 +37,13 @@ class Configuration:
         # Properties.
         self.n_particles = reduce(lambda sum, g: sum + g.n_particles, geometries, 0)
 
-        self.activation_threshold = np.concatenate([g.frame_threshold for g in geometries], dtype=int)
-        self.temperature = np.concatenate([g.temperature for g in geometries], dtype=np.float32).flatten()
-        self.position = np.concatenate([g.position for g in geometries], dtype=np.float32)
-        self.velocity = np.concatenate([g.velocity for g in geometries], dtype=np.float32)
-        self.phase = np.concatenate([g.phase for g in geometries], dtype=np.float32).flatten()
-        self.state = np.concatenate([g.state for g in geometries], dtype=int)
+        # Arrays holding properties for all geometries.
+        self._arr_activation_threshold = np.concatenate([g.frame_threshold for g in geometries], dtype=int)
+        self._arr_temperature = np.concatenate([g.temperature for g in geometries], dtype=np.float32).flatten()
+        self._arr_position = np.concatenate([g.position for g in geometries], dtype=np.float32)
+        self._arr_velocity = np.concatenate([g.velocity for g in geometries], dtype=np.float32)
+        self._arr_phase = np.concatenate([g.phase for g in geometries], dtype=np.float32).flatten()
+        self._arr_state = np.concatenate([g.state for g in geometries], dtype=int)
 
     def build(self):
         """This builds the Taichi fields, must be called before use and after ti.init(...)."""
@@ -55,9 +56,9 @@ class Configuration:
         self.state_p = ti.field(dtype=int, shape=self.n_particles)
 
         # Initialize fields.
-        self.activation_threshold_p.from_numpy(self.activation_threshold)
-        self.temperature_p.from_numpy(self.temperature)
-        self.position_p.from_numpy(self.position)
-        self.velocity_p.from_numpy(self.velocity)
-        self.phase_p.from_numpy(self.phase)
-        self.state_p.from_numpy(self.state)
+        self.activation_threshold_p.from_numpy(self._arr_activation_threshold)
+        self.temperature_p.from_numpy(self._arr_temperature)
+        self.position_p.from_numpy(self._arr_position)
+        self.velocity_p.from_numpy(self._arr_velocity)
+        self.phase_p.from_numpy(self._arr_phase)
+        self.state_p.from_numpy(self._arr_state)
