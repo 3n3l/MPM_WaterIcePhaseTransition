@@ -8,10 +8,6 @@ from src.enums import Phase
 
 import taichi as ti
 
-# TODO: use args for arch and debug values?
-ti.init(arch=ti.cpu, debug=True)
-# ti.init(arch=ti.cuda, debug=True)
-
 
 def main():
     configurations = [
@@ -228,7 +224,24 @@ def main():
         type=int,
     )
 
+    solver_type_help = "Choose the Taichi architecture to run on."
+    parser.add_argument(
+        "-a",
+        "--arch",
+        default="CPU",
+        nargs="?",
+        choices=["CPU", "GPU", "CUDA"],
+        help=solver_type_help,
+    )
+
     args = parser.parse_args()
+
+    if args.arch.lower() == "cpu":
+        ti.init(arch=ti.cpu, debug=True)
+    elif args.arch.lower() == "gpu":
+        ti.init(arch=ti.gpu, debug=True)
+    else:
+        ti.init(arch=ti.cuda, debug=True)
 
     print("\n", "#" * 100, sep="")
     print("###", simulation_name)

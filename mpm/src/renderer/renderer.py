@@ -40,6 +40,10 @@ class Renderer(ABC):
         # The MLS-MPM solver.
         self.solver = solver
 
+        # Build the Taichi fields.
+        for configuration in configurations:
+            configuration.build()
+
         # Load the initial configuration and reset the solver to this configuration.
         self.configuration_id = 0
         self.configurations = configurations
@@ -92,7 +96,7 @@ class Renderer(ABC):
                 self.solver.color_p[p] = Color.Water if particle_is_water else Color.Ice
                 self.solver.heat_p[p] = LATENT_HEAT if particle_is_water else 0.0
 
-                self.solver.activation_threshold_p[p] = configuration.activity_threshold_p[p]
+                self.solver.activation_threshold_p[p] = configuration.activation_threshold_p[p]
                 self.solver.temperature_p[p] = configuration.temperature_p[p]
                 self.solver.activation_state_p[p] = configuration.state_p[p]
                 self.solver.velocity_p[p] = configuration.velocity_p[p]
