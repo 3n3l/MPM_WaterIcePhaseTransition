@@ -99,8 +99,8 @@ def particle_to_grid(x: float, y: float):  # pyright: ignore
 
     # NOTE: when further offsetting the stagger values, the distance offsets have to be adjusted as well
     #       otherwise the interpolation yields negative values?!
-    x_offset = ti.Vector([(dx * 0.5), 1.0])
-    y_offset = ti.Vector([1.0, (dx * 0.5)])
+    x_offset = ti.Vector([(dx * 0.5), 0.0])
+    y_offset = ti.Vector([0.0, (dx * 0.5)])
 
     # We use an additional offset of 0.5 for element-wise flooring.
     position_p = ti.Vector([x, y])
@@ -284,6 +284,7 @@ def grid_to_particle(x: float, y: float):
 
 def main():
     # positions = [(0.0, 0.0), (0.1, 0.1), (0.4, 0.4), (0.5, 0.5), (0.6, 0.6), (0.9, 0.9), (1.0, 1.0)]
+    # positions = [(0.32, 0.52), (0.52, 0.32), (0.52, 0.52)]
     positions = [(0.52, 0.52)]
     for x, y in positions:
         classification_c.fill(Classification.Empty)
