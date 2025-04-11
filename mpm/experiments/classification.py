@@ -93,14 +93,14 @@ def compute_cubic_weight(x: float) -> float:
 def particle_to_grid(x: float, y: float):  # pyright: ignore
     # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
     # NOTE: the idea is to offset the face in the opposite direction by one cell (= dx)
-    x_stagger = ti.Vector([(dx * 0.5) + 0.5, 1.5])
-    y_stagger = ti.Vector([1.5, (dx * 0.5) + 0.5])
+    x_stagger = ti.Vector([1.0, 1.5])
+    y_stagger = ti.Vector([1.5, 1.0])
     c_stagger = ti.Vector([0.5, 0.5])
 
     # NOTE: when further offsetting the stagger values, the distance offsets have to be adjusted as well
     #       otherwise the interpolation yields negative values?!
-    x_offset = ti.Vector([(dx * 0.5), 0.0])
-    y_offset = ti.Vector([0.0, (dx * 0.5)])
+    x_offset = ti.Vector([0.0, 0.5])
+    y_offset = ti.Vector([0.5, 0.0])
 
     # We use an additional offset of 0.5 for element-wise flooring.
     position_p = ti.Vector([x, y])
@@ -255,13 +255,14 @@ def grid_to_particle(x: float, y: float):
     position_p = ti.Vector([x, y])
 
     # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
-    x_stagger = ti.Vector([(dx * 0.5) + 0.5, 0.5])
-    y_stagger = ti.Vector([0.5, (dx * 0.5) + 0.5])
+    x_stagger = ti.Vector([1.0, 1.5])
+    y_stagger = ti.Vector([1.5, 1.0])
     # c_stagger = ti.Vector([0.5, 0.5])
 
-    # Additional offsets for the grid, used for the distance (fx) computations.
-    x_offset = ti.Vector([(dx * 0.5), 0.0])
-    y_offset = ti.Vector([0.0, (dx * 0.5)])
+    # NOTE: when further offsetting the stagger values, the distance offsets have to be adjusted as well
+    #       otherwise the interpolation yields negative values?!
+    x_offset = ti.Vector([0.0, 0.5])
+    y_offset = ti.Vector([0.5, 0.0])
 
     # base_c = ti.floor((position_p[p] * inv_dx - c_stagger), dtype=ti.i32)
     base_x = ti.floor((position_p * inv_dx - x_stagger), dtype=ti.i32)
