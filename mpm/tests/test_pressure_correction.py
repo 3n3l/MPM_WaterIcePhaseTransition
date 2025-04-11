@@ -292,14 +292,16 @@ def main() -> None:
 
             print(".", end=("\n" if i % 10 == 0 else " "), flush=True)
 
-            if np.any(np.round(divergence.to_numpy(), 2) != 0):  # pyright: ignore
-                print("\n\nDivergence too big :(")
+            if np.round(curr_min) > np.round(prev_min) or np.round(curr_max) > np.round(prev_max):
+                # The solver actually increased the divergence :(
+                print("\n\nDivergence increased :(")
+                print(f"prev_min = {prev_min}, prev_max = {prev_max}")
+                print(f"curr_min = {curr_min}, curr_max = {curr_max}")
                 we_succeeded = False
                 break
 
-            if curr_min > prev_min or curr_max > prev_max:
-                # The solver actually increased the divergence :(
-                print("\n\nDivergence increased :(")
+            if np.any(np.round(divergence.to_numpy(), 2) != 0):  # pyright: ignore
+                print("\n\nDivergence too big :(")
                 we_succeeded = False
                 break
 
