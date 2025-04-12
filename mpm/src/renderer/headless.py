@@ -2,7 +2,6 @@ from src.enums import Conductivity, Phase, Color, State, Capacity
 from src.mpm_solver import MPM_Solver, LATENT_HEAT
 from src.configurations import Configuration
 
-from abc import ABC, abstractmethod
 from datetime import datetime
 
 import taichi as ti
@@ -10,13 +9,14 @@ import os
 
 
 @ti.data_oriented
-class Renderer(ABC):
+class HeadlessRenderer:
     def __init__(
         self,
         name: str,
         res: tuple[int, int] | int,
         solver: MPM_Solver,
         configurations: list[Configuration],
+        max_frames: int = 0,
     ) -> None:
         """Constructs a Renderer object, this advances the MLS-MPM solver and renders the updated particle positions.
         ---
@@ -28,6 +28,7 @@ class Renderer(ABC):
         """
         # State.
         self.is_paused = True
+        self.max_frames = max_frames
         self.should_write_to_disk = False
         self.is_showing_settings = not self.is_paused
 
@@ -40,6 +41,10 @@ class Renderer(ABC):
         # The MLS-MPM solver.
         self.solver = solver
 
+        # Build the Taichi fields.
+        for configuration in configurations:
+            configuration.build()
+
         # Load the initial configuration and reset the solver to this configuration.
         self.configuration_id = 0
         self.configurations = configurations
@@ -47,13 +52,16 @@ class Renderer(ABC):
         self.load_configuration(self.configuration)
         self.reset_solver(self.configuration)
 
-    @abstractmethod
+    # TODO: just dump frames here?
     def render(self) -> None:
         pass
+        # if self.should_write_to_disk:
+        #     self.video_manager.write_frame(self.window.get_image_buffer_as_numpy())
 
-    @abstractmethod
+    # TODO: this should be substep?
     def run(self) -> None:
-        pass
+        while self.solver.current_frame[None] < self.max_frames:
+            self.solver.substep()
 
     @ti.kernel
     def load_configuration(self, configuration: ti.template()):  # pyright: ignore
@@ -92,7 +100,7 @@ class Renderer(ABC):
                 self.solver.color_p[p] = Color.Water if particle_is_water else Color.Ice
                 self.solver.heat_p[p] = LATENT_HEAT if particle_is_water else 0.0
 
-                self.solver.activation_threshold_p[p] = configuration.activity_threshold_p[p]
+                self.solver.activation_threshold_p[p] = configuration.activation_threshold_p[p]
                 self.solver.temperature_p[p] = configuration.temperature_p[p]
                 self.solver.activation_state_p[p] = configuration.state_p[p]
                 self.solver.velocity_p[p] = configuration.velocity_p[p]

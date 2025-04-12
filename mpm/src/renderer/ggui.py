@@ -1,5 +1,5 @@
+from src.renderer.headless import HeadlessRenderer
 from src.configurations import Configuration
-from src.renderer.renderer import Renderer
 from src.mpm_solver import MPM_Solver
 from src.enums import Color
 
@@ -7,7 +7,7 @@ import taichi as ti
 
 
 @ti.data_oriented
-class GGUI_Renderer(Renderer):
+class GGUI_Renderer(HeadlessRenderer):
     def __init__(
         self,
         name: str,
