@@ -1,5 +1,5 @@
+from src.renderer.headless import HeadlessRenderer
 from src.configurations import Configuration
-from src.renderer.renderer import Renderer
 from src.mpm_solver import MPM_Solver
 from src.enums import Phase, Color
 
@@ -7,7 +7,7 @@ import taichi as ti
 
 
 @ti.data_oriented
-class GUI_Renderer(Renderer):
+class GUI_Renderer(HeadlessRenderer):
     def __init__(
         self,
         name: str,
