@@ -45,8 +45,8 @@ Keep in mind that the simulation starts paused, pause/unpause is toggled with sp
                       8: Freezing Waterspout
                       9: Simple Spout Source
                       10: Simple Blob Source
-                      11: Spherefall
-                      12: Spherefall
+                      11: Spherefall [Water]
+                      12: Spherefall [Ice]
 -s [{Direct,Iterative}], --solverType [{Direct,Iterative}]
                       Choose whether to use a direct or iterative solver for the pressure and heat systems.
 -q [QUALITY], --quality [QUALITY]

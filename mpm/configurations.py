@@ -148,7 +148,7 @@ configuration_list = [
         ambient_temperature=-20.0,
     ),
     Configuration(
-        name="Spherefall",
+        name="Spherefall [Water]",
         geometries=[
             Circle(Phase.Water, 0.06, 4000, (0, 0), (0.5, 0.5), 0, 10.0),
         ],
@@ -160,7 +160,7 @@ configuration_list = [
         ambient_temperature=20.0,
     ),
     Configuration(
-        name="Spherefall",
+        name="Spherefall [Ice]",
         geometries=[
             Circle(Phase.Ice, 0.06, 4000, (0, 0), (0.5, 0.5), 0, -10.0),
         ],
