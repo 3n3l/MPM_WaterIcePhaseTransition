@@ -19,7 +19,7 @@ position_p = ti.Vector.field(2, dtype=float, shape=max_particles)
 
 @ti.data_oriented
 class PoissonDiskSampler:
-    def __init__(self, r: float = 0.0025, k: int = 30, desired_samples: int = 500_000) -> None:
+    def __init__(self, r: float = 0.0025, k: int = 500, desired_samples: int = 500_000) -> None:
         self.r = r  # Minimum distance between samples
         self.k = k  # Samples to choose before rejection
         self.dx = r / ti.sqrt(2)  # Cell size is bounded by this
@@ -34,13 +34,14 @@ class PoissonDiskSampler:
         self.background_grid.fill(-1)
 
         # The sampled points will go here, we sample until this field is filled.
-        # TODO: this can be removed if used on mpm_solver.position_p
+        # TODO: this can be removed if used on mpm_solver.position_p?
+        #       But some methods need self.sample[index], where index comes from the grid
         self.samples = ti.Vector.field(2, dtype=ti.f32, shape=desired_samples)
 
+        self.desired_samples = ti.field(int, shape=())
+        self.sample_count = ti.field(int, shape=())
         self.head = ti.field(int, shape=())
         self.tail = ti.field(int, shape=())
-        self.sample_count = ti.field(int, shape=())
-        self.desired_samples = ti.field(int, shape=())
 
     @ti.func
     def _position_to_index(self, point: ti.template()) -> ti.Vector:  # pyright: ignore
@@ -49,19 +50,19 @@ class PoissonDiskSampler:
         return ti.Vector([x, y])
 
     @ti.func
-    def _has_collision(self, point: ti.template()) -> bool:  # pyright: ignore
-        x, y = self._position_to_index(point)
+    def _has_collision(self, base_point: ti.template()) -> bool:  # pyright: ignore
+        x, y = self._position_to_index(base_point)
         _min = (ti.max(0, x - 2), ti.min(self.n_grid, x + 3))  # pyright: ignore
         _max = (ti.max(0, y - 2), ti.min(self.n_grid, y + 3))  # pyright: ignore
-        distance_min = ti.sqrt(2)  # Initialized to max distance
+        distance_min = ti.sqrt(2) # Maximum possible distance
+        # Search in a 3x3 grid neighborhood around the position
         for i, j in ti.ndrange(_min, _max):
-            index = self.background_grid[i, j]
-            if index != -1:
-                q = self.samples[index]
-                d = (q - point).norm()
-                if d < distance_min:
-                    distance_min = d
-        # TODO: break out of loop if this condition is reached???
+            if (index := self.background_grid[i, j]) != -1:
+                # We found a point and can compute the distance:
+                found_point = self.samples[index]
+                distance = (found_point - base_point).norm()
+                if distance < distance_min:
+                    distance_min = distance
         # TODO: why subtract 1e-6???
         return distance_min < self.r - 1e-6
 
@@ -73,7 +74,6 @@ class PoissonDiskSampler:
         return stuff
 
     @ti.func
-    # def _sample_single_point(self, geometry: ti.template()) -> ti.i32:  # pyright: ignore
     def _sample_single_point(self, geometry: ti.template()) -> None:  # pyright: ignore
         while self._some_condition_is_not_reached():
             prev_position = self.samples[self.head[None]]
@@ -81,18 +81,16 @@ class PoissonDiskSampler:
 
             for _ in range(self.k):
                 theta = ti.random() * 2 * ti.math.pi
-                offset = ti.Vector([ti.cos(theta), ti.sin(theta)]) * (1 + ti.random()) * self.r
+                offset = ti.Vector([ti.cos(theta), ti.sin(theta)])
+                offset *= (1 + ti.random()) * self.r
                 next_position = prev_position + offset
                 next_index = self._position_to_index(next_position)
                 next_x, next_y = next_position[0], next_position[1]  # pyright: ignore
 
-
-                # TODO: shouldn't this be checked sooner? like in while condition????
-                desired_target_not_reached = self.tail[None] < self.desired_samples[None]
-
-                has_no_collision = not self._has_collision(next_position)
-                is_in_bounds = 0 <= next_x < 1 and 0 <= next_y < 1 and geometry.in_bounds(next_x, next_y)
-                if is_in_bounds and has_no_collision and desired_target_not_reached:
+                point_has_been_found = not self._has_collision(next_position)  # no collision
+                point_has_been_found &= 0 <= next_x < 1 and 0 <= next_y < 1  # in simulation bounds
+                point_has_been_found &= geometry.in_bounds(next_x, next_y)  # in geometry bounds
+                if point_has_been_found:
                     # FIXME: this is not needed
                     self.samples[self.tail[None]] = next_position
                     # FIXME: this adds to the global positions
@@ -101,14 +99,8 @@ class PoissonDiskSampler:
                     self.background_grid[next_index] = self.tail[None]
                     self.tail[None] += 1
 
-        # TODO: is this ever needed?
-        # return self.tail[None]
-
     @ti.kernel
     def sample(self, desired_samples: ti.i32, geometry: ti.template()):  # pyright: ignore
-        # TODO: compute n_new (DONE? this should be n_samples)
-        # x, y = self.point_to_index(ti.Vector([3, 4]))
-
         # Reset values for the new sample:
         self.desired_samples[None] = desired_samples
         self.sample_count[None] = 1
@@ -119,16 +111,13 @@ class PoissonDiskSampler:
         initial_point = geometry.center
         self.samples[0] = initial_point
         index = self._position_to_index(initial_point)
-        # print(initial_point)
-        # print(index)
         self.background_grid[index] = 0
 
         # Reset the background grid:
         for i, j in self.background_grid:
             self.background_grid[i, j] = -1
 
-        # TODO: this is wrong?
-        # TODO: the bounding box of the geometry is not incorporated yet
+        # TODO: desired_samples = max_samples
         for _ in ti.ndrange(self.desired_samples[None]):
             self._sample_single_point(geometry)
             self.sample_count[None] += 1
@@ -158,7 +147,7 @@ def naive_sample_circle(n_new: int, circle: ti.template()):  # pyright: ignore
 def main() -> None:
     window = ti.ui.Window(
         "Poisson Disk Sampling [LEFT] vs. Naive Implementation [RIGHT]",
-        res=(1080, 1080),
+        res=(720, 720),
         fps_limit=60,
     )
     canvas = window.get_canvas()
@@ -168,7 +157,7 @@ def main() -> None:
     ### Poisson Disk Sampling
     pds = PoissonDiskSampler()
     pds.sample(
-        2 * n_samples,
+        3 * n_samples,
         Circle(
             phase=Phase.Ice,
             radius=0.1,
@@ -177,7 +166,7 @@ def main() -> None:
         ),
     )
     pds.sample(
-        2 * n_samples,
+        3 * n_samples,
         Rectangle(
             phase=Phase.Ice,
             width=0.2,
