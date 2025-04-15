@@ -25,13 +25,12 @@ class State:
     Active = 88
 
 
-# TODO: Capacity should not be an enum!?
 class Capacity:
     Water = 4.186  # j/dC
     Ice = 2.093  # j/dC
     # Water = 4186  # j/dC
     # Ice = 2093  # j/dC
-    Zero = 0
+    Zero = 0.0
 
 
 class Conductivity:
@@ -42,3 +41,7 @@ class Conductivity:
 class Density:
     Water = 997.0
     Ice = 400.0
+
+class LatenHeat:
+    Water = 334.4
+    Ice = 0.0

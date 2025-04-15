@@ -54,7 +54,7 @@ class PoissonDiskSampler:
         x, y = self._position_to_index(base_point)
         _min = (ti.max(0, x - 2), ti.min(self.n_grid, x + 3))  # pyright: ignore
         _max = (ti.max(0, y - 2), ti.min(self.n_grid, y + 3))  # pyright: ignore
-        distance_min = ti.sqrt(2) # Maximum possible distance
+        distance_min = ti.sqrt(2)  # Maximum possible distance
         # Search in a 3x3 grid neighborhood around the position
         for i, j in ti.ndrange(_min, _max):
             if (index := self.background_grid[i, j]) != -1:
@@ -169,8 +169,7 @@ def main() -> None:
         3 * n_samples,
         Rectangle(
             phase=Phase.Ice,
-            width=0.2,
-            height=0.2,
+            size=(0.2, 0.2),
             velocity=(0, 0),
             lower_left=(0.15, 0.15),
         ),
@@ -190,8 +189,7 @@ def main() -> None:
         n_samples,
         Rectangle(
             phase=Phase.Ice,
-            width=0.2,
-            height=0.2,
+            size=(0.2, 0.2),
             velocity=(0, 0),
             lower_left=(0.65, 0.15),
         ),
