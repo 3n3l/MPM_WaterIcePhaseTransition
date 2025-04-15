@@ -74,7 +74,13 @@ class Rectangle(Geometry):
         self.b_bound = self.y
         self.r_bound = self.x + self.width
         self.t_bound = self.y + self.height
-        self.center = [self.l_bound + 0.5 * self.r_bound, self.b_bound + 0.5 * self.t_bound]
+        # print()
+        # print(self.l_bound)
+        # print(self.b_bound)
+        # print(self.r_bound)
+        # print(self.t_bound)
+        self.center = [self.x + 0.5 * self.width, self.y + 0.5 * self.height]
+        # print(self.center)
 
     @ti.func
     def in_bounds(self, x: float, y: float) -> bool:

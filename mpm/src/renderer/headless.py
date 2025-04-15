@@ -59,6 +59,7 @@ class HeadlessRenderer:
         #     configuration.build()
 
         # Load the initial configuration and reset the solver to this configuration.
+        self.geometry_index = 0
         self.configuration_id = 0
         self.configurations = configurations
         self.configuration = configurations[self.configuration_id]
@@ -76,61 +77,21 @@ class HeadlessRenderer:
         while self.solver.current_frame[None] < self.max_frames:
             self.substep()
 
-    # @ti.kernel
-    # def add_geometry(self, geometry: ti.template()):  # pyright: ignore
-    def add_geometry(self, geometry: Geometry) -> None:
-        # Idea: Compute background grid from all particle positions,
-        #       then to the PDS. This way even geometries that are added
-        #       later on won't clash with each other
-
-        # TODO: think about which parameters can be moved here from the solver
-        # n_particles = self.solver.n_particles[None]
-        self.sampler.sample(10_000, geometry)
-
-        # TODO: geometry.n_particles is not known here
-        # for p in ti.ndrange(n_particles, n_particles + geometry.n_particles):
-        #     # Apply properties from the geometry.
-        #     self.solver.conductivity_p[p] = geometry.conductivity
-        #     self.solver.temperature_p[p] = geometry.temperature
-        #     self.solver.capacity_p[p] = geometry.capacity
-        #     self.solver.velocity_p[p] = geometry.velocity
-        #     self.solver.color_p[p] = geometry.color
-        #     self.solver.phase_p[p] = geometry.phase
-        #     self.solver.heat_p[p] = geometry.heat
-        #
-        #     # Reset properties.
-        #     self.solver.mass_p[p] = self.solver.particle_vol * self.solver.rho_0
-        #     self.solver.inv_lambda_p[p] = 1 / self.solver.lambda_0[None]
-        #     self.solver.FE_p[p] = ti.Matrix([[1, 0], [0, 1]])
-        #     self.solver.C_p[p] = ti.Matrix.zero(float, 2, 2)
-        #     # self.solver.position_p[p] = [0.5, 0.5]  # TODO: calculate position with PDS
-        #     self.solver.JE_p[p] = 1
-        #     self.solver.JP_p[p] = 1
-        #     # FIXME: these are all unused now and can be deleted
-        #     # self.solver.activation_threshold_p[p] = configuration.activation_threshold_p[p]
-        #     # self.solver.activation_state_p[p] = configuration.state_p[p]
-        #     # offset_position = configuration.position_p[p] + self.solver.boundary_offset
-        #     # p_is_active = configuration.state_p[p] == State.Active
-        #     # self.solver.active_position_p[p] = offset_position if p_is_active else [0, 0]
-        #
-        # self.solver.n_particles[None] += geometry.n_particles
-
     def substep(self) -> None:
         # TODO: move current_frame to this class
         self.solver.current_frame[None] += 1
 
         # TODO: check against frame thresholds, add geometry if necessary
         # Load all the subsequent geometries into solver, once the frame threshold is reached:
-        # if len(self.configuration.subsequent_geometries) > 0:
-        #     current_frame = self.solver.current_frame[None]
-        #     frame_threshold = self.configuration.subsequent_geometries[0].frame_threshold
-        #     # TODO: this only loads one geometry at the moment,
-        #     #       but there could be more with the same frame
-        #     if current_frame == frame_threshold:
-        #         # TODO: the popping ruins the list in the configuration?
-        #         #       So copy it first? Or don't pop?
-        #         geometry = self.configuration.subsequent_geometries.pop()
-        #         self.add_geometry(geometry)
+        if self.geometry_index < len(self.configuration.subsequent_geometries):
+            current_frame = self.solver.current_frame[None]
+            geometry = self.configuration.subsequent_geometries[self.geometry_index]
+            # TODO: this only loads one geometry at the moment,
+            #       but there could be more with the same frame
+            if current_frame == geometry.frame_threshold:
+                self.sampler.add_to_running(10, geometry)
+                # self.sampler.sample(10_000, geometry)
+                self.geometry_index += 1
 
         for _ in range(int(2e-3 // self.solver.dt)):
             self.solver.reset_grids()
@@ -170,10 +131,16 @@ class HeadlessRenderer:
             # TODO: don't pop on the configuration list
         # geometry = self.configuration.initial_geometries.pop()
         self.reset_solver(self.configuration)
-        self.solver.n_particles[None] = 0
-        self.sampler.sample_count[None] = 0
-        geometry = self.configuration.initial_geometries[0]
-        self.add_geometry(geometry)
+        # self.solver.n_particles[None] = 0
+        # self.sampler.sample_count[None] = 0
+        self.sampler.reset()
+        self.geometry_index = 0
+        # print("???", self.solver.n_particles[None])
+        # print("???", self.sampler.sample_count[None])
+        for geometry in self.configuration.initial_geometries:
+            self.sampler.sample(10_000, geometry)
+        # print("???", self.solver.n_particles[None])
+        # print("???", self.sampler.sample_count[None])
 
     @ti.kernel
     def reset_solver(self, configuration: ti.template()):  # pyright: ignore
@@ -185,32 +152,6 @@ class HeadlessRenderer:
         """
         self.solver.current_frame[None] = 0
         for p in self.solver.position_p:
-            # if p < configuration.n_particles:
-            #     particle_is_water = configuration.phase_p[p] == Phase.Water
-            #     self.solver.conductivity_p[p] = Conductivity.Water if particle_is_water else Conductivity.Ice
-            #     self.solver.capacity_p[p] = Capacity.Water if particle_is_water else Capacity.Ice
-            #     self.solver.color_p[p] = Color.Water if particle_is_water else Color.Ice
-            #     self.solver.heat_p[p] = LATENT_HEAT if particle_is_water else 0.0
-            #
-            #     self.solver.activation_threshold_p[p] = configuration.activation_threshold_p[p]
-            #     self.solver.temperature_p[p] = configuration.temperature_p[p]
-            #     self.solver.activation_state_p[p] = configuration.state_p[p]
-            #     self.solver.velocity_p[p] = configuration.velocity_p[p]
-            #     self.solver.phase_p[p] = configuration.phase_p[p]
-            #
-            #     offset_position = configuration.position_p[p] + self.solver.boundary_offset
-            #     p_is_active = configuration.state_p[p] == State.Active
-            #     self.solver.active_position_p[p] = offset_position if p_is_active else [0, 0]
-            #     self.solver.position_p[p] = offset_position
-            # else:
-            #     # TODO: this might be completely irrelevant, as only the first n_particles are used anyway?
-            #     #       So work can be saved by just ignoring all the other particles and iterating only
-            #     #       over the configuration.n_particles?
-
-            # TODO: As this is done in add geometry, this can probably go???
-            #       Because these properties are overwritten by a new geometry anyways?
-            #       So as long as the n_particles value is adjusted this should work?
-
             # Reset all properties.
             self.solver.activation_state_p[p] = State.Inactive
             self.solver.conductivity_p[p] = Conductivity.Zero

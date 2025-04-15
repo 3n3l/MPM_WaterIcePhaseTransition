@@ -122,7 +122,8 @@ class GGUI_Renderer(HeadlessRenderer):
         self.canvas.set_background_color(Color.Background)
         self.canvas.circles(
             per_vertex_color=self.solver.color_p,
-            centers=self.solver.active_position_p,
+            # centers=self.solver.active_position_p,
+            centers=self.solver.position_p,
             radius=0.0015,
         )
         if self.should_write_to_disk and not self.is_paused and not self.is_showing_settings:
@@ -135,6 +136,6 @@ class GGUI_Renderer(HeadlessRenderer):
             self.handle_events()
             self.show_settings()
             if not self.is_paused:
-                # self.substep()
-                self.solver.substep()
+                self.substep()
+                # self.solver.substep()
             self.render()

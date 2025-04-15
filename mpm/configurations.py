@@ -1,3 +1,4 @@
+from numpy._core.defchararray import center
 from src.configurations import Configuration
 from src.geometries import Circle, Rectangle
 from src.enums import Phase
@@ -136,28 +137,25 @@ configuration_list = [
     #     theta_s=5.0e-3,  # Critical stretch (7.5e-3)
     #     ambient_temperature=-500.0,
     # ),
-
-    # Configuration(
-    #     name="Simple Spout Source",
-    #     geometries=[
-    #         Rectangle(
-    #             phase=Phase.Water,
-    #             size=(0.05, 0.05),
-    #             velocity=(0, -2),
-    #             lower_left=(0.45, 0.85),
-    #             frame_threshold=i,
-    #             temperature=20.0,
-    #         )
-    #         for i in range(10, 500)
-    #     ],
-    #     E=1.4e5,  # Young's modulus (1.4e5)
-    #     nu=0.2,  # Poisson's ratio (0.2)
-    #     zeta=10,  # Hardening coefficient (10)
-    #     theta_c=2.5e-2,  # Critical compression (2.5e-2)
-    #     theta_s=5.0e-3,  # Critical stretch (7.5e-3)
-    #     ambient_temperature=20.0,
-    # ),
-
+    Configuration(
+        name="Simple Spout Source",
+        geometries=[
+            Rectangle(
+                phase=Phase.Water,
+                size=(0.04, 0.04),
+                velocity=(0, -2),
+                lower_left=(0.48, 0.48),
+                frame_threshold=i,
+                temperature=20.0,
+            ) for i in range(1, 200)
+        ],
+        E=1.4e5,  # Young's modulus (1.4e5)
+        nu=0.2,  # Poisson's ratio (0.2)
+        zeta=10,  # Hardening coefficient (10)
+        theta_c=2.5e-2,  # Critical compression (2.5e-2)
+        theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ambient_temperature=20.0,
+    ),
     # Configuration(
     #     name="Simple Blob Source",
     #     geometries=[
@@ -174,26 +172,26 @@ configuration_list = [
         name="Spherefall [Water]",
         geometries=[
             Circle(
-                center=(0.5, 0.5),
+                center=(0.5, 0.35),
                 velocity=(0, -2),
-                radius=0.1,
+                radius=0.08,
                 phase=Phase.Water,
-            ),
+            )
         ],
         E=1.4e5,  # Young's modulus (1.4e5)
         nu=0.2,  # Poisson's ratio (0.2)
         zeta=10,  # Hardening coefficient (10)
         theta_c=2.5e-2,  # Critical compression (2.5e-2)
         theta_s=5.0e-3,  # Critical stretch (7.5e-3)
-        ambient_temperature=-2000.0,
+        ambient_temperature=-20.0,
     ),
     Configuration(
         name="Spherefall [Ice]",
         geometries=[
             Circle(
-                center=(0.5, 0.5),
+                center=(0.5, 0.35),
                 velocity=(0, -2),
-                radius=0.1,
+                radius=0.08,
                 phase=Phase.Ice,
             ),
         ],

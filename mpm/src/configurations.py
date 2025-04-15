@@ -36,17 +36,17 @@ class Configuration:
 
         # TODO: build list of configurations that are added in the beginning (frame_threshold == 0)
         # TODO: build list of configurations that are added at a specific frame (frame_threshold > 0)
-        self.initial_geometries = geometries
-        # self.initial_geometries = []
-        # self.subsequent_geometries = []
-        # for geometry in geometries:
-        #     if geometry.frame_threshold == 0:
-        #         self.initial_geometries.append(geometry)
-        #     else:
-        #         self.subsequent_geometries.append(geometry)
-        #
-        # # Sort this by frame_threshold, so only the first element has to be checked against.
-        # self.subsequent_geometries.sort(key=(lambda g: g.frame_threshold))
+        # self.initial_geometries = geometries
+        self.initial_geometries = []
+        self.subsequent_geometries = []
+        for geometry in geometries:
+            if geometry.frame_threshold == 0:
+                self.initial_geometries.append(geometry)
+            else:
+                self.subsequent_geometries.append(geometry)
+
+        # Sort this by frame_threshold, so only the first element has to be checked against.
+        self.subsequent_geometries.sort(key=(lambda g: g.frame_threshold))
 
     # TODO: this can all go?
     #     # Properties.

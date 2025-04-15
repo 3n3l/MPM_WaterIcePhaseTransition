@@ -7,7 +7,7 @@ from src.mpm_solver import MPM_Solver
 
 @ti.data_oriented
 class PoissonDiskSampler:
-    def __init__(self, mpm_solver: MPM_Solver, r: float = 0.0025, k: int = 100) -> None:
+    def __init__(self, mpm_solver: MPM_Solver, r: float = 0.005, k: int = 100) -> None:
         # Get these from the mpm solver
         self.max_samples = mpm_solver.max_particles
         self.sample_count = mpm_solver.n_particles
@@ -20,7 +20,7 @@ class PoissonDiskSampler:
         self.dx = r / ti.sqrt(2)  # Cell size is bounded by this
         self.n_grid = int(1 / self.dx)  # Number of cells in the grid
 
-        # Initialize an n-dimension background grid fro storing samples.
+        # Initialize an n-dimension background grid to store samples.
         self.background_grid = ti.field(dtype=ti.i32, shape=(self.n_grid, self.n_grid))
 
         # Fill the grid, -1 indicates no sample, a non-negative integer gives
@@ -50,20 +50,27 @@ class PoissonDiskSampler:
         distance_min = ti.sqrt(2)  # Maximum possible distance
         # Search in a 3x3 grid neighborhood around the position
         for i, j in ti.ndrange(_min, _max):
+            # TODO: check all distances against < self.r, return immediately
             if (index := self.background_grid[i, j]) != -1:
                 # We found a point and can compute the distance:
                 found_point = self.samples_by_index[index]
                 distance = (found_point - base_point).norm()
                 if distance < distance_min:
                     distance_min = distance
+
+        return distance_min < self.r
         # TODO: why subtract 1e-6???
         return distance_min < self.r - 1e-6
 
     @ti.func
     def _some_condition_is_not_reached(self) -> bool:
         # TODO: give this a proper name
+        print("3", self.head[None] < self.tail[None])
+        print("4", self.head[None] <= ti.min(self.sample_count[None], self.max_samples))
+        print("5", self.head[None], self.tail[None], self.sample_count[None], self.max_samples)
         stuff = self.head[None] < self.tail[None]
-        stuff &= self.head[None] <= ti.min(self.sample_count[None], self.max_samples)
+        # stuff &= self.head[None] <= ti.min(self.sample_count[None], self.max_samples)
+        stuff &= self.head[None] <= self.max_samples
         return stuff
 
     @ti.func
@@ -84,20 +91,21 @@ class PoissonDiskSampler:
         self.solver.inv_lambda_p[p] = 1 / self.solver.lambda_0[None]
         self.solver.FE_p[p] = ti.Matrix([[1, 0], [0, 1]])
         self.solver.C_p[p] = ti.Matrix.zero(float, 2, 2)
+        self.solver.position_p[p] = position
         self.solver.JE_p[p] = 1
         self.solver.JP_p[p] = 1
 
-        # TODO:
-        self.solver.position_p[p] = position
-        self.solver.activation_state_p[p] = State.Active
-        # self.solver.active_position_p[index] = position
-        # self.solver.activation_threshold_p[index] = geometry.frame_threshold
+        # TODO: the activation fields can all go?
+        # self.solver.active_position_p[p] = position if geometry.frame_threshold > 0 else [0, 0]
+        self.solver.active_position_p[p] = position
         self.solver.activation_threshold_p[p] = 0
-        # self.solver.n_particles[None] += 1
+        self.solver.activation_state_p[p] = State.Active
 
     @ti.func
     def _sample_single_point(self, geometry: ti.template()) -> None:  # pyright: ignore
+        print("1, sample_count =", self.sample_count[None])
         while self._some_condition_is_not_reached():
+            print("2")
             prev_position = self.samples_by_index[self.head[None]]
             self.head[None] += 1
 
@@ -123,10 +131,8 @@ class PoissonDiskSampler:
                     self.sample_count[None] += 1
 
     @ti.kernel
-    # def reset(self) -> None:
     def reset(self):
         # Reset values for the new sample:
-        # self.max_samples[None] = desired_samples
         self.sample_count[None] = 1
         self.head[None] = 0
         self.tail[None] = 1
@@ -135,21 +141,48 @@ class PoissonDiskSampler:
         for i, j in self.background_grid:
             self.background_grid[i, j] = -1
 
-    def seed_from_running_simulation(self):
-        pass
+    @ti.kernel
+    def add_to_running(self, desired_samples: ti.i32, geometry: ti.template()):  # pyright: ignore
+        # Reset the background grid:
+        for i, j in self.background_grid:
+            self.background_grid[i, j] = -1
+        # TODO: rename this lol
+        # for p in self.position_p:
+        # for p in ti.ndrange(self.solver.n_particles[None]):
+        for p in ti.ndrange(self.sample_count[None]):
+            # print("HI")
+            position = self.position_p[p]
+            index = self._position_to_index(position)
+            self.background_grid[index] = p
+            # self.head[None] += 1
+            # self.tail[None] += 1
+
+        self.head[None] = self.sample_count[None]
+        self.tail[None] = self.sample_count[None] + 1
+        self.sample_count[None] += 1
+
+        # Start in the center of the geometry
+        initial_point = geometry.center
+        # initial_point = [geometry.x + 0.5 * geometry.width, geometry.y + geometry.height]
+        self.samples_by_index[self.tail[None]] = initial_point
+        index = self._position_to_index(initial_point)
+        self.background_grid[index] = self.tail[None]
+
+        for _ in ti.ndrange(desired_samples):
+            self._sample_single_point(geometry)
 
     @ti.kernel
     def sample(self, desired_samples: ti.i32, geometry: ti.template()):  # pyright: ignore
         # TODO: this needs some check if n_samples + desired_samples > max_samples
 
-        # Reset values for the new sample:
-        self.sample_count[None] = 1
-        self.head[None] = 0
-        self.tail[None] = 1
-
-        # Reset the background grid:
-        for i, j in self.background_grid:
-            self.background_grid[i, j] = -1
+        # # Reset values for the new sample:
+        # self.sample_count[None] = 1
+        # self.head[None] = 0
+        # self.tail[None] = 1
+        #
+        # # Reset the background grid:
+        # for i, j in self.background_grid:
+        #     self.background_grid[i, j] = -1
 
         # Start in the center of the geometry
         initial_point = geometry.center
