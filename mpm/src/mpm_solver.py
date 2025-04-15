@@ -1,12 +1,10 @@
-from src.enums import Capacity, Classification, Color, Conductivity, Density, Phase, State, Density
+from src.enums import Capacity, Classification, Color, Conductivity, Density, Phase, State, Density, LatenHeat
 from src.pressure_solver import PressureSolver
 from src.heat_solver import HeatSolver
 
 import taichi as ti
 
-WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
-ICE_CONDUCTIVITY = 2.33
-LATENT_HEAT = 334.4  # kJ/kg, L_p
+# TODO: move to configuration?
 GRAVITY = -9.81
 
 
@@ -16,6 +14,7 @@ class MPM_Solver:
         # MPM Parameters that are configuration independent
         self.n_particles = ti.field(dtype=ti.int32, shape=())
         self.current_frame = ti.field(dtype=ti.int32, shape=())
+        self.max_particles = max_particles
         self.n_grid = 128 * quality
         self.n_cells = self.n_grid * self.n_grid
         self.dx = 1 / self.n_grid
@@ -451,7 +450,7 @@ class MPM_Solver:
 
                 # If the heat buffer is full the particle changes its phase to water,
                 # everything is then reset according to the new phase.
-                if self.heat_p[p] > LATENT_HEAT:
+                if self.heat_p[p] > LatenHeat.Water:
                     # TODO: Lame parameters for each phase, something like:
                     # E = 3 * 1e-4
                     # nu = 0.45
@@ -463,7 +462,7 @@ class MPM_Solver:
                     self.temperature_p[p] = 0.0
                     self.phase_p[p] = Phase.Water
                     self.mass_p[p] = self.particle_vol * Density.Water
-                    self.heat_p[p] = LATENT_HEAT
+                    self.heat_p[p] = LatenHeat.Water
 
             elif (self.phase_p[p] == Phase.Water) and (nt < 0):
                 # Water particle reached the freezing point, additional temperature change is added to heat buffer.
@@ -471,7 +470,7 @@ class MPM_Solver:
 
                 # If the heat buffer is empty the particle changes its phase to ice,
                 # everything is then reset according to the new phase.
-                if self.heat_p[p] < 0:
+                if self.heat_p[p] < LatenHeat.Ice:
                     # TODO: Lame parameters for each phase, something like:
                     # E = 7 * 1e-4
                     # nu = 0.3
@@ -483,7 +482,7 @@ class MPM_Solver:
                     self.temperature_p[p] = 0.0
                     self.phase_p[p] = Phase.Ice
                     self.mass_p[p] = self.particle_vol * Density.Ice
-                    self.heat_p[p] = 0.0
+                    self.heat_p[p] = LatenHeat.Ice
 
             else:
                 # Freely change temperature according to heat equation.
@@ -493,6 +492,7 @@ class MPM_Solver:
             # only pushing the position into p_active_position will draw this particle.
             self.active_position_p[p] = self.position_p[p]
 
+    # TODO: this can go
     def substep(self) -> None:
         self.current_frame[None] += 1
         for _ in range(int(2e-3 // self.dt)):

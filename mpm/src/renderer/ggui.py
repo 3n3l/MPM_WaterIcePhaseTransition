@@ -48,7 +48,7 @@ class GGUI_Renderer(HeadlessRenderer):
             self.configuration = self.configurations[_id]
             self.is_paused = True
             self.load_configuration(self.configuration)
-            self.reset_solver(self.configuration)
+            # self.reset_solver(self.configuration)
 
     def show_parameters(self, subwindow) -> None:
         """
@@ -109,6 +109,7 @@ class GGUI_Renderer(HeadlessRenderer):
         if self.window.get_event(ti.ui.PRESS):
             if self.window.event.key == "r":
                 self.reset_solver(self.configuration)
+                self.load_configuration(self.configuration) # TODO: aaaa
             elif self.window.event.key in [ti.GUI.BACKSPACE, "s"]:
                 self.should_write_to_disk = not self.should_write_to_disk
             elif self.window.event.key in [ti.GUI.SPACE, "p"]:
@@ -134,5 +135,6 @@ class GGUI_Renderer(HeadlessRenderer):
             self.handle_events()
             self.show_settings()
             if not self.is_paused:
+                # self.substep()
                 self.solver.substep()
             self.render()

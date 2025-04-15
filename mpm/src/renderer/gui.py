@@ -51,5 +51,5 @@ class GUI_Renderer(HeadlessRenderer):
                 elif self.gui.event.key in [ti.GUI.ESCAPE, ti.GUI.EXIT]:  # pyright: ignore
                     break
             if not self.is_paused:
-                self.solver.substep()
+                self.substep()
             self.render()
