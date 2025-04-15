@@ -36,7 +36,7 @@ class TestRenderer(HeadlessRenderer):
 
     def run(self) -> None:
         for i in range(1, 301):
-            self.solver.substep()
+            self.substep()
             prev_min = np.abs(np.min(self.divergence.to_numpy()))
             prev_max = np.abs(np.max(self.divergence.to_numpy()))
             self.compute_divergence(self.divergence)
@@ -63,7 +63,8 @@ class TestRenderer(HeadlessRenderer):
 
 
 def main() -> None:
-    max_particles = max([c.n_particles for c in configuration_list])
+    # max_particles = max([c.n_particles for c in configuration_list])
+    max_particles = 1_000_000
     solver = MPM_Solver(quality=1, max_particles=max_particles)
     test_renderer = TestRenderer(
         configurations=configuration_list,
