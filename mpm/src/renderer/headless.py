@@ -2,6 +2,7 @@ from src.configurations import Configuration
 from src.sampling import PoissonDiskSampler
 from src.mpm_solver import MPM_Solver
 from datetime import datetime
+from src.enums import State
 
 import taichi as ti
 import os
@@ -109,9 +110,14 @@ class HeadlessRenderer:
         # self.sampler.reset()
         # self.solver.reset()
 
-        # FIXME: something needs to be reset, undoing the particle state cause problems, 
-        #        even though we only iterate over n_particles???????????
-        self.solver.position_p.fill([-222, -222])
+        # TODO: clean this up, maybe move to solver?
+        # This resets the mpm solver:
+        # Hidden particles are ignored in the solver, seeding
+        # a particle will set the state 
+        self.solver.state_p.fill(State.Hidden)
+        # NOTE: setting this to something outside the simulation
+        #       improves FPS and hides these particles
+        self.solver.position_p.fill([42, 42])
 
         self.subsequent_geometries = self.configuration.subsequent_geometries.copy()
 

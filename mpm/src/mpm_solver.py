@@ -1,4 +1,4 @@
-from src.enums import Capacity, Classification, Color, Conductivity, Density, Phase, Density, LatenHeat
+from src.enums import Capacity, Classification, Color, Conductivity, Density, Phase, Density, LatenHeat, State
 from src.pressure_solver import PressureSolver
 from src.heat_solver import HeatSolver
 
@@ -65,6 +65,7 @@ class MPM_Solver:
         self.velocity_p = ti.Vector.field(2, dtype=float, shape=max_particles)
         self.capacity_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.color_p = ti.Vector.field(3, dtype=float, shape=max_particles)
+        self.state_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.phase_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.mass_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.FE_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
@@ -117,6 +118,10 @@ class MPM_Solver:
     @ti.kernel
     def particle_to_grid(self):
         for p in ti.ndrange(self.n_particles[None]):
+            # We ignore uninitialized particles:
+            if self.state_p[p] != State.Initialized:
+                continue
+
             # Deformation gradient update.
             self.FE_p[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
 
@@ -367,6 +372,10 @@ class MPM_Solver:
     @ti.kernel
     def grid_to_particle(self):
         for p in ti.ndrange(self.n_particles[None]):
+            # We ignore uninitialized particles:
+            if self.state_p[p] != State.Initialized:
+                continue
+
             # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
             c_stagger = ti.Vector([0.5, 0.5])
             x_stagger = ti.Vector([0.5, 1.0])

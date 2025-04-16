@@ -42,3 +42,7 @@ class Density:
 class LatenHeat:
     Water = 334.4
     Ice = 0.0
+
+class State:
+    Initialized = 42
+    Hidden = 24
