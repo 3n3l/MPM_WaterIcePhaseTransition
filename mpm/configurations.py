@@ -27,21 +27,35 @@ configuration_list = [
     #     theta_s=5.0e-3,  # Critical stretch (7.5e-3)
     #     ambient_temperature=-5000.0,
     # ),
-    # Configuration(
-    #     name="Waterspout Hits Body of Water",
-    #     geometries=[
-    #         # TODO: width is set with boundary_offset in mind, change this to absolute values,
-    #         #       or even find a cleaner solution for this?
-    #         Rectangle(Phase.Water, 0.9375, 0.05, 5_000, (0, 0), (0, 0), 0, 20.0),
-    #         *[Rectangle(Phase.Water, 0.08, 0.04, 50, (0, -2), (0.45, 0.45), i, 20.0) for i in range(10, 300)],
-    #     ],
-    #     E=1e4,  # Young's modulus (1.4e5)
-    #     nu=0.49,  # Poisson's ratio (0.2)
-    #     zeta=10,  # Hardening coefficient (10)
-    #     theta_c=2.5e-2,  # Critical compression (2.5e-2)
-    #     theta_s=5.0e-3,  # Critical stretch (7.5e-3)
-    #     ambient_temperature=20.0,
-    # ),
+    Configuration(
+        name="Waterspout Hits Pool [Water]",
+        geometries=[
+            Rectangle(
+                lower_left=(0.0, 0.0),
+                phase=Phase.Water,
+                temperature=20.0,
+                size=(1.0, 0.1),
+                velocity=(0, 0),
+            ),
+            *[
+                Rectangle(
+                    phase=Phase.Water,
+                    size=(0.04, 0.04),
+                    velocity=(0, -3),
+                    lower_left=(0.48, 0.48),
+                    frame_threshold=i,
+                    temperature=20.0,
+                )
+                for i in range(1, 200)
+            ],
+        ],
+        E=5e5,  # Young's modulus (1.4e5)
+        nu=0.45,  # Poisson's ratio (0.2)
+        zeta=10,  # Hardening coefficient (10)
+        theta_c=2.5e-2,  # Critical compression (2.5e-2)
+        theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ambient_temperature=20.0,
+    ),
     # Configuration(
     #     name="Waterspout Hits Ice Cube",
     #     geometries=[
@@ -70,33 +84,24 @@ configuration_list = [
     #     theta_s=7.5e-3,  # Critical stretch (7.5e-3)
     #     ambient_temperature=20.0,
     # ),
-    # Configuration(
-    #     name="Stationary Pool of Water",
-    #     geometries=[
-    #         # TODO: width is set with boundary_offset in mind, change this to absolute values,
-    #         #       or even find a cleaner solution for this?
-    #         # Rectangle(
-    #         #     phase=Phase.Water,
-    #         #     size=(0.95, 0.05),
-    #         #     lower_left=(0.3, 0.3),
-    #         #     velocity=(0, 0),
-    #         #     temperature=20.0,
-    #         # ),
-    #         Rectangle(
-    #             phase=Phase.Water,
-    #             size=(0.2, 0.2),
-    #             lower_left=(0.15, 0.15),
-    #             velocity=(0, 0),
-    #             temperature=20.0,
-    #         ),
-    #     ],
-    #     E=1e4,  # Young's modulus (1.4e5)
-    #     nu=0.49,  # Poisson's ratio (0.2)
-    #     zeta=10,  # Hardening coefficient (10)
-    #     theta_c=2.5e-2,  # Critical compression (2.5e-2)
-    #     theta_s=5.0e-3,  # Critical stretch (7.5e-3)
-    #     ambient_temperature=20.0,
-    # ),
+    Configuration(
+        name="Stationary Pool [Water]",
+        geometries=[
+            Rectangle(
+                lower_left=(0.0, 0.0),
+                phase=Phase.Water,
+                temperature=20.0,
+                size=(1.0, 0.15),
+                velocity=(0, 0),
+            ),
+        ],
+        E=5e5,  # Young's modulus (1.4e5)
+        nu=0.45,  # Poisson's ratio (0.2)
+        zeta=10,  # Hardening coefficient (10)
+        theta_c=2.5e-2,  # Critical compression (2.5e-2)
+        theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ambient_temperature=20.0,
+    ),
     # Configuration(
     #     name="Dropping Ice Cubes Into Body of Water",
     #     geometries=[
@@ -136,7 +141,6 @@ configuration_list = [
     #     theta_s=5.0e-3,  # Critical stretch (7.5e-3)
     #     ambient_temperature=-500.0,
     # ),
-
     Configuration(
         name="Simple Spout Source",
         geometries=[
@@ -147,7 +151,8 @@ configuration_list = [
                 lower_left=(0.48, 0.48),
                 frame_threshold=i,
                 temperature=20.0,
-            ) for i in range(1, 200)
+            )
+            for i in range(1, 200)
         ],
         E=5.5e5,  # Young's modulus (1.4e5)
         nu=0.45,  # Poisson's ratio (0.2)
@@ -156,7 +161,6 @@ configuration_list = [
         theta_s=5.0e-3,  # Critical stretch (7.5e-3)
         ambient_temperature=20.0,
     ),
-
     # Configuration(
     #     name="Simple Blob Source",
     #     geometries=[

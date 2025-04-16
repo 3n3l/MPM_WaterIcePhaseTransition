@@ -23,14 +23,11 @@ class MPM_Solver:
         self.particle_vol = (self.dx * 0.5) ** 2
         self.n_dimensions = 2
 
-        # The width of the simulation boundary in grid nodes.
-        self.boundary_width = 4  # TODO: this can be 3 again?
-
-        # Offset to correct coordinates such that the origin lies within the boundary,
-        # added to each position vector when loading a new configuration.
-        # TODO: shouldn't this just be self.boundary_width * self.dx?
-        # TODO: use this to define bounding box, PDS will use this to not sample outside simulation
-        self.boundary_offset = 1 - ((self.n_grid - self.boundary_width) * self.dx)
+        # The width of the simulation boundary in grid nodes and offsets to
+        # guarantee that seeded particles always lie within the boundary:
+        self.boundary_width = 3
+        self.lower = self.boundary_width * self.dx
+        self.upper = 1 - self.lower
 
         # Properties on MAC-faces.
         self.classification_x = ti.field(dtype=int, shape=(self.n_grid + 1, self.n_grid))
@@ -90,6 +87,10 @@ class MPM_Solver:
         # Poisson solvers for pressure and heat.
         self.pressure_solver = PressureSolver(self, should_use_direct_solver)
         self.heat_solver = HeatSolver(self, should_use_direct_solver)
+
+    @ti.func
+    def in_bounds(self, x: float, y: float) -> bool:
+        return self.lower < x < self.upper and self.lower < y < self.upper
 
     @ti.kernel
     def reset_grids(self):

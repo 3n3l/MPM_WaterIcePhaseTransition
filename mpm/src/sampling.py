@@ -50,14 +50,6 @@ class PoissonDiskSampler:
         return ti.cast(position * self.n_grid, ti.i32)  # pyright: ignore
 
     @ti.func
-    def _in_bounds(self, position: ti.template(), geometry: ti.template()) -> bool:  # pyright: ignore
-        # TODO: check for simulation bounds w.r.t boundary instead of 0, 1
-        # point_has_been_found &= self.solver.in_bounds(next_x, next_y)  # in simulation bounds
-        in_bounds = 0 <= position[0] < 1 and 0 <= position[1] < 1  # in simulation bounds
-        in_bounds &= geometry.in_bounds(position[0], position[1])  # in geometry bounds
-        return in_bounds
-
-    @ti.func
     def _has_collision(self, base_point: ti.template()) -> bool:  # pyright: ignore
         x, y = self._position_to_index(base_point)
         _min = (ti.max(0, x - 2), ti.min(self.n_grid, x + 3))  # pyright: ignore
@@ -78,8 +70,20 @@ class PoissonDiskSampler:
         return distance_min < self.r
 
     @ti.func
+    def _in_bounds(self, position: ti.template(), geometry: ti.template()) -> bool:  # pyright: ignore
+        in_bounds = self.solver.in_bounds(position[0], position[1])  # in simulation bounds
+        in_bounds &= geometry.in_bounds(position[0], position[1])  # in geometry bounds
+        return in_bounds
+
+    @ti.func
+    def _point_has_been_found(self, position: ti.template(), geometry: ti.template()) -> bool:  # pyright: ignore
+        point_has_been_found = not self._has_collision(position)  # no collision
+        point_has_been_found &= self._in_bounds(position, geometry)  # in bounds
+        return point_has_been_found
+
+    @ti.func
     def _could_sample_more_points(self) -> bool:
-        return (self.head[None] < self.tail[None]) and (self.head[None] <= self.solver.max_particles)
+        return (self.head[None] < self.tail[None]) and (self.head[None] < self.solver.max_particles)
 
     @ti.func
     def _generate_point(self, prev_position: ti.template()) -> ti.Vector:  # pyright: ignore
@@ -97,9 +101,7 @@ class PoissonDiskSampler:
             for _ in range(self.k):
                 next_position = self._generate_point(prev_position)
                 next_index = self._position_to_index(next_position)
-                point_has_been_found = not self._has_collision(next_position)  # no collision
-                point_has_been_found &= self._in_bounds(next_position, geometry)
-                if point_has_been_found:
+                if self._point_has_been_found(next_position, geometry):
                     self.background_grid[next_index] = self.tail[None]
                     self._seed_particle(next_position, geometry)
                     self.tail[None] += 1  # Increment when point is found
@@ -127,8 +129,8 @@ class PoissonDiskSampler:
 
         # Find a good initial point for this sample run:
         initial_point = geometry.random_seed()
-        n_samples = 0 # otherwise this might not halt
-        while self._has_collision(initial_point) and n_samples < self.k:
+        n_samples = 0  # otherwise this might not halt
+        while not self._point_has_been_found(initial_point, geometry) and n_samples < self.k:
             initial_point = geometry.random_seed()
             n_samples += 1
 
