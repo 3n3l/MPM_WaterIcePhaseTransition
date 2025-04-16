@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from src.configurations import Configuration
 from src.sampling import PoissonDiskSampler
 from src.mpm_solver import MPM_Solver
@@ -42,7 +43,7 @@ class HeadlessRenderer:
         self.solver = solver
 
         # Poisson disk sampling.
-        # TODO: pass as parameter
+        # TODO: pass as parameter?
         self.sampler = PoissonDiskSampler(mpm_solver=self.solver)
 
         # Load the initial configuration and reset the solver to this configuration.
@@ -51,24 +52,22 @@ class HeadlessRenderer:
         self.configurations = configurations
         self.load_configuration(configurations[self.configuration_id])
 
-    # TODO: just dump frames here?
+    @abstractmethod
     def render(self) -> None:
         pass
 
-    # TODO: this should be substep?
+    @abstractmethod
     def run(self) -> None:
-        while self.solver.current_frame[None] < self.max_frames:
-            self.substep()
+        pass
 
     def substep(self) -> None:
-        # TODO: move current frame to this class
-        self.solver.current_frame[None] += 1
+        self.current_frame += 1
 
         # Load all remaining geometries with a satisfied frame threshold:
         if len(self.subsequent_geometries) > 0:
-            if self.solver.current_frame[None] == self.subsequent_geometries[0].frame_threshold:
+            if self.current_frame == self.subsequent_geometries[0].frame_threshold:
                 geometry = self.subsequent_geometries.pop(0)
-                self.sampler.sample_geometry(1000, geometry)
+                self.sampler.sample_geometry(geometry)
 
         for _ in range(int(2e-3 // self.solver.dt)):
             self.solver.reset_grids()
@@ -87,8 +86,6 @@ class HeadlessRenderer:
         Parameters:
             configuration: Configuration
         """
-        self.configuration = configuration
-
         self.solver.ambient_temperature[None] = configuration.ambient_temperature
         self.solver.lambda_0[None] = configuration.lambda_0
         self.solver.theta_c[None] = configuration.theta_c
@@ -97,34 +94,24 @@ class HeadlessRenderer:
         self.solver.mu_0[None] = configuration.mu_0
         self.solver.nu[None] = configuration.nu
         self.solver.E[None] = configuration.E
-
+        self.configuration = configuration
         self.reset()
 
     def reset(self) -> None:
         """Reset the simulation."""
-        # TODO: this should be here?
-        self.solver.current_frame[None] = 0
-        self.solver.n_particles[None] = 0
-        # self.current_frame = 0
 
-        # self.sampler.reset()
-        # self.solver.reset()
-
-        # TODO: clean this up, maybe move to solver?
-        # This resets the mpm solver:
-        # Hidden particles are ignored in the solver, seeding
-        # a particle will set the state 
+        # Reset the MPM solver:
         self.solver.state_p.fill(State.Hidden)
-        # NOTE: setting this to something outside the simulation
-        #       improves FPS and hides these particles
         self.solver.position_p.fill([42, 42])
-        # self.solver.position_p.fill([0.48, 0.48])
+        self.solver.n_particles[None] = 0
+        self.current_frame = 0
 
+        # We copy this, so we can pop from this list and check the length:
         self.subsequent_geometries = self.configuration.subsequent_geometries.copy()
 
         # Load all the initial geometries into the solver:
         for geometry in self.configuration.initial_geometries:
-            self.sampler.sample_geometry(10_000, geometry)
+            self.sampler.sample_geometry(geometry)
 
     def dump_frames(self) -> None:
         """Creates an output directory, a VideoManager in this directory and then dumps frames to this directory."""

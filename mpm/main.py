@@ -75,7 +75,6 @@ def main():
 
     # Initialize Taichi on the chosen architecture:
     if args.arch.lower() == "cpu":
-        # ti.init(arch=ti.cpu, debug=args.debug, cpu_max_num_threads=1)
         ti.init(arch=ti.cpu, debug=args.debug)
     elif args.arch.lower() == "gpu":
         ti.init(arch=ti.gpu, debug=args.debug)
@@ -85,7 +84,7 @@ def main():
     solver = MPM_Solver(
         quality=args.quality,
         # max_particles=max([c.n_particles for c in configuration_list]),
-        max_particles=1_000_000, # TODO: there might be a way to set this again?
+        max_particles=10_000,  # TODO: there might be a way to set this again?
         should_use_direct_solver=(args.solverType.lower() == "direct"),
     )
 

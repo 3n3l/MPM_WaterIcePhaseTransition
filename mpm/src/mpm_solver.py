@@ -13,7 +13,6 @@ class MPM_Solver:
     def __init__(self, quality: int, max_particles: int, should_use_direct_solver: bool = True):
         # MPM Parameters that are configuration independent
         self.n_particles = ti.field(dtype=ti.int32, shape=())
-        self.current_frame = ti.field(dtype=ti.int32, shape=())
         self.max_particles = max_particles
         self.n_grid = 128 * quality
         self.n_cells = self.n_grid * self.n_grid
