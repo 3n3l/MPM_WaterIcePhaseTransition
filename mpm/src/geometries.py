@@ -26,8 +26,11 @@ class Geometry(ABC):
         self.center: list  # x, y coordinates of the center, used as initial sample
 
     @abstractmethod
-    # TODO: this might better be a ti.field for performance?
     def in_bounds(self, x: float, y: float) -> bool:
+        pass
+
+    @abstractmethod
+    def random_seed(self) -> ti.Vector:
         pass
 
 
@@ -46,13 +49,21 @@ class Circle(Geometry):
         self.center = list(center)
         self.x = center[0]
         self.y = center[1]
-        self.height = radius # for convenience while sampling
+        self.height = radius  # for convenience while sampling
         self.radius = radius
         self.squared_radius = radius * radius
 
     @ti.func
     def in_bounds(self, x: float, y: float) -> bool:
         return (self.x - x) ** 2 + (self.y - y) ** 2 <= self.squared_radius
+
+    @ti.func
+    def random_seed(self) -> ti.Vector:
+        r = self.radius * ti.math.sqrt(ti.random())
+        t = 2 * ti.math.pi * ti.random()
+        x = (r * ti.sin(t)) + self.x
+        y = (r * ti.cos(t)) + self.y
+        return ti.Vector([x, y])
 
 
 class Rectangle(Geometry):
@@ -75,14 +86,14 @@ class Rectangle(Geometry):
         self.b_bound = self.y
         self.r_bound = self.x + self.width
         self.t_bound = self.y + self.height
-        # print()
-        # print(self.l_bound)
-        # print(self.b_bound)
-        # print(self.r_bound)
-        # print(self.t_bound)
         self.center = [self.x + 0.5 * self.width, self.y + 0.5 * self.height]
-        # print(self.center)
 
     @ti.func
     def in_bounds(self, x: float, y: float) -> bool:
         return self.l_bound <= x <= self.r_bound and self.b_bound <= y <= self.t_bound
+
+    @ti.func
+    def random_seed(self) -> ti.Vector:
+        x = self.x + ti.random() * self.width
+        y = self.y + ti.random() * self.height
+        return ti.Vector([x, y])

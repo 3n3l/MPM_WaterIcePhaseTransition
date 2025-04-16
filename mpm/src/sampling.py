@@ -50,6 +50,14 @@ class PoissonDiskSampler:
         return ti.cast(position * self.n_grid, ti.i32)  # pyright: ignore
 
     @ti.func
+    def _in_bounds(self, position: ti.template(), geometry: ti.template()) -> bool:  # pyright: ignore
+        # TODO: check for simulation bounds w.r.t boundary instead of 0, 1
+        # point_has_been_found &= self.solver.in_bounds(next_x, next_y)  # in simulation bounds
+        in_bounds = 0 <= position[0] < 1 and 0 <= position[1] < 1  # in simulation bounds
+        in_bounds &= geometry.in_bounds(position[0], position[1])  # in geometry bounds
+        return in_bounds
+
+    @ti.func
     def _has_collision(self, base_point: ti.template()) -> bool:  # pyright: ignore
         x, y = self._position_to_index(base_point)
         _min = (ti.max(0, x - 2), ti.min(self.n_grid, x + 3))  # pyright: ignore
@@ -74,28 +82,27 @@ class PoissonDiskSampler:
         return (self.head[None] < self.tail[None]) and (self.head[None] <= self.solver.max_particles)
 
     @ti.func
+    def _generate_point(self, prev_position: ti.template()) -> ti.Vector:  # pyright: ignore
+        theta = ti.random() * 2 * ti.math.pi
+        offset = ti.Vector([ti.cos(theta), ti.sin(theta)])
+        offset *= (1 + ti.random()) * self.r
+        return prev_position + offset
+
+    @ti.func
     def _sample_single_point(self, geometry: ti.template()):  # pyright: ignore
         while self._could_sample_more_points():
             prev_position = self.solver.position_p[self.head[None]]
-            self.head[None] += 1
+            self.head[None] += 1  # Increment on each iteration
 
             for _ in range(self.k):
-                theta = ti.random() * 2 * ti.math.pi
-                offset = ti.Vector([ti.cos(theta), ti.sin(theta)])
-                offset *= (1 + ti.random()) * self.r
-                next_position = prev_position + offset
+                next_position = self._generate_point(prev_position)
                 next_index = self._position_to_index(next_position)
-                next_x, next_y = next_position[0], next_position[1]  # pyright: ignore
-
                 point_has_been_found = not self._has_collision(next_position)  # no collision
-                # TODO: check for simulation bounds instead of 0, 1
-                point_has_been_found &= 0 <= next_x < 1 and 0 <= next_y < 1  # in simulation bounds
-                # point_has_been_found &= self.solver.in_bounds(next_x, next_y)  # in simulation bounds
-                point_has_been_found &= geometry.in_bounds(next_x, next_y)  # in geometry bounds
+                point_has_been_found &= self._in_bounds(next_position, geometry)
                 if point_has_been_found:
                     self.background_grid[next_index] = self.tail[None]
                     self._seed_particle(next_position, geometry)
-                    self.tail[None] += 1
+                    self.tail[None] += 1  # Increment when point is found
 
     @ti.kernel
     def sample_geometry(self, geometry: ti.template()):  # pyright: ignore
@@ -118,13 +125,14 @@ class PoissonDiskSampler:
         self.head[None] = self.solver.n_particles[None]
         self.tail[None] = self.solver.n_particles[None] + 1
 
-        # Set the initial point for this sample to the center of the geometry.
-        # TODO: this can collide and should be looking for an empty spot?!
-        # TODO: a falling spout source is better off starting seeding at the top
-        # TODO: move this point to the geometry, as 'initial_seed' or something
-        initial_point = geometry.center + ti.math.vec2(0, 0.5 * geometry.height)
+        # Find a good initial point for this sample run:
+        initial_point = geometry.random_seed()
+        n_samples = 0 # otherwise this might not halt
+        while self._has_collision(initial_point) and n_samples < self.k:
+            initial_point = geometry.random_seed()
+            n_samples += 1
 
-        # self.solver.position_p[self.solver.n_particles[None]] = initial_point
+        # Set the initial point for this sample run:
         index = self._position_to_index(initial_point)
         self.background_grid[index] = self.solver.n_particles[None]
         self._seed_particle(initial_point, geometry)
