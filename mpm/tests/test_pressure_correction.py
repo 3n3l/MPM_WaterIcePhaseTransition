@@ -35,7 +35,7 @@ class TestRenderer(HeadlessRenderer):
                 div[i, j] += self.solver.velocity_y[i, j + 1] - self.solver.velocity_y[i, j]
 
     def run(self) -> None:
-        for i in range(1, 301):
+        for i in range(1, 501):
             self.substep()
             prev_min = np.abs(np.min(self.divergence.to_numpy()))
             prev_max = np.abs(np.max(self.divergence.to_numpy()))
@@ -77,7 +77,6 @@ def main() -> None:
     for configuration in configuration_list:
         print(f"NOW RUNNING: {configuration.name}")
         test_renderer.load_configuration(configuration)
-        test_renderer.reset_solver(configuration)
         test_renderer.run()
         if not test_renderer.we_succeeded:
             break

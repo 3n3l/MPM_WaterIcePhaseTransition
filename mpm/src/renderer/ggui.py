@@ -45,10 +45,9 @@ class GGUI_Renderer(HeadlessRenderer):
                 self.configuration_id = i
         if self.configuration_id != prev_configuration_id:
             _id = self.configuration_id
-            self.configuration = self.configurations[_id]
+            configuration = self.configurations[_id]
+            self.load_configuration(configuration)
             self.is_paused = True
-            self.load_configuration(self.configuration)
-            # self.reset_solver(self.configuration)
 
     def show_parameters(self, subwindow) -> None:
         """
@@ -65,7 +64,7 @@ class GGUI_Renderer(HeadlessRenderer):
         self.solver.theta_s[None] = subwindow.slider_float("theta_s", self.solver.theta_s[None], 1e-3, 10e-3)
         self.solver.zeta[None] = subwindow.slider_int("zeta", self.solver.zeta[None], 3, 20)
         self.solver.nu[None] = subwindow.slider_float("nu", self.solver.nu[None], 0.1, 0.4)
-        self.solver.E[None] = subwindow.slider_float("E", self.solver.E[None], 4.8e4, 2.8e5)
+        self.solver.E[None] = subwindow.slider_float("E", self.solver.E[None], 4.8e4, 5.5e5)
         E = self.solver.E[None]
         nu = self.solver.nu[None]
         self.solver.lambda_0[None] = E * nu / ((1 + nu) * (1 - 2 * nu))
@@ -86,7 +85,7 @@ class GGUI_Renderer(HeadlessRenderer):
             else:
                 self.create_video()
         if subwindow.button(" Reset Particles "):
-            self.reset_solver(self.configuration)
+            self.reset()
         if subwindow.button(" Start Simulation"):
             self.is_paused = False
 
@@ -108,8 +107,7 @@ class GGUI_Renderer(HeadlessRenderer):
         """Handle key presses arising from window events."""
         if self.window.get_event(ti.ui.PRESS):
             if self.window.event.key == "r":
-                self.reset_solver(self.configuration)
-                self.load_configuration(self.configuration) # TODO: aaaa
+                self.reset()
             elif self.window.event.key in [ti.GUI.BACKSPACE, "s"]:
                 self.should_write_to_disk = not self.should_write_to_disk
             elif self.window.event.key in [ti.GUI.SPACE, "p"]:

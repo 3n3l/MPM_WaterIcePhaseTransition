@@ -20,11 +20,6 @@ class Color:
     _Background = 0x171414
 
 
-class State:
-    Inactive = 77
-    Active = 88
-
-
 class Capacity:
     Water = 4.186  # j/dC
     Ice = 2.093  # j/dC
@@ -38,9 +33,11 @@ class Conductivity:
     Ice = 2.33
     Zero = 0
 
+
 class Density:
     Water = 997.0
     Ice = 400.0
+
 
 class LatenHeat:
     Water = 334.4

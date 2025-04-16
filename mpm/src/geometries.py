@@ -46,6 +46,7 @@ class Circle(Geometry):
         self.center = list(center)
         self.x = center[0]
         self.y = center[1]
+        self.height = radius # for convenience while sampling
         self.radius = radius
         self.squared_radius = radius * radius
 

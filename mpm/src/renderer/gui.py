@@ -45,7 +45,7 @@ class GUI_Renderer(HeadlessRenderer):
         while self.gui.running:
             if self.gui.get_event(ti.GUI.PRESS):
                 if self.gui.event.key == "r":  # pyright: ignore
-                    self.reset_solver(self.configuration)
+                    self.reset()
                 elif self.gui.event.key == ti.GUI.SPACE:  # pyright: ignore
                     self.is_paused = not self.is_paused
                 elif self.gui.event.key in [ti.GUI.ESCAPE, ti.GUI.EXIT]:  # pyright: ignore

@@ -1,11 +1,6 @@
-from src.enums import Conductivity, Phase, Color, State, Capacity
 from src.configurations import Configuration
 from src.sampling import PoissonDiskSampler
 from src.mpm_solver import MPM_Solver
-from src.geometries import Geometry
-
-# from src.geometries import Geometry
-
 from datetime import datetime
 
 import taichi as ti
@@ -46,31 +41,18 @@ class HeadlessRenderer:
         self.solver = solver
 
         # Poisson disk sampling.
+        # TODO: pass as parameter
         self.sampler = PoissonDiskSampler(mpm_solver=self.solver)
-        # self.sampler.reset()
-
-        # Properties for the Poisson Disk Sampling
-        self.n_grid = solver.n_grid
-        self.classification_c = ti.field(dtype=ti.int8, shape=(self.n_grid, self.n_grid))
-
-        # Build the Taichi fields.
-        # TODO: remove
-        # for configuration in configurations:
-        #     configuration.build()
 
         # Load the initial configuration and reset the solver to this configuration.
-        self.geometry_index = 0
+        self.current_frame = 0
         self.configuration_id = 0
         self.configurations = configurations
-        self.configuration = configurations[self.configuration_id]
-        self.load_configuration(self.configuration)
-        # self.reset_solver(self.configuration)
+        self.load_configuration(configurations[self.configuration_id])
 
     # TODO: just dump frames here?
     def render(self) -> None:
         pass
-        # if self.should_write_to_disk:
-        #     self.video_manager.write_frame(self.window.get_image_buffer_as_numpy())
 
     # TODO: this should be substep?
     def run(self) -> None:
@@ -78,20 +60,14 @@ class HeadlessRenderer:
             self.substep()
 
     def substep(self) -> None:
-        # TODO: move current_frame to this class
+        # TODO: move current frame to this class
         self.solver.current_frame[None] += 1
 
-        # TODO: check against frame thresholds, add geometry if necessary
-        # Load all the subsequent geometries into solver, once the frame threshold is reached:
-        if self.geometry_index < len(self.configuration.subsequent_geometries):
-            current_frame = self.solver.current_frame[None]
-            geometry = self.configuration.subsequent_geometries[self.geometry_index]
-            # TODO: this only loads one geometry at the moment,
-            #       but there could be more with the same frame
-            if current_frame == geometry.frame_threshold:
-                self.sampler.add_to_running(10, geometry)
-                # self.sampler.sample(10_000, geometry)
-                self.geometry_index += 1
+        # Load all remaining geometries with a satisfied frame threshold:
+        if len(self.subsequent_geometries) > 0:
+            if self.solver.current_frame[None] == self.subsequent_geometries[0].frame_threshold:
+                geometry = self.subsequent_geometries.pop(0)
+                self.sampler.sample_geometry(1000, geometry)
 
         for _ in range(int(2e-3 // self.solver.dt)):
             self.solver.reset_grids()
@@ -99,23 +75,20 @@ class HeadlessRenderer:
             self.solver.momentum_to_velocity()
             self.solver.classify_cells()
             self.solver.compute_volumes()
-            self.solver.pressure_solver.solve()
-            self.solver.heat_solver.solve()
+            # self.solver.pressure_solver.solve()
+            # self.solver.heat_solver.solve()
             self.solver.grid_to_particle()
 
-    # @ti.kernel
-    # @ti.func
-    def load_configuration(self, configuration: ti.template()):  # pyright: ignore
+    def load_configuration(self, configuration: Configuration) -> None:
         """
         Loads the chosen configuration into the MLS-MPM solver.
         ---
         Parameters:
             configuration: Configuration
         """
+        self.configuration = configuration
+
         self.solver.ambient_temperature[None] = configuration.ambient_temperature
-        # self.solver.n_particles[None] = configuration.n_particles
-        self.solver.stickiness[None] = configuration.stickiness
-        self.solver.friction[None] = configuration.friction
         self.solver.lambda_0[None] = configuration.lambda_0
         self.solver.theta_c[None] = configuration.theta_c
         self.solver.theta_s[None] = configuration.theta_s
@@ -124,62 +97,27 @@ class HeadlessRenderer:
         self.solver.nu[None] = configuration.nu
         self.solver.E[None] = configuration.E
 
-        # Load all the initial geometries into the solver:
-        # TODO: check against frame thresholds, add geometry if necessary
-        # TODO: this must be done after resetting? maybe in some other reset method?
-        # while len(self.configuration.initial_geometries) > 0:
-            # TODO: don't pop on the configuration list
-        # geometry = self.configuration.initial_geometries.pop()
-        self.reset_solver(self.configuration)
-        # self.solver.n_particles[None] = 0
-        # self.sampler.sample_count[None] = 0
-        self.sampler.reset()
-        self.geometry_index = 0
-        # print("???", self.solver.n_particles[None])
-        # print("???", self.sampler.sample_count[None])
-        for geometry in self.configuration.initial_geometries:
-            self.sampler.sample(10_000, geometry)
-        # print("???", self.solver.n_particles[None])
-        # print("???", self.sampler.sample_count[None])
+        self.reset()
 
-    @ti.kernel
-    def reset_solver(self, configuration: ti.template()):  # pyright: ignore
-        """
-        Resets the MLS-MPM solver to the field values of the configuration.
-        ---
-        Parameters:
-            configuration: Configuration
-        """
+    def reset(self) -> None:
+        """Reset the simulation."""
+        # TODO: this should be here?
         self.solver.current_frame[None] = 0
-        for p in self.solver.position_p:
-            # Reset all properties.
-            self.solver.activation_state_p[p] = State.Inactive
-            self.solver.conductivity_p[p] = Conductivity.Zero
-            self.solver.color_p[p] = Color.Background
-            self.solver.capacity_p[p] = Capacity.Zero
-            self.solver.activation_threshold_p[p] = 0
-            self.solver.phase_p[p] = Phase.Water
-            self.solver.active_position_p[p] = [0, 0]
-            self.solver.position_p[p] = [0, 0]
-            self.solver.velocity_p[p] = [0, 0]
-            self.solver.temperature_p[p] = 0
-            self.solver.heat_p[p] = 0
+        self.solver.n_particles[None] = 0
+        # self.current_frame = 0
 
-            self.solver.mass_p[p] = self.solver.particle_vol * self.solver.rho_0
+        # self.sampler.reset()
+        # self.solver.reset()
 
-            # FIXME: this is just for testing
-            # TODO: set lambda depending on phase
-            self.solver.inv_lambda_p[p] = 1 / self.solver.lambda_0[None]
-            # self.solver.inv_lambda_p[p] = 1 / 9999999999.0
+        # FIXME: something needs to be reset, undoing the particle state cause problems, 
+        #        even though we only iterate over n_particles???????????
+        self.solver.position_p.fill([-222, -222])
 
-            self.solver.FE_p[p] = ti.Matrix([[1, 0], [0, 1]])
-            self.solver.C_p[p] = ti.Matrix.zero(float, 2, 2)
-            self.solver.JE_p[p] = 1
-            self.solver.JP_p[p] = 1
+        self.subsequent_geometries = self.configuration.subsequent_geometries.copy()
 
-        # geometry = self.configuration.initial_geometries[0]
-        # self.add_geometry(geometry)
-        # self.sampler.sample(10_000, self.configuration.initial_geometries[0])
+        # Load all the initial geometries into the solver:
+        for geometry in self.configuration.initial_geometries:
+            self.sampler.sample_geometry(10_000, geometry)
 
     def dump_frames(self) -> None:
         """Creates an output directory, a VideoManager in this directory and then dumps frames to this directory."""

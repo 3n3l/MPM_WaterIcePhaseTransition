@@ -1,4 +1,4 @@
-from src.enums import Capacity, Classification, Color, Conductivity, Density, Phase, State, Density, LatenHeat
+from src.enums import Capacity, Classification, Color, Conductivity, Density, Phase, Density, LatenHeat
 from src.pressure_solver import PressureSolver
 from src.heat_solver import HeatSolver
 
@@ -25,10 +25,12 @@ class MPM_Solver:
         self.n_dimensions = 2
 
         # The width of the simulation boundary in grid nodes.
-        self.boundary_width = 4
+        self.boundary_width = 4  # TODO: this can be 3 again?
 
         # Offset to correct coordinates such that the origin lies within the boundary,
         # added to each position vector when loading a new configuration.
+        # TODO: shouldn't this just be self.boundary_width * self.dx?
+        # TODO: use this to define bounding box, PDS will use this to not sample outside simulation
         self.boundary_offset = 1 - ((self.n_grid - self.boundary_width) * self.dx)
 
         # Properties on MAC-faces.
@@ -69,13 +71,6 @@ class MPM_Solver:
         self.JE_p = ti.field(dtype=float, shape=max_particles)
         self.JP_p = ti.field(dtype=float, shape=max_particles)
         self.C_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
-
-        # Fields needed to implement sources (TODO: and sinks), the state will be set to
-        # active once the activation threshold (frame) is reached. Active particles in
-        # p_active_position will be drawn, all other particles are hidden until active.
-        self.activation_threshold_p = ti.field(dtype=int, shape=max_particles)
-        self.activation_state_p = ti.field(dtype=int, shape=max_particles)
-        self.active_position_p = ti.Vector.field(2, dtype=ti.float32, shape=max_particles)
 
         # Fields needed for the latent heat and phase change.
         self.heat_p = ti.field(dtype=ti.float32, shape=max_particles)  # U_p
@@ -122,14 +117,6 @@ class MPM_Solver:
     @ti.kernel
     def particle_to_grid(self):
         for p in ti.ndrange(self.n_particles[None]):
-            # Check whether the particle can be activated.
-            if self.activation_threshold_p[p] == self.current_frame[None]:
-                self.activation_state_p[p] = State.Active
-
-            # We only update currently active particles.
-            if self.activation_state_p[p] == State.Inactive:
-                continue
-
             # Deformation gradient update.
             self.FE_p[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
 
@@ -380,10 +367,6 @@ class MPM_Solver:
     @ti.kernel
     def grid_to_particle(self):
         for p in ti.ndrange(self.n_particles[None]):
-            # We only update active particles.
-            if self.activation_state_p[p] == State.Inactive:
-                continue
-
             # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
             c_stagger = ti.Vector([0.5, 0.5])
             x_stagger = ti.Vector([0.5, 1.0])
@@ -487,20 +470,3 @@ class MPM_Solver:
             else:
                 # Freely change temperature according to heat equation.
                 self.temperature_p[p] = nt
-
-            # The particle_position holds the positions for all particles, active and inactive,
-            # only pushing the position into p_active_position will draw this particle.
-            self.active_position_p[p] = self.position_p[p]
-
-    # TODO: this can go
-    def substep(self) -> None:
-        self.current_frame[None] += 1
-        for _ in range(int(2e-3 // self.dt)):
-            self.reset_grids()
-            self.particle_to_grid()
-            self.momentum_to_velocity()
-            self.classify_cells()
-            self.compute_volumes()
-            self.pressure_solver.solve()
-            self.heat_solver.solve()
-            self.grid_to_particle()
