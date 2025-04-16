@@ -174,9 +174,9 @@ configuration_list = [
         geometries=[
             Circle(
                 center=(0.5, 0.35),
+                phase=Phase.Water,
                 velocity=(0, -2),
                 radius=0.08,
-                phase=Phase.Water,
             )
         ],
         E=1.4e5,  # Young's modulus (1.4e5)
@@ -192,8 +192,8 @@ configuration_list = [
             Circle(
                 center=(0.5, 0.35),
                 velocity=(0, -2),
-                radius=0.08,
                 phase=Phase.Ice,
+                radius=0.08,
             ),
         ],
         E=1.4e5,  # Young's modulus (1.4e5)

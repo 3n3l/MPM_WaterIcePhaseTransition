@@ -9,21 +9,18 @@ class Geometry(ABC):
     def __init__(
         self,
         velocity: Tuple[float, float],
-        phase: int,
-        temperature: float,
         frame_threshold: int,
+        temperature: float,
+        phase: int,
     ) -> None:
         self.conductivity = Conductivity.Water if phase == Phase.Water else Conductivity.Ice
         self.capacity = Capacity.Water if phase == Phase.Water else Capacity.Ice
         self.heat = LatenHeat.Water if phase == Phase.Water else LatenHeat.Ice
         self.color = Color.Water if phase == Phase.Water else Color.Ice
-
         self.frame_threshold = frame_threshold
-        self.velocity = list(velocity)  # TODO: should be Tuple, but Taichi expects list?
         self.temperature = temperature
+        self.velocity = list(velocity)
         self.phase = phase
-
-        self.center: list  # x, y coordinates of the center, used as initial sample
 
     @abstractmethod
     def in_bounds(self, x: float, y: float) -> bool:
@@ -37,21 +34,17 @@ class Geometry(ABC):
 class Circle(Geometry):
     def __init__(
         self,
-        center: Tuple[float, float],
         velocity: Tuple[float, float],
+        center: Tuple[float, float],
         radius: float,
         temperature: float = 0.0,
         frame_threshold: int = 0,
         phase: int = Phase.Water,
     ) -> None:
-        super().__init__(velocity, phase, temperature, frame_threshold)
-
-        self.center = list(center)
-        self.x = center[0]
-        self.y = center[1]
-        self.height = radius  # for convenience while sampling
-        self.radius = radius
+        super().__init__(velocity, frame_threshold, temperature, phase)
+        self.x, self.y = list(center)
         self.squared_radius = radius * radius
+        self.radius = radius
 
     @ti.func
     def in_bounds(self, x: float, y: float) -> bool:
@@ -76,21 +69,15 @@ class Rectangle(Geometry):
         frame_threshold: int = 0,
         phase: int = Phase.Water,
     ) -> None:
-        super().__init__(velocity, phase, temperature, frame_threshold)
-
+        super().__init__(velocity, frame_threshold, temperature, phase)
         self.width, self.height = size
         self.x, self.y = lower_left
-
-        # The bounding box.
-        self.l_bound = self.x
-        self.b_bound = self.y
         self.r_bound = self.x + self.width
         self.t_bound = self.y + self.height
-        self.center = [self.x + 0.5 * self.width, self.y + 0.5 * self.height]
 
     @ti.func
     def in_bounds(self, x: float, y: float) -> bool:
-        return self.l_bound <= x <= self.r_bound and self.b_bound <= y <= self.t_bound
+        return self.x <= x <= self.r_bound and self.y <= y <= self.t_bound
 
     @ti.func
     def random_seed(self) -> ti.Vector:
