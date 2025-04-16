@@ -1,8 +1,9 @@
 from argparse import ArgumentParser, RawTextHelpFormatter
+from configurations import configuration_list
+from src.sampling import PoissonDiskSampler
 from src.renderer.ggui import GGUI_Renderer
 from src.renderer.gui import GUI_Renderer
 from src.mpm_solver import MPM_Solver
-from configurations import configuration_list
 
 import taichi as ti
 
@@ -88,20 +89,24 @@ def main():
         should_use_direct_solver=(args.solverType.lower() == "direct"),
     )
 
+    poisson_disk_sampler = PoissonDiskSampler(mpm_solver=solver)
+
     if args.gui.lower() == "ggui":
         renderer = GGUI_Renderer(
-            name=simulation_name,
             configurations=configuration_list,
+            poisson_disk_sampler=poisson_disk_sampler,
+            mpm_solver=solver,
             res=(720, 720),
-            solver=solver,
+            name=simulation_name,
         )
         renderer.run()
     elif args.gui.lower() == "gui":
         renderer = GUI_Renderer(
-            name=simulation_name,
             configuration=configuration_list[args.configuration],
-            solver=solver,
+            poisson_disk_sampler=poisson_disk_sampler,
+            mpm_solver=solver,
             res=720,
+            name=simulation_name,
         )
         renderer.run()
 

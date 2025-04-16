@@ -13,10 +13,9 @@ import os
 class HeadlessRenderer:
     def __init__(
         self,
-        name: str,
-        res: tuple[int, int] | int,
-        solver: MPM_Solver,
+        poisson_disk_sampler: PoissonDiskSampler,
         configurations: list[Configuration],
+        mpm_solver: MPM_Solver,
         max_frames: int = 0,
     ) -> None:
         """Constructs a Renderer object, this advances the MLS-MPM solver and renders the updated particle positions.
@@ -40,11 +39,8 @@ class HeadlessRenderer:
             os.makedirs(self.parent_dir)
 
         # The MLS-MPM solver.
-        self.solver = solver
-
-        # Poisson disk sampling.
-        # TODO: pass as parameter?
-        self.sampler = PoissonDiskSampler(mpm_solver=self.solver)
+        self.mpm_solver = mpm_solver
+        self.poisson_disk_sampler = poisson_disk_sampler
 
         # Load the initial configuration and reset the solver to this configuration.
         self.current_frame = 0
@@ -67,17 +63,17 @@ class HeadlessRenderer:
         if len(self.subsequent_geometries) > 0:
             if self.current_frame == self.subsequent_geometries[0].frame_threshold:
                 geometry = self.subsequent_geometries.pop(0)
-                self.sampler.sample_geometry(geometry)
+                self.poisson_disk_sampler.sample_geometry(geometry)
 
-        for _ in range(int(2e-3 // self.solver.dt)):
-            self.solver.reset_grids()
-            self.solver.particle_to_grid()
-            self.solver.momentum_to_velocity()
-            self.solver.classify_cells()
-            self.solver.compute_volumes()
-            self.solver.pressure_solver.solve()
-            self.solver.heat_solver.solve()
-            self.solver.grid_to_particle()
+        for _ in range(int(2e-3 // self.mpm_solver.dt)):
+            self.mpm_solver.reset_grids()
+            self.mpm_solver.particle_to_grid()
+            self.mpm_solver.momentum_to_velocity()
+            self.mpm_solver.classify_cells()
+            self.mpm_solver.compute_volumes()
+            self.mpm_solver.pressure_solver.solve()
+            self.mpm_solver.heat_solver.solve()
+            self.mpm_solver.grid_to_particle()
 
     def load_configuration(self, configuration: Configuration) -> None:
         """
@@ -86,14 +82,14 @@ class HeadlessRenderer:
         Parameters:
             configuration: Configuration
         """
-        self.solver.ambient_temperature[None] = configuration.ambient_temperature
-        self.solver.lambda_0[None] = configuration.lambda_0
-        self.solver.theta_c[None] = configuration.theta_c
-        self.solver.theta_s[None] = configuration.theta_s
-        self.solver.zeta[None] = configuration.zeta
-        self.solver.mu_0[None] = configuration.mu_0
-        self.solver.nu[None] = configuration.nu
-        self.solver.E[None] = configuration.E
+        self.mpm_solver.ambient_temperature[None] = configuration.ambient_temperature
+        self.mpm_solver.lambda_0[None] = configuration.lambda_0
+        self.mpm_solver.theta_c[None] = configuration.theta_c
+        self.mpm_solver.theta_s[None] = configuration.theta_s
+        self.mpm_solver.zeta[None] = configuration.zeta
+        self.mpm_solver.mu_0[None] = configuration.mu_0
+        self.mpm_solver.nu[None] = configuration.nu
+        self.mpm_solver.E[None] = configuration.E
         self.configuration = configuration
         self.reset()
 
@@ -101,9 +97,9 @@ class HeadlessRenderer:
         """Reset the simulation."""
 
         # Reset the MPM solver:
-        self.solver.state_p.fill(State.Hidden)
-        self.solver.position_p.fill([42, 42])
-        self.solver.n_particles[None] = 0
+        self.mpm_solver.state_p.fill(State.Hidden)
+        self.mpm_solver.position_p.fill([42, 42])
+        self.mpm_solver.n_particles[None] = 0
         self.current_frame = 0
 
         # We copy this, so we can pop from this list and check the length:
@@ -111,7 +107,7 @@ class HeadlessRenderer:
 
         # Load all the initial geometries into the solver:
         for geometry in self.configuration.initial_geometries:
-            self.sampler.sample_geometry(geometry)
+            self.poisson_disk_sampler.sample_geometry(geometry)
 
     def dump_frames(self) -> None:
         """Creates an output directory, a VideoManager in this directory and then dumps frames to this directory."""
