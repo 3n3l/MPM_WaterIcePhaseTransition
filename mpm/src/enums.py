@@ -44,5 +44,5 @@ class LatenHeat:
     Ice = 0.0
 
 class State:
-    Initialized = 42
-    Hidden = 24
+    Active = 0
+    Hidden = 1

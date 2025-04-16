@@ -6,7 +6,7 @@ import taichi as ti
 
 @ti.data_oriented
 class PoissonDiskSampler:
-    def __init__(self, mpm_solver: MPM_Solver, r: float = 0.005, k: int = 100) -> None:
+    def __init__(self, mpm_solver: MPM_Solver, r: float = 0.004, k: int = 100) -> None:
         # Get these from the mpm solver
         self.max_samples = mpm_solver.max_particles
         # self.n_particles = mpm_solver.n_particles
@@ -37,9 +37,7 @@ class PoissonDiskSampler:
 
     @ti.func
     def _position_to_index(self, position: ti.template()) -> ti.Vector:  # pyright: ignore
-        x = ti.cast(position[0] * self.n_grid, ti.i32)
-        y = ti.cast(position[1] * self.n_grid, ti.i32)
-        return ti.Vector([x, y])
+        return ti.cast(position * self.n_grid, ti.i32) # pyright: ignore
 
     @ti.func
     def _has_collision(self, base_point: ti.template()) -> bool:  # pyright: ignore
@@ -49,6 +47,7 @@ class PoissonDiskSampler:
         distance_min = ti.sqrt(2)  # Maximum possible distance
 
         # Search in a 3x3 grid neighborhood around the position
+        # TODO: compute lower left as base like in mpm
         for i, j in ti.ndrange(_min, _max):
             # TODO: check all distances against < self.r, return immediately
             if (index := self.background_grid[i, j]) != -1:
@@ -61,46 +60,37 @@ class PoissonDiskSampler:
         return distance_min < self.r
 
     @ti.func
+    # def _some_condition_is_not_reached(self, head: int, tail: int) -> bool:
     def _some_condition_is_not_reached(self) -> bool:
-        stuff = self.head[None] <= ti.min(self.solver.n_particles[None], self.max_samples)
-        stuff &= self.head[None] < self.tail[None]
-        return stuff
+        # print((self.head[None] < self.tail[None]) and (self.head[None] <= self.max_samples))
+        return (self.head[None] < self.tail[None]) and (self.head[None] <= self.max_samples)
 
     @ti.func
     def _seed_particle(self, position: ti.template(), geometry: ti.template()) -> None:  # pyright: ignore
-        # print(self.solver.n_particles[None], self.tail[None])
-        # p = self.tail[None]
-        p = self.solver.n_particles[None]
-        # p = self.tail[None]
-
-        # print(f"n_particles = {self.solver.n_particles[None]}")
-        # print(f"tail = {self.tail[None]}")
+        index = self.tail[None]
 
         # Seed from the geometry:
-        self.solver.conductivity_p[p] = geometry.conductivity
-        self.solver.temperature_p[p] = geometry.temperature
-        self.solver.capacity_p[p] = geometry.capacity
-        self.solver.velocity_p[p] = geometry.velocity
-        self.solver.color_p[p] = geometry.color
-        self.solver.phase_p[p] = geometry.phase
-        self.solver.heat_p[p] = geometry.heat
+        self.solver.conductivity_p[index] = geometry.conductivity
+        self.solver.temperature_p[index] = geometry.temperature
+        self.solver.capacity_p[index] = geometry.capacity
+        self.solver.velocity_p[index] = geometry.velocity
+        self.solver.color_p[index] = geometry.color
+        self.solver.phase_p[index] = geometry.phase
+        self.solver.heat_p[index] = geometry.heat
 
         # Set properties to default values:
-        self.solver.mass_p[p] = self.solver.particle_vol * self.solver.rho_0
-        self.solver.inv_lambda_p[p] = 1 / self.solver.lambda_0[None]
-        self.solver.FE_p[p] = ti.Matrix([[1, 0], [0, 1]])
-        self.solver.C_p[p] = ti.Matrix.zero(float, 2, 2)
-        self.solver.state_p[p] = State.Initialized
-        self.solver.position_p[p] = position
-        self.solver.JE_p[p] = 1.0
-        self.solver.JP_p[p] = 1.0
-
-        # Keep track of the added particle:
-        self.solver.n_particles[None] += 1
-        self.tail[None] += 1
+        self.solver.mass_p[index] = self.solver.particle_vol * self.solver.rho_0
+        self.solver.inv_lambda_p[index] = 1 / self.solver.lambda_0[None]
+        self.solver.FE_p[index] = ti.Matrix([[1, 0], [0, 1]])
+        self.solver.C_p[index] = ti.Matrix.zero(float, 2, 2)
+        self.solver.state_p[index] = State.Active
+        self.solver.position_p[index] = position
+        self.solver.JE_p[index] = 1.0
+        self.solver.JP_p[index] = 1.0
 
     @ti.func
-    def _sample_single_point(self, geometry: ti.template()) -> None:  # pyright: ignore
+    # def _sample_single_point(self, head: int, tail: int, geometry: ti.template()) -> Tuple[int, int]:  # pyright: ignore
+    def _sample_single_point(self, geometry: ti.template()):  # pyright: ignore
         while self._some_condition_is_not_reached():
             prev_position = self.solver.position_p[self.head[None]]
             self.head[None] += 1
@@ -122,7 +112,12 @@ class PoissonDiskSampler:
                     self.background_grid[next_index] = self.tail[None]
                     self._seed_particle(next_position, geometry)
                     # self.solver.n_particles[None] += 1
+                    self.tail[None] += 1
+                    # ti.atomic_add(tail, 1)
+                    # self.solver.n_particles[None] += 1
                     # self.tail[None] += 1
+
+        # return head, tail
 
     @ti.kernel
     def sample_geometry(self, desired_samples: ti.i32, geometry: ti.template()):  # pyright: ignore
@@ -133,26 +128,17 @@ class PoissonDiskSampler:
         # Seed the background grid from current positions:
         for p in ti.ndrange(self.solver.n_particles[None]):
             # We ignore uninitialized particles:
-            if self.solver.state_p[p] != State.Initialized:
+            if self.solver.state_p[p] == State.Hidden:
                 continue
 
             position = self.solver.position_p[p]
             index = self._position_to_index(position)
             self.background_grid[index] = p
 
-        # print(self.head[None], self.tail[None])
-
-        # self.head[None] = self.solver.n_particles[None]
-        # self.tail[None] = self.solver.n_particles[None] + 1
-
-        # print(self.head[None], self.tail[None])
-        # self.solver.n_particles[None] += 1
-
         # Update state, for a fresh sample this will be (0, 1, 1), in the running simulation
         # this will reset this to where we left of, allowing to add more particles
         self.head[None] = self.solver.n_particles[None]
         self.tail[None] = self.solver.n_particles[None] + 1
-        self.solver.n_particles[None] += 1
 
         # Set the initial point for this sample to the center of the geometry.
         # TODO: this can collide and should be looking for an empty spot?!
@@ -162,8 +148,12 @@ class PoissonDiskSampler:
 
         # self.solver.position_p[self.solver.n_particles[None]] = initial_point
         index = self._position_to_index(initial_point)
+        # self.background_grid[index] = self.tail[None]
         self.background_grid[index] = self.solver.n_particles[None]
         self._seed_particle(initial_point, geometry)
+        self.head[None] += 1
+        self.tail[None] += 1
+        # head, tail = head + 1, tail + 1
         # self.solver.n_particles[None] += 1
         # self.tail[None] += 1
 
@@ -172,5 +162,7 @@ class PoissonDiskSampler:
         # self.background_grid[index] = self.tail[None]
 
         # TODO: set desired_samples in geometry
-        for _ in ti.ndrange(desired_samples):
-            self._sample_single_point(geometry)
+        # ti.loop_config(serialize=True)
+        # for _ in ti.ndrange(desired_samples):
+        self._sample_single_point(geometry)
+        self.solver.n_particles[None] = self.tail[None]

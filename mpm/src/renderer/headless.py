@@ -76,8 +76,8 @@ class HeadlessRenderer:
             self.solver.momentum_to_velocity()
             self.solver.classify_cells()
             self.solver.compute_volumes()
-            # self.solver.pressure_solver.solve()
-            # self.solver.heat_solver.solve()
+            self.solver.pressure_solver.solve()
+            self.solver.heat_solver.solve()
             self.solver.grid_to_particle()
 
     def load_configuration(self, configuration: Configuration) -> None:
@@ -118,6 +118,7 @@ class HeadlessRenderer:
         # NOTE: setting this to something outside the simulation
         #       improves FPS and hides these particles
         self.solver.position_p.fill([42, 42])
+        # self.solver.position_p.fill([0.48, 0.48])
 
         self.subsequent_geometries = self.configuration.subsequent_geometries.copy()
 

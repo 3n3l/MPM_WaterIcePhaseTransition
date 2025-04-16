@@ -119,7 +119,7 @@ class MPM_Solver:
     def particle_to_grid(self):
         for p in ti.ndrange(self.n_particles[None]):
             # We ignore uninitialized particles:
-            if self.state_p[p] != State.Initialized:
+            if self.state_p[p] == State.Hidden:
                 continue
 
             # Deformation gradient update.
@@ -373,7 +373,7 @@ class MPM_Solver:
     def grid_to_particle(self):
         for p in ti.ndrange(self.n_particles[None]):
             # We ignore uninitialized particles:
-            if self.state_p[p] != State.Initialized:
+            if self.state_p[p] == State.Hidden:
                 continue
 
             # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
