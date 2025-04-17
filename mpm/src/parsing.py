@@ -29,7 +29,7 @@ solver_type_help = "Choose whether to use a direct or iterative solver for the p
 parser.add_argument(
     "-s",
     "--solverType",
-    default="Direct",
+    default="Iterative",
     nargs="?",
     choices=["Direct", "Iterative"],
     help=solver_type_help,
@@ -59,8 +59,8 @@ solver_type_help = "Turn on debugging."
 parser.add_argument(
     "-d",
     "--debug",
-    default=True,
-    action="store_false",
+    default=False,
+    action="store_true",
     help=solver_type_help,
 )
 
