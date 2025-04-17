@@ -84,8 +84,8 @@ class MPM_Solver:
         self.E = ti.field(dtype=float, shape=())
 
         # Poisson solvers for pressure and heat.
-        self.pressure_solver = PressureSolver(self, should_use_direct_solver)
-        self.heat_solver = HeatSolver(self, should_use_direct_solver)
+        self.pressure_solver = PressureSolver(self)
+        self.heat_solver = HeatSolver(self)
 
     @ti.func
     def in_bounds(self, x: float, y: float) -> bool:

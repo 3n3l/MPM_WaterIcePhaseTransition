@@ -1,4 +1,5 @@
 from taichi.linalg import SparseMatrixBuilder, SparseSolver, SparseCG
+from src.parsing import should_use_direct_solver
 from src.constants import Classification
 
 import taichi as ti
@@ -7,7 +8,7 @@ import numpy as np
 
 @ti.data_oriented
 class PressureSolver:
-    def __init__(self, mpm_solver, should_use_direct_solver: bool = True) -> None:
+    def __init__(self, mpm_solver) -> None:
         self.n_cells = mpm_solver.n_grid * mpm_solver.n_grid
         self.boundary_width = mpm_solver.boundary_width
         self.inv_dx = mpm_solver.inv_dx

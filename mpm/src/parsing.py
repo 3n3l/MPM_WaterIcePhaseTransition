@@ -65,3 +65,6 @@ parser.add_argument(
 )
 
 arguments = parser.parse_args()
+
+# Parsed constants:
+should_use_direct_solver=(arguments.solverType.lower() == "direct")
