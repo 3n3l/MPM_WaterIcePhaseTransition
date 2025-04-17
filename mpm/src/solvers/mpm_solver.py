@@ -121,41 +121,37 @@ class MPM_Solver:
             if self.state_p[p] == State.Hidden:
                 continue
 
-            # Deformation gradient update.
+            # Deformation gradient update. TODO: is this F and not FE???
             self.FE_p[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
 
-            # Clamp singular values to simulate plasticity and elasticity.
+            # TODO: set lambda an mu per particle
+            la, mu = self.lambda_0[None], self.mu_0[None]
             U, sigma, V = ti.svd(self.FE_p[p])
             JE_p, JP_p = 1.0, 1.0
+
+            # Clamp singular values to simulate plasticity and elasticity.
             for d in ti.static(range(self.n_dimensions)):
                 singular_value = float(sigma[d, d])
                 # Clamp singular values to [1 - theta_c, 1 + theta_s]
-                if self.phase_p[p] == Phase.Ice:
-                    clamped = singular_value
-                    clamped = max(singular_value, 1 - self.theta_c[None])
-                    clamped = min(clamped, 1 + self.theta_s[None])
-                    sigma[d, d] = clamped
-                    JP_p *= singular_value / clamped
-                    JE_p *= clamped
-                else:
-                    JP_p *= singular_value
-                    JE_p *= singular_value
+                clamped = max(singular_value, 1 - self.theta_c[None])
+                clamped = min(clamped, 1 + self.theta_s[None])
+                sigma[d, d] = clamped
+                JP_p *= singular_value / clamped
+                JE_p *= clamped
 
-            la = self.lambda_0[None]
-            mu = self.mu_0[None]
-            if self.phase_p[p] == Phase.Water:
-                # TODO: Apply correction for dilational/deviatoric stresses?
-                # Reset elastic deformation gradient to avoid numerical instability.
-                self.FE_p[p] = ti.Matrix.identity(float, self.n_dimensions) * JE_p ** (1 / self.n_dimensions)
-                # Set the viscosity to zero.
-                mu = 0
-            elif self.phase_p[p] == Phase.Ice:
+            if self.phase_p[p] == Phase.Ice:
                 # Reconstruct elastic deformation gradient after plasticity
                 self.FE_p[p] = U @ sigma @ V.transpose()
+
                 # Apply ice hardening by adjusting Lame parameters
                 hardening = ti.max(0.1, ti.min(20, ti.exp(self.zeta[None] * (1.0 - JP_p))))
-                la *= hardening
-                mu *= hardening
+                la, mu = la * hardening, mu * hardening
+            else:
+                # Reset elastic deformation gradient to avoid numerical instability.
+                self.FE_p[p] = ti.Matrix.identity(float, self.n_dimensions) * JE_p ** (1 / self.n_dimensions)
+                # FIXME: JE_p is only close to 1.0, but should be exactly 1.0?!
+                # print(JE_p, JP_p)
+                mu = 0
 
             # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
             stress = 2 * mu * (self.FE_p[p] - U @ V.transpose())
