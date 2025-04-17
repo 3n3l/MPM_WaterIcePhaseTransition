@@ -63,7 +63,7 @@ class HeadlessRenderer:
         if len(self.subsequent_geometries) > 0:
             if self.current_frame == self.subsequent_geometries[0].frame_threshold:
                 geometry = self.subsequent_geometries.pop(0)
-                self.poisson_disk_sampler.sample_geometry(geometry)
+                self.add_geometry(geometry)
 
         for _ in range(int(2e-3 // self.mpm_solver.dt)):
             self.mpm_solver.reset_grids()
@@ -74,6 +74,57 @@ class HeadlessRenderer:
             self.mpm_solver.pressure_solver.solve()
             self.mpm_solver.heat_solver.solve()
             self.mpm_solver.grid_to_particle()
+
+    @ti.func
+    def add_particle(self, index: ti.i32, position: ti.template(), geometry: ti.template()):  # pyright: ignore
+        # Seed from the geometry and given position:
+        self.mpm_solver.conductivity_p[index] = geometry.conductivity
+        self.mpm_solver.temperature_p[index] = geometry.temperature
+        self.mpm_solver.capacity_p[index] = geometry.capacity
+        self.mpm_solver.velocity_p[index] = geometry.velocity
+        self.mpm_solver.color_p[index] = geometry.color
+        self.mpm_solver.phase_p[index] = geometry.phase
+        self.mpm_solver.heat_p[index] = geometry.heat
+        self.mpm_solver.position_p[index] = position
+
+        # Set properties to default values:
+        self.mpm_solver.mass_p[index] = self.mpm_solver.particle_vol * self.mpm_solver.rho_0
+        self.mpm_solver.inv_lambda_p[index] = 1 / self.mpm_solver.lambda_0[None]
+        self.mpm_solver.FE_p[index] = ti.Matrix([[1, 0], [0, 1]])
+        self.mpm_solver.C_p[index] = ti.Matrix.zero(float, 2, 2)
+        self.mpm_solver.state_p[index] = State.Active
+        self.mpm_solver.JE_p[index] = 1.0
+        self.mpm_solver.JP_p[index] = 1.0
+
+    @ti.kernel
+    def add_geometry(self, geometry: ti.template()):  # pyright: ignore
+        # Initialize background grid to the current positions:
+        self.poisson_disk_sampler.initialize_grid(self.mpm_solver.n_particles[None], self.mpm_solver.position_p)
+
+        # Update pointers, for a fresh sample this will be (0, 1), in the running simulation
+        # this will reset this to where we left of, allowing to add more particles:
+        self.poisson_disk_sampler.initialize_pointers(self.mpm_solver.n_particles[None])
+
+        # Find a good initial point for this sample run:
+        initial_point = self.poisson_disk_sampler.generate_initial_point(geometry)
+        self.add_particle(self.poisson_disk_sampler.tail(), initial_point, geometry)
+        self.poisson_disk_sampler.increment_head()
+        self.poisson_disk_sampler.increment_tail()
+
+        while self.poisson_disk_sampler.can_sample_more_points():
+            prev_position = self.mpm_solver.position_p[self.poisson_disk_sampler._head[None]]
+            self.poisson_disk_sampler.increment_head()  # Increment on each iteration
+
+            for _ in range(self.poisson_disk_sampler.k):
+                next_position = self.poisson_disk_sampler.generate_point_around(prev_position)
+                next_index = self.poisson_disk_sampler.point_to_index(next_position)
+                if self.poisson_disk_sampler.point_fits(next_position, geometry):
+                    self.poisson_disk_sampler.background_grid[next_index] = self.poisson_disk_sampler.tail()
+                    self.add_particle(self.poisson_disk_sampler.tail(), next_position, geometry)
+                    self.poisson_disk_sampler.increment_tail()  # Increment when point is found
+
+        # The head points to the last found position, this is the updated number of particles:
+        self.mpm_solver.n_particles[None] = self.poisson_disk_sampler._head[None]
 
     def load_configuration(self, configuration: Configuration) -> None:
         """
@@ -96,7 +147,7 @@ class HeadlessRenderer:
     def reset(self) -> None:
         """Reset the simulation."""
 
-        # Reset the MPM solver:
+        # Reset the simulation:
         self.mpm_solver.state_p.fill(State.Hidden)
         self.mpm_solver.position_p.fill([42, 42])
         self.mpm_solver.n_particles[None] = 0
@@ -107,7 +158,7 @@ class HeadlessRenderer:
 
         # Load all the initial geometries into the solver:
         for geometry in self.configuration.initial_geometries:
-            self.poisson_disk_sampler.sample_geometry(geometry)
+            self.add_geometry(geometry)
 
     def dump_frames(self) -> None:
         """Creates an output directory, a VideoManager in this directory and then dumps frames to this directory."""
