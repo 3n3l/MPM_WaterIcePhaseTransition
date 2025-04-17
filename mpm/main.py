@@ -16,11 +16,8 @@ def main():
     else:
         ti.init(arch=ti.cuda, debug=arguments.debug)
 
-    solver = MPM_Solver(
-        quality=arguments.quality,
-        max_particles=100_000,  # TODO: there might be a way to set this again?
-        should_use_direct_solver=(arguments.solverType.lower() == "direct"),
-    )
+    # TODO: there might be a way to set this again?
+    solver = MPM_Solver(quality=arguments.quality, max_particles=100_000)
     poisson_disk_sampler = PoissonDiskSampler(mpm_solver=solver)
 
     simulation_name = "MPM - Water and Ice with Phase Transition"

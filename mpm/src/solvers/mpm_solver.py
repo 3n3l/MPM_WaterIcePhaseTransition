@@ -9,7 +9,7 @@ GRAVITY = -9.81
 
 @ti.data_oriented
 class MPM_Solver:
-    def __init__(self, quality: int, max_particles: int, should_use_direct_solver: bool = True):
+    def __init__(self, quality: int, max_particles: int):
         # MPM Parameters that are configuration independent
         self.n_particles = ti.field(dtype=ti.int32, shape=())
         self.max_particles = max_particles
@@ -170,24 +170,18 @@ class MPM_Solver:
             affine_x = affine @ ti.Vector([1, 0])  # pyright: ignore
             affine_y = affine @ ti.Vector([0, 1])  # pyright: ignore
 
-            # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
-            x_stagger = ti.Vector([1.0, 1.5])
-            y_stagger = ti.Vector([1.5, 1.0])
-            c_stagger = ti.Vector([0.5, 0.5])
+            # Lower left corner of the interpolation grid:
+            base_x = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([1.0, 1.5])), dtype=ti.i32)
+            base_y = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([1.5, 1.0])), dtype=ti.i32)
+            base_c = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([0.5, 0.5])), dtype=ti.i32)
 
-            # Additional offsets for the grid, used for the distance (fx) computations.
-            x_offset = ti.Vector([0.0, 0.5])
-            y_offset = ti.Vector([0.5, 0.0])
-
-            # We use an additional offset of 0.5 for element-wise flooring.
-            base_c = ti.floor((self.position_p[p] * self.inv_dx - c_stagger), dtype=ti.i32)
-            base_x = ti.floor((self.position_p[p] * self.inv_dx - x_stagger), dtype=ti.i32)
-            base_y = ti.floor((self.position_p[p] * self.inv_dx - y_stagger), dtype=ti.i32)
+            # Distance between lower left corner and particle position:
+            dist_x = self.position_p[p] * self.inv_dx - ti.cast(base_x, ti.f32) - ti.Vector([0.0, 0.5])
+            dist_y = self.position_p[p] * self.inv_dx - ti.cast(base_y, ti.f32) - ti.Vector([0.5, 0.0])
             dist_c = self.position_p[p] * self.inv_dx - ti.cast(base_c, ti.f32)
-            dist_x = self.position_p[p] * self.inv_dx - ti.cast(base_x, ti.f32) - x_offset
-            dist_y = self.position_p[p] * self.inv_dx - ti.cast(base_y, ti.f32) - y_offset
 
             # Cubic kernels (JST16 Eqn. 122 with x=fx, abs(fx-1), abs(fx-2), (and abs(fx-3) for faces).
+            # Based on https://www.bilibili.com/opus/662560355423092789
             w_c = [
                 ((-0.166 * dist_c**3) + (dist_c**2) - (2 * dist_c) + 1.33),
                 ((0.5 * ti.abs(dist_c - 1.0) ** 3) - ((dist_c - 1.0) ** 2) + 0.66),
@@ -371,22 +365,18 @@ class MPM_Solver:
             if self.state_p[p] == State.Hidden:
                 continue
 
-            # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
-            c_stagger = ti.Vector([0.5, 0.5])
-            x_stagger = ti.Vector([0.5, 1.0])
-            y_stagger = ti.Vector([1.0, 0.5])
+            # Lower left corner of the interpolation grid:
+            base_x = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([0.5, 1.0])), dtype=ti.i32)
+            base_y = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([1.0, 0.5])), dtype=ti.i32)
+            base_c = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([0.5, 0.5])), dtype=ti.i32)
 
-            # Additional offsets for the grid, used for the distance (fx) computations.
-            x_offset = ti.Vector([0.0, 0.5])
-            y_offset = ti.Vector([0.5, 0.0])
-
-            base_c = ti.floor((self.position_p[p] * self.inv_dx - c_stagger), dtype=ti.i32)
-            base_x = ti.floor((self.position_p[p] * self.inv_dx - x_stagger), dtype=ti.i32)
-            base_y = ti.floor((self.position_p[p] * self.inv_dx - y_stagger), dtype=ti.i32)
+            # Distance between lower left corner and particle position:
+            dist_x = self.position_p[p] * self.inv_dx - ti.cast(base_x, ti.f32) - ti.Vector([0.0, 0.5])
+            dist_y = self.position_p[p] * self.inv_dx - ti.cast(base_y, ti.f32) - ti.Vector([0.5, 0.0])
             dist_c = self.position_p[p] * self.inv_dx - ti.cast(base_c, ti.f32)
-            dist_x = self.position_p[p] * self.inv_dx - ti.cast(base_x, ti.f32) - x_offset
-            dist_y = self.position_p[p] * self.inv_dx - ti.cast(base_y, ti.f32) - y_offset
+
             # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1, fx-2)
+            # Based on https://www.bilibili.com/opus/662560355423092789
             w_c = [0.5 * (1.5 - dist_c) ** 2, 0.75 - (dist_c - 1) ** 2, 0.5 * (dist_c - 0.5) ** 2]
             w_x = [0.5 * (1.5 - dist_x) ** 2, 0.75 - (dist_x - 1) ** 2, 0.5 * (dist_x - 0.5) ** 2]
             w_y = [0.5 * (1.5 - dist_y) ** 2, 0.75 - (dist_y - 1) ** 2, 0.5 * (dist_y - 0.5) ** 2]
