@@ -1,6 +1,6 @@
 import utils  # import first to append parent directory to path
 
-from src.enums import Classification
+from src.constants import Classification
 
 import taichi as ti
 import numpy as np
@@ -255,9 +255,9 @@ def grid_to_particle(x: float, y: float):
     position_p = ti.Vector([x, y])
 
     # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
-    x_stagger = ti.Vector([1.0, 1.5])
-    y_stagger = ti.Vector([1.5, 1.0])
     # c_stagger = ti.Vector([0.5, 0.5])
+    x_stagger = ti.Vector([0.5, 1.0])
+    y_stagger = ti.Vector([1.0, 0.5])
 
     # NOTE: when further offsetting the stagger values, the distance offsets have to be adjusted as well
     #       otherwise the interpolation yields negative values?!
