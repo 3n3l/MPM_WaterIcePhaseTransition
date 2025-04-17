@@ -1,6 +1,7 @@
 import taichi as ti
 
-from src.enums import Capacity, Color, Conductivity, Phase, LatenHeat
+from src.constants import Capacity, Color, Conductivity, Phase, LatentHeat
+
 from abc import ABC, abstractmethod
 from typing import Tuple
 
@@ -15,7 +16,7 @@ class Geometry(ABC):
     ) -> None:
         self.conductivity = Conductivity.Water if phase == Phase.Water else Conductivity.Ice
         self.capacity = Capacity.Water if phase == Phase.Water else Capacity.Ice
-        self.heat = LatenHeat.Water if phase == Phase.Water else LatenHeat.Ice
+        self.heat = LatentHeat.Water if phase == Phase.Water else LatentHeat.Ice
         self.color = Color.Water if phase == Phase.Water else Color.Ice
         self.frame_threshold = frame_threshold
         self.temperature = temperature

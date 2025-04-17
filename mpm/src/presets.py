@@ -1,6 +1,5 @@
-from src.configurations import Configuration
-from src.geometries import Circle, Rectangle
-from src.enums import Phase
+from src.configurations import Circle, Rectangle, Configuration
+from src.constants import Phase
 
 configuration_list = [
     # Configuration(

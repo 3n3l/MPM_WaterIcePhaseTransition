@@ -39,7 +39,7 @@ class Density:
     Ice = 400.0
 
 
-class LatenHeat:
+class LatentHeat:
     Water = 334.4
     Ice = 0.0
 

@@ -1,20 +1,18 @@
 import utils  # import first to append parent directory to path
 
-from src.renderer.headless import HeadlessRenderer
-from configurations import configuration_list
 from src.configurations import Configuration
-from src.sampling import PoissonDiskSampler
-from src.mpm_solver import MPM_Solver
-from src.enums import Classification
+from src.samplers import PoissonDiskSampler
+from src.presets import configuration_list
+from src.constants import Classification
+from src.renderer import BaseRenderer
+from src.solvers import MPM_Solver
+from src.parsing import arguments
 
 import taichi as ti
 import numpy as np
 
-ti.init(arch=ti.cpu, debug=True)
-# ti.init(arch=ti.cuda, debug=True)
 
-
-class TestRenderer(HeadlessRenderer):
+class TestRenderer(BaseRenderer):
     def __init__(
         self,
         solver: MPM_Solver,
@@ -62,8 +60,15 @@ class TestRenderer(HeadlessRenderer):
 
 
 def main() -> None:
-    # max_particles = max([c.n_particles for c in configuration_list])
-    max_particles = 1_000_000
+    # Initialize Taichi on the chosen architecture:
+    if arguments.arch.lower() == "cpu":
+        ti.init(arch=ti.cpu, debug=arguments.debug)
+    elif arguments.arch.lower() == "gpu":
+        ti.init(arch=ti.gpu, debug=arguments.debug)
+    else:
+        ti.init(arch=ti.cuda, debug=arguments.debug)
+
+    max_particles = 100_000
     solver = MPM_Solver(quality=1, max_particles=max_particles)
     poisson_disk_sampler = PoissonDiskSampler(mpm_solver=solver)
     test_renderer = TestRenderer(

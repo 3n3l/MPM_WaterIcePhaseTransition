@@ -1,6 +1,5 @@
-from src.enums import Capacity, Classification, Color, Conductivity, Density, Phase, Density, LatenHeat, State
-from src.pressure_solver import PressureSolver
-from src.heat_solver import HeatSolver
+from src.constants import Capacity, Classification, Color, Conductivity, Density, Phase, Density, LatentHeat, State
+from src.solvers import PressureSolver, HeatSolver
 
 import taichi as ti
 
@@ -442,7 +441,7 @@ class MPM_Solver:
 
                 # If the heat buffer is full the particle changes its phase to water,
                 # everything is then reset according to the new phase.
-                if self.heat_p[p] > LatenHeat.Water:
+                if self.heat_p[p] > LatentHeat.Water:
                     # TODO: Lame parameters for each phase, something like:
                     # E = 3 * 1e-4
                     # nu = 0.45
@@ -454,7 +453,7 @@ class MPM_Solver:
                     self.temperature_p[p] = 0.0
                     self.phase_p[p] = Phase.Water
                     self.mass_p[p] = self.particle_vol * Density.Water
-                    self.heat_p[p] = LatenHeat.Water
+                    self.heat_p[p] = LatentHeat.Water
 
             elif (self.phase_p[p] == Phase.Water) and (nt < 0):
                 # Water particle reached the freezing point, additional temperature change is added to heat buffer.
@@ -462,7 +461,7 @@ class MPM_Solver:
 
                 # If the heat buffer is empty the particle changes its phase to ice,
                 # everything is then reset according to the new phase.
-                if self.heat_p[p] < LatenHeat.Ice:
+                if self.heat_p[p] < LatentHeat.Ice:
                     # TODO: Lame parameters for each phase, something like:
                     # E = 7 * 1e-4
                     # nu = 0.3
@@ -474,7 +473,7 @@ class MPM_Solver:
                     self.temperature_p[p] = 0.0
                     self.phase_p[p] = Phase.Ice
                     self.mass_p[p] = self.particle_vol * Density.Ice
-                    self.heat_p[p] = LatenHeat.Ice
+                    self.heat_p[p] = LatentHeat.Ice
 
             else:
                 # Freely change temperature according to heat equation.

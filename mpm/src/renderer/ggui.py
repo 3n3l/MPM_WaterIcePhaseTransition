@@ -1,14 +1,14 @@
-from src.renderer.headless import HeadlessRenderer
 from src.configurations import Configuration
-from src.sampling import PoissonDiskSampler
-from src.mpm_solver import MPM_Solver
-from src.enums import Color
+from src.samplers import PoissonDiskSampler
+from src.renderer import BaseRenderer
+from src.solvers import MPM_Solver
+from src.constants import Color
 
 import taichi as ti
 
 
 @ti.data_oriented
-class GGUI_Renderer(HeadlessRenderer):
+class GGUI(BaseRenderer):
     def __init__(
         self,
         name: str,

@@ -1,4 +1,4 @@
-from src.geometries import Geometry
+from src.configurations.geometries import Geometry
 
 import taichi as ti
 

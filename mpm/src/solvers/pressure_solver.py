@@ -1,5 +1,5 @@
 from taichi.linalg import SparseMatrixBuilder, SparseSolver, SparseCG
-from src.enums import Classification
+from src.constants import Classification
 
 import taichi as ti
 import numpy as np

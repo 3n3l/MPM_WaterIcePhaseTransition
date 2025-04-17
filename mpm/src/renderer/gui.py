@@ -1,14 +1,14 @@
-from src.renderer.headless import HeadlessRenderer
 from src.configurations import Configuration
-from src.sampling import PoissonDiskSampler
-from src.mpm_solver import MPM_Solver
-from src.enums import Phase, Color
+from src.samplers import PoissonDiskSampler
+from src.constants import Phase, Color
+from src.renderer import BaseRenderer
+from src.solvers import MPM_Solver
 
 import taichi as ti
 
 
 @ti.data_oriented
-class GUI_Renderer(HeadlessRenderer):
+class GUI(BaseRenderer):
     def __init__(
         self,
         name: str,

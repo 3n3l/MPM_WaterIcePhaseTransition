@@ -1,22 +1,22 @@
-from abc import abstractmethod
 from src.configurations import Configuration
-from src.sampling import PoissonDiskSampler
-from src.mpm_solver import MPM_Solver
+from src.samplers import PoissonDiskSampler
+from src.solvers import MPM_Solver
+from src.constants import State
+
+from abc import abstractmethod
 from datetime import datetime
-from src.enums import State
 
 import taichi as ti
 import os
 
 
 @ti.data_oriented
-class HeadlessRenderer:
+class BaseRenderer:
     def __init__(
         self,
         poisson_disk_sampler: PoissonDiskSampler,
         configurations: list[Configuration],
         mpm_solver: MPM_Solver,
-        max_frames: int = 0,
     ) -> None:
         """Constructs a Renderer object, this advances the MLS-MPM solver and renders the updated particle positions.
         ---
@@ -28,7 +28,6 @@ class HeadlessRenderer:
         """
         # State.
         self.is_paused = True
-        self.max_frames = max_frames
         self.should_write_to_disk = False
         self.is_showing_settings = not self.is_paused
 
