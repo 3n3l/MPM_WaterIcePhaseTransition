@@ -1,12 +1,9 @@
-from src.enums import Capacity, Classification, Color, Conductivity, Density, Phase, State, Density
-from src.pressure_solver import PressureSolver
-from src.heat_solver import HeatSolver
+from src.constants import Capacity, Classification, Color, Conductivity, Density, Phase, Density, LatentHeat, State
+from src.solvers import PressureSolver, HeatSolver
 
 import taichi as ti
 
-WATER_CONDUCTIVITY = 0.55  # Water: 0.55, Ice: 2.33
-ICE_CONDUCTIVITY = 2.33
-LATENT_HEAT = 334.4  # kJ/kg, L_p
+# TODO: move to configuration?
 GRAVITY = -9.81
 
 
@@ -15,7 +12,7 @@ class MPM_Solver:
     def __init__(self, quality: int, max_particles: int, should_use_direct_solver: bool = True):
         # MPM Parameters that are configuration independent
         self.n_particles = ti.field(dtype=ti.int32, shape=())
-        self.current_frame = ti.field(dtype=ti.int32, shape=())
+        self.max_particles = max_particles
         self.n_grid = 128 * quality
         self.n_cells = self.n_grid * self.n_grid
         self.dx = 1 / self.n_grid
@@ -25,12 +22,11 @@ class MPM_Solver:
         self.particle_vol = (self.dx * 0.5) ** 2
         self.n_dimensions = 2
 
-        # The width of the simulation boundary in grid nodes.
-        self.boundary_width = 4
-
-        # Offset to correct coordinates such that the origin lies within the boundary,
-        # added to each position vector when loading a new configuration.
-        self.boundary_offset = 1 - ((self.n_grid - self.boundary_width) * self.dx)
+        # The width of the simulation boundary in grid nodes and offsets to
+        # guarantee that seeded particles always lie within the boundary:
+        self.boundary_width = 3
+        self.lower = self.boundary_width * self.dx
+        self.upper = 1 - self.lower
 
         # Properties on MAC-faces.
         self.classification_x = ti.field(dtype=int, shape=(self.n_grid + 1, self.n_grid))
@@ -64,19 +60,13 @@ class MPM_Solver:
         self.velocity_p = ti.Vector.field(2, dtype=float, shape=max_particles)
         self.capacity_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.color_p = ti.Vector.field(3, dtype=float, shape=max_particles)
+        self.state_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.phase_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.mass_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.FE_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
         self.JE_p = ti.field(dtype=float, shape=max_particles)
         self.JP_p = ti.field(dtype=float, shape=max_particles)
         self.C_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
-
-        # Fields needed to implement sources (TODO: and sinks), the state will be set to
-        # active once the activation threshold (frame) is reached. Active particles in
-        # p_active_position will be drawn, all other particles are hidden until active.
-        self.activation_threshold_p = ti.field(dtype=int, shape=max_particles)
-        self.activation_state_p = ti.field(dtype=int, shape=max_particles)
-        self.active_position_p = ti.Vector.field(2, dtype=ti.float32, shape=max_particles)
 
         # Fields needed for the latent heat and phase change.
         self.heat_p = ti.field(dtype=ti.float32, shape=max_particles)  # U_p
@@ -94,8 +84,12 @@ class MPM_Solver:
         self.E = ti.field(dtype=float, shape=())
 
         # Poisson solvers for pressure and heat.
-        self.pressure_solver = PressureSolver(self, should_use_direct_solver)
-        self.heat_solver = HeatSolver(self, should_use_direct_solver)
+        self.pressure_solver = PressureSolver(self)
+        self.heat_solver = HeatSolver(self)
+
+    @ti.func
+    def in_bounds(self, x: float, y: float) -> bool:
+        return self.lower < x < self.upper and self.lower < y < self.upper
 
     @ti.kernel
     def reset_grids(self):
@@ -123,12 +117,8 @@ class MPM_Solver:
     @ti.kernel
     def particle_to_grid(self):
         for p in ti.ndrange(self.n_particles[None]):
-            # Check whether the particle can be activated.
-            if self.activation_threshold_p[p] == self.current_frame[None]:
-                self.activation_state_p[p] = State.Active
-
-            # We only update currently active particles.
-            if self.activation_state_p[p] == State.Inactive:
+            # We ignore uninitialized particles:
+            if self.state_p[p] == State.Hidden:
                 continue
 
             # Deformation gradient update.
@@ -381,8 +371,8 @@ class MPM_Solver:
     @ti.kernel
     def grid_to_particle(self):
         for p in ti.ndrange(self.n_particles[None]):
-            # We only update active particles.
-            if self.activation_state_p[p] == State.Inactive:
+            # We ignore uninitialized particles:
+            if self.state_p[p] == State.Hidden:
                 continue
 
             # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
@@ -451,7 +441,7 @@ class MPM_Solver:
 
                 # If the heat buffer is full the particle changes its phase to water,
                 # everything is then reset according to the new phase.
-                if self.heat_p[p] > LATENT_HEAT:
+                if self.heat_p[p] > LatentHeat.Water:
                     # TODO: Lame parameters for each phase, something like:
                     # E = 3 * 1e-4
                     # nu = 0.45
@@ -463,7 +453,7 @@ class MPM_Solver:
                     self.temperature_p[p] = 0.0
                     self.phase_p[p] = Phase.Water
                     self.mass_p[p] = self.particle_vol * Density.Water
-                    self.heat_p[p] = LATENT_HEAT
+                    self.heat_p[p] = LatentHeat.Water
 
             elif (self.phase_p[p] == Phase.Water) and (nt < 0):
                 # Water particle reached the freezing point, additional temperature change is added to heat buffer.
@@ -471,7 +461,7 @@ class MPM_Solver:
 
                 # If the heat buffer is empty the particle changes its phase to ice,
                 # everything is then reset according to the new phase.
-                if self.heat_p[p] < 0:
+                if self.heat_p[p] < LatentHeat.Ice:
                     # TODO: Lame parameters for each phase, something like:
                     # E = 7 * 1e-4
                     # nu = 0.3
@@ -483,24 +473,8 @@ class MPM_Solver:
                     self.temperature_p[p] = 0.0
                     self.phase_p[p] = Phase.Ice
                     self.mass_p[p] = self.particle_vol * Density.Ice
-                    self.heat_p[p] = 0.0
+                    self.heat_p[p] = LatentHeat.Ice
 
             else:
                 # Freely change temperature according to heat equation.
                 self.temperature_p[p] = nt
-
-            # The particle_position holds the positions for all particles, active and inactive,
-            # only pushing the position into p_active_position will draw this particle.
-            self.active_position_p[p] = self.position_p[p]
-
-    def substep(self) -> None:
-        self.current_frame[None] += 1
-        for _ in range(int(2e-3 // self.dt)):
-            self.reset_grids()
-            self.particle_to_grid()
-            self.momentum_to_velocity()
-            self.classify_cells()
-            self.compute_volumes()
-            self.pressure_solver.solve()
-            self.heat_solver.solve()
-            self.grid_to_particle()

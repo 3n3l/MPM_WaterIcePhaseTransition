@@ -1,19 +1,21 @@
-from src.renderer.headless import HeadlessRenderer
 from src.configurations import Configuration
-from src.mpm_solver import MPM_Solver
-from src.enums import Color
+from src.samplers import PoissonDiskSampler
+from src.renderer import BaseRenderer
+from src.solvers import MPM_Solver
+from src.constants import Color
 
 import taichi as ti
 
 
 @ti.data_oriented
-class GGUI_Renderer(HeadlessRenderer):
+class GGUI(BaseRenderer):
     def __init__(
         self,
         name: str,
         res: tuple[int, int],
-        solver: MPM_Solver,
+        mpm_solver: MPM_Solver,
         configurations: list[Configuration],
+        poisson_disk_sampler: PoissonDiskSampler,
     ) -> None:
         """Constructs a  GGUI renderer, this advances the MLS-MPM solver and renders the updated particle positions.
         ---
@@ -23,7 +25,11 @@ class GGUI_Renderer(HeadlessRenderer):
             solver: the MLS-MPM solver
             configurations: list of configurations for the solver
         """
-        super().__init__(name, res, solver, configurations)
+        super().__init__(
+            poisson_disk_sampler=poisson_disk_sampler,
+            configurations=configurations,
+            mpm_solver=mpm_solver,
+        )
 
         # GGUI.
         self.window = ti.ui.Window(name, res)
@@ -45,10 +51,9 @@ class GGUI_Renderer(HeadlessRenderer):
                 self.configuration_id = i
         if self.configuration_id != prev_configuration_id:
             _id = self.configuration_id
-            self.configuration = self.configurations[_id]
+            configuration = self.configurations[_id]
+            self.load_configuration(configuration)
             self.is_paused = True
-            self.load_configuration(self.configuration)
-            self.reset_solver(self.configuration)
 
     def show_parameters(self, subwindow) -> None:
         """
@@ -61,15 +66,15 @@ class GGUI_Renderer(HeadlessRenderer):
         # TODO: Implement back stickiness + friction or remove them entirely
         # self.solver.stickiness[None] = subwindow.slider_float("stickiness", self.solver.stickiness[None], 1.0, 5.0)
         # self.solver.friction[None] = subwindow.slider_float("friction", self.solver.friction[None], 1.0, 5.0)
-        self.solver.theta_c[None] = subwindow.slider_float("theta_c", self.solver.theta_c[None], 1e-2, 10e-2)
-        self.solver.theta_s[None] = subwindow.slider_float("theta_s", self.solver.theta_s[None], 1e-3, 10e-3)
-        self.solver.zeta[None] = subwindow.slider_int("zeta", self.solver.zeta[None], 3, 20)
-        self.solver.nu[None] = subwindow.slider_float("nu", self.solver.nu[None], 0.1, 0.4)
-        self.solver.E[None] = subwindow.slider_float("E", self.solver.E[None], 4.8e4, 2.8e5)
-        E = self.solver.E[None]
-        nu = self.solver.nu[None]
-        self.solver.lambda_0[None] = E * nu / ((1 + nu) * (1 - 2 * nu))
-        self.solver.mu_0[None] = E / (2 * (1 + nu))
+        self.mpm_solver.theta_c[None] = subwindow.slider_float("theta_c", self.mpm_solver.theta_c[None], 1e-2, 10e-2)
+        self.mpm_solver.theta_s[None] = subwindow.slider_float("theta_s", self.mpm_solver.theta_s[None], 1e-3, 10e-3)
+        self.mpm_solver.zeta[None] = subwindow.slider_int("zeta", self.mpm_solver.zeta[None], 3, 20)
+        self.mpm_solver.nu[None] = subwindow.slider_float("nu", self.mpm_solver.nu[None], 0.1, 0.4)
+        self.mpm_solver.E[None] = subwindow.slider_float("E", self.mpm_solver.E[None], 4.8e4, 5.5e5)
+        E = self.mpm_solver.E[None]
+        nu = self.mpm_solver.nu[None]
+        self.mpm_solver.lambda_0[None] = E * nu / ((1 + nu) * (1 - 2 * nu))
+        self.mpm_solver.mu_0[None] = E / (2 * (1 + nu))
 
     def show_buttons(self, subwindow) -> None:
         """
@@ -86,7 +91,7 @@ class GGUI_Renderer(HeadlessRenderer):
             else:
                 self.create_video()
         if subwindow.button(" Reset Particles "):
-            self.reset_solver(self.configuration)
+            self.reset()
         if subwindow.button(" Start Simulation"):
             self.is_paused = False
 
@@ -108,7 +113,7 @@ class GGUI_Renderer(HeadlessRenderer):
         """Handle key presses arising from window events."""
         if self.window.get_event(ti.ui.PRESS):
             if self.window.event.key == "r":
-                self.reset_solver(self.configuration)
+                self.reset()
             elif self.window.event.key in [ti.GUI.BACKSPACE, "s"]:
                 self.should_write_to_disk = not self.should_write_to_disk
             elif self.window.event.key in [ti.GUI.SPACE, "p"]:
@@ -120,8 +125,8 @@ class GGUI_Renderer(HeadlessRenderer):
         """Renders the simulation with the data from the MLS-MPM solver."""
         self.canvas.set_background_color(Color.Background)
         self.canvas.circles(
-            per_vertex_color=self.solver.color_p,
-            centers=self.solver.active_position_p,
+            per_vertex_color=self.mpm_solver.color_p,
+            centers=self.mpm_solver.position_p,
             radius=0.0015,
         )
         if self.should_write_to_disk and not self.is_paused and not self.is_showing_settings:
@@ -134,5 +139,5 @@ class GGUI_Renderer(HeadlessRenderer):
             self.handle_events()
             self.show_settings()
             if not self.is_paused:
-                self.solver.substep()
+                self.substep()
             self.render()

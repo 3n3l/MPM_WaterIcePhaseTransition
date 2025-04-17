@@ -20,18 +20,12 @@ class Color:
     _Background = 0x171414
 
 
-class State:
-    Inactive = 77
-    Active = 88
-
-
-# TODO: Capacity should not be an enum!?
 class Capacity:
     Water = 4.186  # j/dC
     Ice = 2.093  # j/dC
     # Water = 4186  # j/dC
     # Ice = 2093  # j/dC
-    Zero = 0
+    Zero = 0.0
 
 
 class Conductivity:
@@ -39,6 +33,16 @@ class Conductivity:
     Ice = 2.33
     Zero = 0
 
+
 class Density:
     Water = 997.0
     Ice = 400.0
+
+
+class LatentHeat:
+    Water = 334.4
+    Ice = 0.0
+
+class State:
+    Active = 0
+    Hidden = 1

@@ -1,42 +1,39 @@
 import utils  # import first to append parent directory to path
 
-from src.renderer.headless import HeadlessRenderer
 from src.configurations import Configuration
-from configurations import configuration_list
-from src.mpm_solver import MPM_Solver
-from src.enums import Classification
+from src.samplers import PoissonDiskSampler
+from src.presets import configuration_list
+from src.constants import Classification
+from src.renderer import BaseRenderer
+from src.solvers import MPM_Solver
+from src.parsing import arguments
 
 import taichi as ti
 import numpy as np
 
-ti.init(arch=ti.cpu, debug=True)
-# ti.init(arch=ti.cuda, debug=True)
 
-
-class TestRenderer(HeadlessRenderer):
+class TestRenderer(BaseRenderer):
     def __init__(
         self,
-        name: str,
-        res: tuple[int, int] | int,
         solver: MPM_Solver,
         configurations: list[Configuration],
-        max_frames: int = 0,
+        poisson_disk_sampler: PoissonDiskSampler,
     ) -> None:
-        super().__init__(name, res, solver, configurations, max_frames)
+        super().__init__(mpm_solver=solver, configurations=configurations, poisson_disk_sampler=poisson_disk_sampler)
         self.divergence = ti.ndarray(ti.f32, shape=(solver.n_grid, solver.n_grid))
         self.we_succeeded = True
 
     @ti.kernel
     def compute_divergence(self, div: ti.types.ndarray()):  # pyright: ignore
-        for i, j in self.solver.pressure_c:
+        for i, j in self.mpm_solver.pressure_c:
             div[i, j] = 0
-            if self.solver.classification_c[i, j] == Classification.Interior:
-                div[i, j] += self.solver.velocity_x[i + 1, j] - self.solver.velocity_x[i, j]
-                div[i, j] += self.solver.velocity_y[i, j + 1] - self.solver.velocity_y[i, j]
+            if self.mpm_solver.classification_c[i, j] == Classification.Interior:
+                div[i, j] += self.mpm_solver.velocity_x[i + 1, j] - self.mpm_solver.velocity_x[i, j]
+                div[i, j] += self.mpm_solver.velocity_y[i, j + 1] - self.mpm_solver.velocity_y[i, j]
 
     def run(self) -> None:
-        for i in range(1, 301):
-            self.solver.substep()
+        for i in range(1, 501):
+            self.substep()
             prev_min = np.abs(np.min(self.divergence.to_numpy()))
             prev_max = np.abs(np.max(self.divergence.to_numpy()))
             self.compute_divergence(self.divergence)
@@ -63,20 +60,26 @@ class TestRenderer(HeadlessRenderer):
 
 
 def main() -> None:
-    max_particles = max([c.n_particles for c in configuration_list])
+    # Initialize Taichi on the chosen architecture:
+    if arguments.arch.lower() == "cpu":
+        ti.init(arch=ti.cpu, debug=arguments.debug)
+    elif arguments.arch.lower() == "gpu":
+        ti.init(arch=ti.gpu, debug=arguments.debug)
+    else:
+        ti.init(arch=ti.cuda, debug=arguments.debug)
+
+    max_particles = 100_000
     solver = MPM_Solver(quality=1, max_particles=max_particles)
+    poisson_disk_sampler = PoissonDiskSampler(mpm_solver=solver)
     test_renderer = TestRenderer(
+        poisson_disk_sampler=poisson_disk_sampler,
         configurations=configuration_list,
-        max_frames=300,
         solver=solver,
-        res=720,
-        name="",
     )
 
     for configuration in configuration_list:
         print(f"NOW RUNNING: {configuration.name}")
         test_renderer.load_configuration(configuration)
-        test_renderer.reset_solver(configuration)
         test_renderer.run()
         if not test_renderer.we_succeeded:
             break
