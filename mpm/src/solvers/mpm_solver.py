@@ -163,7 +163,6 @@ class MPM_Solver:
                 self.FE_p[p] = ti.Matrix.identity(float, self.n_dimensions) * JE_p ** (1 / self.n_dimensions)
                 # FIXME: JE_p is only close to 1.0, but should be exactly 1.0?!
                 # FIXME: there should also be a correction for FP?!
-                # FIXME: is this even FE or rather F?
                 self.F_p[p] = ti.Matrix.identity(float, self.n_dimensions) * JE_p ** (1 / self.n_dimensions)
                 # print(JE_p, JP_p)
                 # Set mu to zero for water TODO: this could just be done in mu_0_p?
@@ -237,7 +236,7 @@ class MPM_Solver:
                 # self.inv_lambda_c[base_c + offset] += weight_c * self.inv_lambda_0_p[p]
 
                 # We use JE^n, JP^n from the last timestep for the transfers, the updated
-                # values will be assigned to the corresponding field at the end of P2G.
+                # values will be assigned to the corresponding field at the end of the loop.
                 self.JE_c[base_c + offset] += weight_c * self.mass_p[p] * self.JE_p[p]
                 self.JP_c[base_c + offset] += weight_c * self.mass_p[p] * self.JP_p[p]
 
@@ -397,31 +396,30 @@ class MPM_Solver:
             w_x = [0.5 * (1.5 - dist_x) ** 2, 0.75 - (dist_x - 1) ** 2, 0.5 * (dist_x - 0.5) ** 2]
             w_y = [0.5 * (1.5 - dist_y) ** 2, 0.75 - (dist_y - 1) ** 2, 0.5 * (dist_y - 0.5) ** 2]
 
-            bx = ti.Vector.zero(float, 2)
-            by = ti.Vector.zero(float, 2)
-            nv = ti.Vector.zero(float, 2)
-            nt = 0.0
+            next_velocity = ti.Vector.zero(float, 2)
+            b_x = ti.Vector.zero(float, 2)
+            b_y = ti.Vector.zero(float, 2)
+            next_temperature = 0.0
             for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
                 offset = ti.Vector([i, j])
-
                 c_weight = w_c[i][0] * w_c[j][1]
-                nt += c_weight * self.temperature_c[base_c + offset]
-
                 x_weight = w_x[i][0] * w_x[j][1]
                 y_weight = w_y[i][0] * w_y[j][1]
                 x_dpos = ti.cast(offset, ti.f32) - dist_x
                 y_dpos = ti.cast(offset, ti.f32) - dist_y
+
+                next_temperature += c_weight * self.temperature_c[base_c + offset]
                 x_velocity = x_weight * self.velocity_x[base_x + offset]
                 y_velocity = y_weight * self.velocity_y[base_y + offset]
-                nv += [x_velocity, y_velocity]
-                bx += x_velocity * x_dpos
-                by += y_velocity * y_dpos
+                next_velocity += [x_velocity, y_velocity]
+                b_x += x_velocity * x_dpos
+                b_y += y_velocity * y_dpos
 
-            cx = 3 * self.inv_dx * bx  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
-            cy = 3 * self.inv_dx * by  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
-            self.C_p[p] = ti.Matrix([[cx[0], cy[0]], [cx[1], cy[1]]])  # pyright: ignore
-            self.position_p[p] += self.dt * nv
-            self.velocity_p[p] = nv
+            c_x = 3 * self.inv_dx * b_x  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
+            c_y = 3 * self.inv_dx * b_y  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
+            self.C_p[p] = ti.Matrix([[c_x[0], c_y[0]], [c_x[1], c_y[1]]])  # pyright: ignore
+            self.position_p[p] += self.dt * next_velocity
+            self.velocity_p[p] = next_velocity
 
             # DONE: set temperature for empty cells
             # DONE: set temperature for particles, ideally per geometry
