@@ -55,5 +55,6 @@ class YoungsModulus:  # = E
 
 
 class PoissonsRatio:  # = nu
-    Water = 0.45
+    # Water = 0.45 # FIXME: not working with current stress computation
+    Water = 0.15
     Ice = 0.2
