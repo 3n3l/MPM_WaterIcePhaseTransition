@@ -81,9 +81,11 @@ class BaseRenderer:
         self.mpm_solver.temperature_p[index] = geometry.temperature
         self.mpm_solver.capacity_p[index] = geometry.capacity
         self.mpm_solver.velocity_p[index] = geometry.velocity
+        self.mpm_solver.lambda_0_p[index] = geometry.lambda_0
         self.mpm_solver.color_p[index] = geometry.color
         self.mpm_solver.phase_p[index] = geometry.phase
         self.mpm_solver.heat_p[index] = geometry.heat
+        self.mpm_solver.mu_0_p[index] = geometry.mu_0
         self.mpm_solver.position_p[index] = position
 
         # Set properties to default values:

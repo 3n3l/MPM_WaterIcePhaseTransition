@@ -43,6 +43,17 @@ class LatentHeat:
     Water = 334.4
     Ice = 0.0
 
+
 class State:
     Active = 0
     Hidden = 1
+
+
+class YoungsModulus:  # = E
+    Water = 1e6
+    Ice = 1e6
+
+
+class PoissonsRatio:  # = nu
+    Water = 0.45
+    Ice = 0.2

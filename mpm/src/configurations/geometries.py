@@ -1,6 +1,6 @@
 import taichi as ti
 
-from src.constants import Capacity, Color, Conductivity, Phase, LatentHeat
+from src.constants import Capacity, Color, Conductivity, Phase, LatentHeat, PoissonsRatio, YoungsModulus
 
 from abc import ABC, abstractmethod
 from typing import Tuple
@@ -22,6 +22,11 @@ class Geometry(ABC):
         self.temperature = temperature
         self.velocity = list(velocity)
         self.phase = phase
+
+        nu = PoissonsRatio.Water if phase == Phase.Water else PoissonsRatio.Ice
+        E = YoungsModulus.Water if phase == Phase.Water else YoungsModulus.Ice
+        self.lambda_0 = E * nu / ((1 + nu) * (1 - 2 * nu))
+        self.mu_0 = E / (2 * (1 + nu))
 
     @abstractmethod
     def in_bounds(self, x: float, y: float) -> bool:

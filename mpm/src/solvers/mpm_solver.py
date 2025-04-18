@@ -1,4 +1,17 @@
-from src.constants import Capacity, Classification, Color, Conductivity, Density, Phase, Density, LatentHeat, State
+# TODO: Use enums Water, Ice to hold everything instead 300000 different enums
+from src.constants import (
+    Capacity,
+    Classification,
+    Color,
+    Conductivity,
+    Density,
+    Phase,
+    Density,
+    LatentHeat,
+    State,
+    PoissonsRatio,
+    YoungsModulus,
+)
 from src.solvers import PressureSolver, HeatSolver
 
 import taichi as ti
@@ -53,16 +66,16 @@ class MPM_Solver:
         # Properties on particles.
         self.conductivity_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.temperature_p = ti.field(dtype=ti.float32, shape=max_particles)
-        # self.particle_lambda_0 = ti.field(dtype=ti.float32, shape=max_particles)
-        # self.particle_mu_0 = ti.field(dtype=ti.float32, shape=max_particles)
         self.inv_lambda_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.position_p = ti.Vector.field(2, dtype=float, shape=max_particles)
         self.velocity_p = ti.Vector.field(2, dtype=float, shape=max_particles)
+        self.lambda_0_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.capacity_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.color_p = ti.Vector.field(3, dtype=float, shape=max_particles)
         self.state_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.phase_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.mass_p = ti.field(dtype=ti.float32, shape=max_particles)
+        self.mu_0_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.FE_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
         self.JE_p = ti.field(dtype=float, shape=max_particles)
         self.JP_p = ti.field(dtype=float, shape=max_particles)
@@ -125,7 +138,7 @@ class MPM_Solver:
             self.FE_p[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
 
             # TODO: set lambda an mu per particle
-            la, mu = self.lambda_0[None], self.mu_0[None]
+            la, mu = self.lambda_0_p[p], self.mu_0_p[p]
             U, sigma, V = ti.svd(self.FE_p[p])
             JE_p, JP_p = 1.0, 1.0
 
@@ -150,16 +163,19 @@ class MPM_Solver:
                 # Reset elastic deformation gradient to avoid numerical instability.
                 self.FE_p[p] = ti.Matrix.identity(float, self.n_dimensions) * JE_p ** (1 / self.n_dimensions)
                 # FIXME: JE_p is only close to 1.0, but should be exactly 1.0?!
+                # FIXME: there should also be a correction for FP?!
+                # FIXME: is this even FE or rather F?
                 # print(JE_p, JP_p)
+                # Set mu to zero for water TODO: this could just be done in mu_0_p?
                 mu = 0
 
             # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
+            # TODO: is U @ V.transpose() == FP?
             stress = 2 * mu * (self.FE_p[p] - U @ V.transpose())
             stress = stress @ self.FE_p[p].transpose()  # pyright: ignore
             stress += ti.Matrix.identity(float, 2) * la * JE_p * (JE_p - 1)
 
             # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
-            # D_inv = 4 * self.inv_dx * self.inv_dx  # Quadratic interpolation
             D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
 
             # TODO: What happens here exactly? Something with Cauchy-stress?
@@ -217,8 +233,11 @@ class MPM_Solver:
 
                 # Rasterize lambda (inverse) to cell centers.
                 # TODO: use particle_inv_lambda, set different lambda for each phase?
-                # self.inv_lambda_c[base_c + offset] += weight_c * self.inv_lambda_p[p]
                 self.inv_lambda_c[base_c + offset] += weight_c * self.lambda_0[None]
+                # FIXME: instability when using inverse?!
+                # self.inv_lambda_c[base_c + offset] += weight_c * (1 / self.lambda_0[None])
+                # self.inv_lambda_c[base_c + offset] += weight_c * self.inv_lambda_p[p]
+                # self.inv_lambda_c[base_c + offset] += weight_c * (1 / self.lambda_0_p[p])
 
                 # We use JE^n, JP^n from the last timestep for the transfers, the updated
                 # values will be assigned to the corresponding field at the end of P2G.
@@ -401,8 +420,6 @@ class MPM_Solver:
                 bx += x_velocity * x_dpos
                 by += y_velocity * y_dpos
 
-            # cx = 4 * self.inv_dx * bx  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Quadratic kernels in P2G
-            # cy = 4 * self.inv_dx * by  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Quadratic kernels in P2G
             cx = 3 * self.inv_dx * bx  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
             cy = 3 * self.inv_dx * by  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
             self.C_p[p] = ti.Matrix([[cx[0], cy[0]], [cx[1], cy[1]]])  # pyright: ignore
@@ -414,25 +431,28 @@ class MPM_Solver:
             # DONE: set heat capacity per particle depending on phase
             # DONE: set heat conductivity per particle depending on phase
             # DONE: set particle mass per phase
-            # TODO: set E and nu for each particle depending on phase
+            # DONE: set E and nu for each particle depending on phase
             # DONE: apply latent heat
-            # TODO: move this to a ti.func?
+            # TODO: move this to a ti.func? (or keep this here but assign values in func and use when adding particles)
+            # TODO: set theta_c, theta_s per phase? Water probably wants very small values, ice depends on temperature
+            # TODO: in theory all of the constitutive parameters must be functions of temperature
+            #       in the ice phase to range from solid ice to slushy ice?
 
             # Initially, we allow each particle to freely change its temperature according to the heat equation.
             # But whenever the freezing point is reached, any additional temperature change is multiplied by
             # conductivity and mass and added to the buffer, with the particle temperature kept unchanged.
             if (self.phase_p[p] == Phase.Ice) and (nt >= 0):
                 # Ice reached the melting point, additional temperature change is added to heat buffer.
-                self.heat_p[p] += self.conductivity_p[p] * self.mass_p[p] * (nt - self.temperature_p[p])
+                difference = nt - self.temperature_p[p]
+                self.heat_p[p] += self.conductivity_p[p] * self.mass_p[p] * difference
 
                 # If the heat buffer is full the particle changes its phase to water,
                 # everything is then reset according to the new phase.
                 if self.heat_p[p] > LatentHeat.Water:
-                    # TODO: Lame parameters for each phase, something like:
-                    # E = 3 * 1e-4
-                    # nu = 0.45
-                    # self.particle_mu_0[p] = ...
-                    # self.particle_lambda_0[p] = ...
+                    # TODO: Shouldn't this just be set to ~inf, 0?
+                    E, nu = YoungsModulus.Water, PoissonsRatio.Water
+                    self.lambda_0_p[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
+                    self.mu_0_p[p] = E / (2 * (1 + nu))
                     self.capacity_p[p] = Capacity.Water
                     self.conductivity_p[p] = Conductivity.Water
                     self.color_p[p] = Color.Water
@@ -443,16 +463,15 @@ class MPM_Solver:
 
             elif (self.phase_p[p] == Phase.Water) and (nt < 0):
                 # Water particle reached the freezing point, additional temperature change is added to heat buffer.
-                self.heat_p[p] += self.conductivity_p[p] * self.mass_p[p] * (nt - self.temperature_p[p])
+                difference = nt - self.temperature_p[p]
+                self.heat_p[p] += self.conductivity_p[p] * self.mass_p[p] * difference
 
                 # If the heat buffer is empty the particle changes its phase to ice,
                 # everything is then reset according to the new phase.
                 if self.heat_p[p] < LatentHeat.Ice:
-                    # TODO: Lame parameters for each phase, something like:
-                    # E = 7 * 1e-4
-                    # nu = 0.3
-                    # self.particle_mu_0[p] = ...
-                    # self.particle_lambda_0[p] = ...
+                    E, nu = YoungsModulus.Ice, PoissonsRatio.Ice
+                    self.lambda_0_p[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
+                    self.mu_0_p[p] = E / (2 * (1 + nu))
                     self.capacity_p[p] = Capacity.Ice
                     self.color_p[p] = Color.Ice
                     self.conductivity_p[p] = Conductivity.Ice

@@ -38,7 +38,7 @@ configuration_list = [
                     frame_threshold=i,
                     temperature=20.0,
                 )
-                for i in range(1, 200)
+                for i in range(1, 300)
             ],
         ],
         E=5e5,  # Young's modulus (1.4e5)
@@ -138,7 +138,7 @@ configuration_list = [
                 temperature=20.0,
                 phase=Phase.Water,
             )
-            for i in range(1, 200)
+            for i in range(1, 300)
         ],
         E=5.5e5,  # Young's modulus (1.4e5)
         nu=0.45,  # Poisson's ratio (0.2)
