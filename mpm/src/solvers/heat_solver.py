@@ -135,7 +135,7 @@ class HeatSolver:
     def solve(self):
         # TODO: max_num_triplets could be optimized to N * 5?
         A = SparseMatrixBuilder(
-            max_num_triplets=(self.n_cells * self.n_cells),
+            max_num_triplets=(10 * self.n_cells),
             # max_num_triplets=(5 * self.n_cells),
             num_rows=self.n_cells,
             num_cols=self.n_cells,
