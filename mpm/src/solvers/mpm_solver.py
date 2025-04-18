@@ -232,12 +232,10 @@ class MPM_Solver:
                 self.mass_c[base_c + offset] += weight_c * self.mass_p[p]
 
                 # Rasterize lambda (inverse) to cell centers.
-                # TODO: use particle_inv_lambda, set different lambda for each phase?
-                self.inv_lambda_c[base_c + offset] += weight_c * self.lambda_0[None]
-                # FIXME: instability when using inverse?!
-                # self.inv_lambda_c[base_c + offset] += weight_c * (1 / self.lambda_0[None])
-                # self.inv_lambda_c[base_c + offset] += weight_c * self.inv_lambda_p[p]
-                # self.inv_lambda_c[base_c + offset] += weight_c * (1 / self.lambda_0_p[p])
+                self.inv_lambda_c[base_c + offset] += weight_c * (1.0 / self.lambda_0_p[p])
+                # TODO: this should be la, because of incorporated hardening?
+                # TODO: store the inverse on particles to save computations:
+                # self.inv_lambda_c[base_c + offset] += weight_c * self.inv_lambda_0_p[p]
 
                 # We use JE^n, JP^n from the last timestep for the transfers, the updated
                 # values will be assigned to the corresponding field at the end of P2G.
