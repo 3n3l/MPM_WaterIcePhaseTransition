@@ -76,7 +76,7 @@ class MPM_Solver:
         self.phase_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.mass_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.mu_0_p = ti.field(dtype=ti.float32, shape=max_particles)
-        self.FE_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
+        self.F_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
         self.JE_p = ti.field(dtype=float, shape=max_particles)
         self.JP_p = ti.field(dtype=float, shape=max_particles)
         self.C_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
@@ -134,12 +134,11 @@ class MPM_Solver:
             if self.state_p[p] == State.Hidden:
                 continue
 
-            # Deformation gradient update. TODO: is this F and not FE???
-            self.FE_p[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
+            # Deformation gradient update.
+            self.F_p[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C_p[p]) @ self.F_p[p]  # pyright: ignore
 
-            # TODO: set lambda an mu per particle
             la, mu = self.lambda_0_p[p], self.mu_0_p[p]
-            U, sigma, V = ti.svd(self.FE_p[p])
+            U, sigma, V = ti.svd(self.F_p[p])
             JE_p, JP_p = 1.0, 1.0
 
             # Clamp singular values to simulate plasticity and elasticity.
@@ -154,7 +153,7 @@ class MPM_Solver:
 
             if self.phase_p[p] == Phase.Ice:
                 # Reconstruct elastic deformation gradient after plasticity
-                self.FE_p[p] = U @ sigma @ V.transpose()
+                self.F_p[p] = U @ sigma @ V.transpose()
 
                 # Apply ice hardening by adjusting Lame parameters
                 hardening = ti.max(0.1, ti.min(20, ti.exp(self.zeta[None] * (1.0 - JP_p))))
@@ -165,14 +164,14 @@ class MPM_Solver:
                 # FIXME: JE_p is only close to 1.0, but should be exactly 1.0?!
                 # FIXME: there should also be a correction for FP?!
                 # FIXME: is this even FE or rather F?
+                self.F_p[p] = ti.Matrix.identity(float, self.n_dimensions) * JE_p ** (1 / self.n_dimensions)
                 # print(JE_p, JP_p)
                 # Set mu to zero for water TODO: this could just be done in mu_0_p?
                 mu = 0
 
             # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
-            # TODO: is U @ V.transpose() == FP?
-            stress = 2 * mu * (self.FE_p[p] - U @ V.transpose())
-            stress = stress @ self.FE_p[p].transpose()  # pyright: ignore
+            stress = 2 * mu * (self.F_p[p] - U @ V.transpose())
+            stress = stress @ self.F_p[p].transpose()  # pyright: ignore
             stress += ti.Matrix.identity(float, 2) * la * JE_p * (JE_p - 1)
 
             # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
