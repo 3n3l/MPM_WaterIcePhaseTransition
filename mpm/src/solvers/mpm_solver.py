@@ -438,14 +438,14 @@ class MPM_Solver:
             # Initially, we allow each particle to freely change its temperature according to the heat equation.
             # But whenever the freezing point is reached, any additional temperature change is multiplied by
             # conductivity and mass and added to the buffer, with the particle temperature kept unchanged.
-            if (self.phase_p[p] == Phase.Ice) and (nt >= 0):
+            if (self.phase_p[p] == Phase.Ice) and (next_temperature >= 0):
                 # Ice reached the melting point, additional temperature change is added to heat buffer.
-                difference = nt - self.temperature_p[p]
+                difference = next_temperature - self.temperature_p[p]
                 self.heat_p[p] += self.conductivity_p[p] * self.mass_p[p] * difference
 
                 # If the heat buffer is full the particle changes its phase to water,
                 # everything is then reset according to the new phase.
-                if self.heat_p[p] > LatentHeat.Water:
+                if self.heat_p[p] >= LatentHeat.Water:
                     # TODO: Shouldn't this just be set to ~inf, 0?
                     E, nu = YoungsModulus.Water, PoissonsRatio.Water
                     self.lambda_0_p[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
@@ -458,14 +458,14 @@ class MPM_Solver:
                     self.mass_p[p] = self.particle_vol * Density.Water
                     self.heat_p[p] = LatentHeat.Water
 
-            elif (self.phase_p[p] == Phase.Water) and (nt < 0):
+            elif (self.phase_p[p] == Phase.Water) and (next_temperature < 0):
                 # Water particle reached the freezing point, additional temperature change is added to heat buffer.
-                difference = nt - self.temperature_p[p]
+                difference = next_temperature - self.temperature_p[p]
                 self.heat_p[p] += self.conductivity_p[p] * self.mass_p[p] * difference
 
                 # If the heat buffer is empty the particle changes its phase to ice,
                 # everything is then reset according to the new phase.
-                if self.heat_p[p] < LatentHeat.Ice:
+                if self.heat_p[p] <= LatentHeat.Ice:
                     E, nu = YoungsModulus.Ice, PoissonsRatio.Ice
                     self.lambda_0_p[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
                     self.mu_0_p[p] = E / (2 * (1 + nu))
@@ -479,4 +479,4 @@ class MPM_Solver:
 
             else:
                 # Freely change temperature according to heat equation.
-                self.temperature_p[p] = nt
+                self.temperature_p[p] = next_temperature
