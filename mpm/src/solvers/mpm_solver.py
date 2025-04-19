@@ -160,11 +160,7 @@ class MPM_Solver:
                 la, mu = la * hardening, mu * hardening
             else:
                 # Reset elastic deformation gradient to avoid numerical instability.
-                self.FE_p[p] = ti.Matrix.identity(float, self.n_dimensions) * JE_p ** (1 / self.n_dimensions)
-                # FIXME: JE_p is only close to 1.0, but should be exactly 1.0?!
-                # FIXME: there should also be a correction for FP?!
                 self.F_p[p] = ti.Matrix.identity(float, self.n_dimensions) * JE_p ** (1 / self.n_dimensions)
-                # print(JE_p, JP_p)
                 # Set mu to zero for water TODO: this could just be done in mu_0_p?
                 mu = 0
 
