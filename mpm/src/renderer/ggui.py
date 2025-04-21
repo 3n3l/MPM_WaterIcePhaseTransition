@@ -16,6 +16,7 @@ class GGUI(BaseRenderer):
         mpm_solver: MPM_Solver,
         configurations: list[Configuration],
         poisson_disk_sampler: PoissonDiskSampler,
+        initial_configuration: int = 0,
     ) -> None:
         """Constructs a  GGUI renderer, this advances the MLS-MPM solver and renders the updated particle positions.
         ---
@@ -26,6 +27,7 @@ class GGUI(BaseRenderer):
             configurations: list of configurations for the solver
         """
         super().__init__(
+            initial_configuration=initial_configuration,
             poisson_disk_sampler=poisson_disk_sampler,
             configurations=configurations,
             mpm_solver=mpm_solver,

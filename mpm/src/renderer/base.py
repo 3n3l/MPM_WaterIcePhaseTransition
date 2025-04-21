@@ -17,6 +17,7 @@ class BaseRenderer:
         poisson_disk_sampler: PoissonDiskSampler,
         configurations: list[Configuration],
         mpm_solver: MPM_Solver,
+        initial_configuration: int = 0,
     ) -> None:
         """Constructs a Renderer object, this advances the MLS-MPM solver and renders the updated particle positions.
         ---
@@ -43,8 +44,8 @@ class BaseRenderer:
 
         # Load the initial configuration and reset the solver to this configuration.
         self.current_frame = 0
-        self.configuration_id = 0
         self.configurations = configurations
+        self.configuration_id = initial_configuration
         self.load_configuration(configurations[self.configuration_id])
 
     @abstractmethod
@@ -71,7 +72,7 @@ class BaseRenderer:
             self.mpm_solver.classify_cells()
             self.mpm_solver.compute_volumes()
             self.mpm_solver.pressure_solver.solve()
-            self.mpm_solver.heat_solver.solve()
+            # self.mpm_solver.heat_solver.solve()
             self.mpm_solver.grid_to_particle()
 
     @ti.func

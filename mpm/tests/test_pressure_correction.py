@@ -18,6 +18,7 @@ class TestRenderer(BaseRenderer):
         solver: MPM_Solver,
         configurations: list[Configuration],
         poisson_disk_sampler: PoissonDiskSampler,
+        initial_configuration: int = 0,
     ) -> None:
         super().__init__(mpm_solver=solver, configurations=configurations, poisson_disk_sampler=poisson_disk_sampler)
         self.divergence = ti.ndarray(ti.f32, shape=(solver.n_grid, solver.n_grid))
@@ -72,6 +73,7 @@ def main() -> None:
     solver = MPM_Solver(quality=1, max_particles=max_particles)
     poisson_disk_sampler = PoissonDiskSampler(mpm_solver=solver)
     test_renderer = TestRenderer(
+        initial_configuration=arguments.configuration,
         poisson_disk_sampler=poisson_disk_sampler,
         configurations=configuration_list,
         solver=solver,

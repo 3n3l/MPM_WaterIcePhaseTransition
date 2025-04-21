@@ -49,6 +49,24 @@ configuration_list = [
         ambient_temperature=20.0,
     ),
     Configuration(
+        name="Dam Break [Water]",
+        geometries=[
+            Rectangle(
+                lower_left=(offset, offset),
+                phase=Phase.Water,
+                temperature=20.0,
+                size=(0.5 - offset, 0.5 - offset),
+                velocity=(0, 0),
+            ),
+        ],
+        E=5e5,  # Young's modulus (1.4e5)
+        nu=0.45,  # Poisson's ratio (0.2)
+        zeta=10,  # Hardening coefficient (10)
+        theta_c=2.5e-2,  # Critical compression (2.5e-2)
+        theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ambient_temperature=20.0,
+    ),
+    Configuration(
         name="Stationary Pool [Water]",
         geometries=[
             Rectangle(

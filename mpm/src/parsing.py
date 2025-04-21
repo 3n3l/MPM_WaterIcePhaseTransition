@@ -15,7 +15,7 @@ parser.add_argument(
     help=ggui_help,
 )
 
-configuration_help = "\n".join([f"{i}: {c.name}" for i, c in enumerate(configuration_list)])
+configuration_help = f"Available Configurations:\n{'\n'.join([f'[{i}] -> {c.name}' for i, c in enumerate(configuration_list)])}"
 parser.add_argument(
     "-c",
     "--configuration",

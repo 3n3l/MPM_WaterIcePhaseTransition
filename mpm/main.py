@@ -21,22 +21,25 @@ def main():
     poisson_disk_sampler = PoissonDiskSampler(mpm_solver=solver)
 
     simulation_name = "MPM - Water and Ice with Phase Transition"
+    initial_configuration = arguments.configuration % len(configuration_list)
     if arguments.gui.lower() == "ggui":
         renderer = GGUI(
-            configurations=configuration_list,
+            initial_configuration=initial_configuration,
             poisson_disk_sampler=poisson_disk_sampler,
+            configurations=configuration_list,
+            name=simulation_name,
             mpm_solver=solver,
             res=(720, 720),
-            name=simulation_name,
         )
         renderer.run()
     elif arguments.gui.lower() == "gui":
         renderer = GUI(
-            configuration=configuration_list[arguments.configuration],
+            initial_configuration=initial_configuration,
             poisson_disk_sampler=poisson_disk_sampler,
+            configurations=configuration_list,
+            name=simulation_name,
             mpm_solver=solver,
             res=720,
-            name=simulation_name,
         )
         renderer.run()
 
