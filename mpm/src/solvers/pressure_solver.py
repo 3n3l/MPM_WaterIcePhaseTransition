@@ -66,34 +66,26 @@ class PressureSolver:
                 if i != 0 and self.classification_c[i - 1, j] != Classification.Colliding:
                     inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
                     A_c -= self.dt * inv_dx_squared * inv_rho
-                if i != 0 and self.classification_c[i - 1, j] == Classification.Interior:
-                    inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
-                    A[idx, idx - self.n_grid] += self.dt * inv_dx_squared * inv_rho
-                    A_l += self.dt * inv_dx_squared * inv_rho
+                    if self.classification_c[i - 1, j] == Classification.Interior:
+                        A[idx, idx - self.n_grid] += self.dt * inv_dx_squared * inv_rho
 
                 if i != self.n_grid - 1 and self.classification_c[i + 1, j] != Classification.Colliding:
                     inv_rho = self.volume_x[i + 1, j] / self.mass_x[i + 1, j]
                     A_c -= self.dt * inv_dx_squared * inv_rho
-                if i != self.n_grid - 1 and self.classification_c[i + 1, j] == Classification.Interior:
-                    inv_rho = self.volume_x[i + 1, j] / self.mass_x[i + 1, j]
-                    A[idx, idx + self.n_grid] += self.dt * inv_dx_squared * inv_rho
-                    A_r += self.dt * inv_dx_squared * inv_rho
+                    if self.classification_c[i + 1, j] == Classification.Interior:
+                        A[idx, idx + self.n_grid] += self.dt * inv_dx_squared * inv_rho
 
                 if j != 0 and self.classification_c[i, j - 1] != Classification.Colliding:
                     inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
                     A_c -= self.dt * inv_dx_squared * inv_rho
-                if j != 0 and self.classification_c[i, j - 1] == Classification.Interior:
-                    inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
-                    A[idx, idx - 1] += self.dt * inv_dx_squared * inv_rho
-                    A_b += self.dt * inv_dx_squared * inv_rho
+                    if self.classification_c[i, j - 1] == Classification.Interior:
+                        A[idx, idx - 1] += self.dt * inv_dx_squared * inv_rho
 
                 if j != self.n_grid - 1 and self.classification_c[i, j + 1] != Classification.Colliding:
                     inv_rho = self.volume_y[i, j + 1] / self.mass_y[i, j + 1]
                     A_c -= self.dt * inv_dx_squared * inv_rho
-                if j != self.n_grid - 1 and self.classification_c[i, j + 1] == Classification.Interior:
-                    inv_rho = self.volume_y[i, j + 1] / self.mass_y[i, j + 1]
-                    A[idx, idx + 1] += self.dt * inv_dx_squared * inv_rho
-                    A_t += self.dt * inv_dx_squared * inv_rho
+                    if self.classification_c[i, j + 1] == Classification.Interior:
+                        A[idx, idx + 1] += self.dt * inv_dx_squared * inv_rho
 
                 A[idx, idx] += A_c
 
@@ -151,6 +143,8 @@ class PressureSolver:
         for i, j in self.pressure_c:
             row = (i * self.n_grid) + j
             self.pressure_c[i, j] = p[row]
+            # TODO: compute pressure according to constitutive model
+            # p = ((-1) / self.J_c[i, j]) * (1 / self.inv_lambda_c[i, j]) * (self.JE_c[i, j] - 1)
 
     @ti.kernel
     def apply_pressure(self):
@@ -189,9 +183,8 @@ class PressureSolver:
             self.velocity_y[i, j] -= z * inv_rho * (self.pressure_c[i, j] - self.pressure_c[i, j - 1])
 
     def solve(self):
-        # TODO: max_num_triplets could be optimized to N * 5?
         A = SparseMatrixBuilder(
-            # max_num_triplets=(self.n_cells * self.n_cells),
+            # TODO: max_num_triplets could be optimized to N * 5?
             max_num_triplets=(10 * self.n_cells),
             num_rows=self.n_cells,
             num_cols=self.n_cells,
@@ -207,7 +200,6 @@ class PressureSolver:
             p = solver.solve(b)
             # FIXME: remove this debugging statements or move to test file
             solver_succeeded, pressure = solver.info(), p.to_numpy()
-
             assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
             assert not np.any(np.isnan(pressure)), "NAN VALUE IN PRESSURE ARRAY!"
         else:
