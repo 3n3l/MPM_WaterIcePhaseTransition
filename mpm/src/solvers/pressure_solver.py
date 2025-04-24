@@ -5,6 +5,8 @@ from src.constants import Classification
 import taichi as ti
 import numpy as np
 
+GRAVITY = -9.81
+
 
 @ti.data_oriented
 class PressureSolver:
@@ -181,6 +183,7 @@ class PressureSolver:
             # Backward difference between the two adjacent cells.
             inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
             self.velocity_y[i, j] -= z * inv_rho * (self.pressure_c[i, j] - self.pressure_c[i, j - 1])
+            self.velocity_y[i, j] += self.dt * GRAVITY
 
     def solve(self):
         A = SparseMatrixBuilder(

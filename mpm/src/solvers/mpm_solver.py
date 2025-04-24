@@ -16,9 +16,6 @@ from src.solvers import PressureSolver, HeatSolver
 
 import taichi as ti
 
-# TODO: move to configuration?
-GRAVITY = -9.81
-
 
 @ti.data_oriented
 class MPM_Solver:
@@ -275,7 +272,6 @@ class MPM_Solver:
         for i, j in self.mass_y:
             if self.mass_y[i, j] > 0:  # No need for epsilon here
                 self.velocity_y[i, j] *= 1 / self.mass_y[i, j]
-                self.velocity_y[i, j] += self.dt * GRAVITY
                 # TODO: as the boundary is classified as colliding later on, this could done while applying pressure?
                 collision_top = j > (self.n_grid - self.boundary_width) and self.velocity_y[i, j] > 0
                 collision_bottom = j < self.boundary_width and self.velocity_y[i, j] < 0
