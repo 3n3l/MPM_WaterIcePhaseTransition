@@ -141,10 +141,12 @@ class MPM_Solver:
             # Clamp singular values to simulate plasticity and elasticity.
             for d in ti.static(range(self.n_dimensions)):
                 singular_value = float(sigma[d, d])
-                # Clamp singular values to [1 - theta_c, 1 + theta_s]
-                clamped = max(singular_value, 1 - self.theta_c[None])
-                clamped = min(clamped, 1 + self.theta_s[None])
-                sigma[d, d] = clamped
+                clamped = singular_value
+                if self.phase_p[p] == Phase.Ice:
+                    # Clamp singular values to [1 - theta_c, 1 + theta_s]
+                    clamped = max(clamped, 1 - self.theta_c[None])
+                    clamped = min(clamped, 1 + self.theta_s[None])
+                    sigma[d, d] = clamped
                 JP_p *= singular_value / clamped
                 JE_p *= clamped
 
