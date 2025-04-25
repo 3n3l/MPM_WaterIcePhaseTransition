@@ -97,7 +97,7 @@ class BaseRenderer:
         # Set properties to default values:
         self.mpm_solver.mass_p[index] = self.mpm_solver.particle_vol * self.mpm_solver.rho_0
         self.mpm_solver.inv_lambda_p[index] = 1 / self.mpm_solver.lambda_0[None]
-        self.mpm_solver.F_p[index] = ti.Matrix([[1, 0], [0, 1]])
+        self.mpm_solver.FE_p[index] = ti.Matrix([[1, 0], [0, 1]])
         self.mpm_solver.C_p[index] = ti.Matrix.zero(float, 2, 2)
         self.mpm_solver.state_p[index] = State.Active
         self.mpm_solver.JE_p[index] = 1.0

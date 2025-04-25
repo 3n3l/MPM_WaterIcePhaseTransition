@@ -74,7 +74,7 @@ class MPM_Solver:
         self.phase_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.mass_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.mu_0_p = ti.field(dtype=ti.float32, shape=max_particles)
-        self.F_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
+        self.FE_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
         self.JE_p = ti.field(dtype=float, shape=max_particles)
         self.JP_p = ti.field(dtype=float, shape=max_particles)
         self.C_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
@@ -142,10 +142,10 @@ class MPM_Solver:
                 continue
 
             # Deformation gradient update.
-            self.F_p[p] = self.R(self.dt * self.C_p[p]) @ self.F_p[p]  # pyright: ignore
+            self.FE_p[p] = self.R(self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
 
             la, mu = self.lambda_0_p[p], self.mu_0_p[p]
-            U, sigma, V = ti.svd(self.F_p[p])
+            U, sigma, V = ti.svd(self.FE_p[p])
             JE_p, JP_p, J_p = 1.0, 1.0, 1.0
 
             # Clamp singular values to simulate plasticity and elasticity.
@@ -162,22 +162,33 @@ class MPM_Solver:
 
             if self.phase_p[p] == Phase.Ice:
                 # Reconstruct elastic deformation gradient after plasticity
-                self.F_p[p] = U @ sigma @ V.transpose()
+                self.FE_p[p] = U @ sigma @ V.transpose()
 
                 # Apply ice hardening by adjusting Lame parameters
                 hardening = ti.max(0.1, ti.min(20, ti.exp(self.zeta[None] * (1.0 - JP_p))))
                 la, mu = la * hardening, mu * hardening
+
+                # NOTE: further corrections to FE, FP, JE, JP would go here:
+                # FE <- JP^(1/d) * FE
+                # FP <- JP^(-1/d) * FP
+                # NOTE: this would make FP purely deviatoric and set JP = 1,
+                #       while keeping a balance with FE, JE, that are then used
+                #       to compute the deviatoric stress.
             else:
                 # Reset elastic deformation gradient to avoid numerical instability.
-                self.F_p[p] = ti.Matrix.identity(float, self.n_dimensions) * JE_p ** (1 / self.n_dimensions)
+                # NOTE: this makes FE purely dilational, clearing its deviatoric component
+                # NOTE: that this update to FE is different than the update in the solid phase
+                self.FE_p[p] = ti.Matrix.identity(float, self.n_dimensions) * JE_p ** (1 / self.n_dimensions)
                 # self.F_p[p] = ti.sqrt(JE_p) * ti.Matrix.identity(float, self.n_dimensions)
                 # Set mu to zero for water TODO: this could just be done in mu_0_p?
                 mu = 0
 
             # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
-            stress = 2 * mu * (self.F_p[p] - U @ V.transpose()) @ self.F_p[p].transpose()  # pyright: ignore
+            stress = 2 * mu * (self.FE_p[p] - U @ V.transpose()) @ self.FE_p[p].transpose()  # pyright: ignore
 
             # FIXME: discretize the dilational component with the pressure correction?!
+            # NOTE: not incorporating this dilational stress is equivalent to setting
+            #       stress to zero in the fluid phase.
             # stress += ti.Matrix.identity(float, 2) * la * JE_p * (JE_p - 1)
 
             # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
