@@ -397,6 +397,7 @@ class MPM_Solver:
             w_x = [0.5 * (1.5 - dist_x) ** 2, 0.75 - (dist_x - 1) ** 2, 0.5 * (dist_x - 0.5) ** 2]
             w_y = [0.5 * (1.5 - dist_y) ** 2, 0.75 - (dist_y - 1) ** 2, 0.5 * (dist_y - 0.5) ** 2]
 
+            g_x = [dist_x - 1.5, (-2) * (dist_x - 1), dist_x - 0.5]
             g_y = [dist_y - 1.5, (-2) * (dist_y - 1), dist_y - 0.5]
 
             next_velocity = ti.Vector.zero(float, 2)
@@ -442,48 +443,48 @@ class MPM_Solver:
             # TODO: in theory all of the constitutive parameters must be functions of temperature
             #       in the ice phase to range from solid ice to slushy ice?
 
-            # Initially, we allow each particle to freely change its temperature according to the heat equation.
-            # But whenever the freezing point is reached, any additional temperature change is multiplied by
-            # conductivity and mass and added to the buffer, with the particle temperature kept unchanged.
-            if (self.phase_p[p] == Phase.Ice) and (next_temperature >= 0):
-                # Ice reached the melting point, additional temperature change is added to heat buffer.
-                difference = next_temperature - self.temperature_p[p]
-                self.heat_p[p] += self.conductivity_p[p] * self.mass_p[p] * difference
-
-                # If the heat buffer is full the particle changes its phase to water,
-                # everything is then reset according to the new phase.
-                if self.heat_p[p] >= LatentHeat.Water:
-                    # TODO: Shouldn't this just be set to ~inf, 0?
-                    E, nu = YoungsModulus.Water, PoissonsRatio.Water
-                    self.lambda_0_p[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
-                    self.mu_0_p[p] = E / (2 * (1 + nu))
-                    self.capacity_p[p] = Capacity.Water
-                    self.conductivity_p[p] = Conductivity.Water
-                    self.color_p[p] = Color.Water
-                    self.temperature_p[p] = 0.0
-                    self.phase_p[p] = Phase.Water
-                    self.mass_p[p] = self.particle_vol * Density.Water
-                    self.heat_p[p] = LatentHeat.Water
-
-            elif (self.phase_p[p] == Phase.Water) and (next_temperature < 0):
-                # Water particle reached the freezing point, additional temperature change is added to heat buffer.
-                difference = next_temperature - self.temperature_p[p]
-                self.heat_p[p] += self.conductivity_p[p] * self.mass_p[p] * difference
-
-                # If the heat buffer is empty the particle changes its phase to ice,
-                # everything is then reset according to the new phase.
-                if self.heat_p[p] <= LatentHeat.Ice:
-                    E, nu = YoungsModulus.Ice, PoissonsRatio.Ice
-                    self.lambda_0_p[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
-                    self.mu_0_p[p] = E / (2 * (1 + nu))
-                    self.capacity_p[p] = Capacity.Ice
-                    self.color_p[p] = Color.Ice
-                    self.conductivity_p[p] = Conductivity.Ice
-                    self.temperature_p[p] = 0.0
-                    self.phase_p[p] = Phase.Ice
-                    self.mass_p[p] = self.particle_vol * Density.Ice
-                    self.heat_p[p] = LatentHeat.Ice
-
-            else:
-                # Freely change temperature according to heat equation.
-                self.temperature_p[p] = next_temperature
+            # # Initially, we allow each particle to freely change its temperature according to the heat equation.
+            # # But whenever the freezing point is reached, any additional temperature change is multiplied by
+            # # conductivity and mass and added to the buffer, with the particle temperature kept unchanged.
+            # if (self.phase_p[p] == Phase.Ice) and (next_temperature >= 0):
+            #     # Ice reached the melting point, additional temperature change is added to heat buffer.
+            #     difference = next_temperature - self.temperature_p[p]
+            #     self.heat_p[p] += self.conductivity_p[p] * self.mass_p[p] * difference
+            #
+            #     # If the heat buffer is full the particle changes its phase to water,
+            #     # everything is then reset according to the new phase.
+            #     if self.heat_p[p] >= LatentHeat.Water:
+            #         # TODO: Shouldn't this just be set to ~inf, 0?
+            #         E, nu = YoungsModulus.Water, PoissonsRatio.Water
+            #         self.lambda_0_p[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
+            #         self.mu_0_p[p] = E / (2 * (1 + nu))
+            #         self.capacity_p[p] = Capacity.Water
+            #         self.conductivity_p[p] = Conductivity.Water
+            #         self.color_p[p] = Color.Water
+            #         self.temperature_p[p] = 0.0
+            #         self.phase_p[p] = Phase.Water
+            #         self.mass_p[p] = self.particle_vol * Density.Water
+            #         self.heat_p[p] = LatentHeat.Water
+            #
+            # elif (self.phase_p[p] == Phase.Water) and (next_temperature < 0):
+            #     # Water particle reached the freezing point, additional temperature change is added to heat buffer.
+            #     difference = next_temperature - self.temperature_p[p]
+            #     self.heat_p[p] += self.conductivity_p[p] * self.mass_p[p] * difference
+            #
+            #     # If the heat buffer is empty the particle changes its phase to ice,
+            #     # everything is then reset according to the new phase.
+            #     if self.heat_p[p] <= LatentHeat.Ice:
+            #         E, nu = YoungsModulus.Ice, PoissonsRatio.Ice
+            #         self.lambda_0_p[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
+            #         self.mu_0_p[p] = E / (2 * (1 + nu))
+            #         self.capacity_p[p] = Capacity.Ice
+            #         self.color_p[p] = Color.Ice
+            #         self.conductivity_p[p] = Conductivity.Ice
+            #         self.temperature_p[p] = 0.0
+            #         self.phase_p[p] = Phase.Ice
+            #         self.mass_p[p] = self.particle_vol * Density.Ice
+            #         self.heat_p[p] = LatentHeat.Ice
+            #
+            # else:
+            #     # Freely change temperature according to heat equation.
+            #     self.temperature_p[p] = next_temperature
