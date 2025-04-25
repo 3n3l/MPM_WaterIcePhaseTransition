@@ -1,15 +1,39 @@
 import utils  # import first to append parent directory to path
 
-from src.configurations import Configuration
+from src.configurations import Configuration, Rectangle
 from src.samplers import PoissonDiskSampler
-from src.presets import configuration_list
-from src.constants import Classification
+
+# from src.presets import configuration_list
+from src.constants import Classification, Phase
 from src.renderer import BaseRenderer
 from src.solvers import MPM_Solver
 from src.parsing import arguments
 
 import taichi as ti
 import numpy as np
+
+offset = 0.0234375
+
+configuration_list = [
+    Configuration(
+        name="Dam Break [Water]",
+        geometries=[
+            Rectangle(
+                lower_left=(offset, offset),
+                phase=Phase.Water,
+                temperature=20.0,
+                size=(0.5 - offset, 0.5 - offset),
+                velocity=(0, 0),
+            ),
+        ],
+        E=5e5,  # Young's modulus (1.4e5)
+        nu=0.45,  # Poisson's ratio (0.2)
+        zeta=10,  # Hardening coefficient (10)
+        theta_c=2.5e-2,  # Critical compression (2.5e-2)
+        theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        ambient_temperature=20.0,
+    ),
+]
 
 
 class TestRenderer(BaseRenderer):
