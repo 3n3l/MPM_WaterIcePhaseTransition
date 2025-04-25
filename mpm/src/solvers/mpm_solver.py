@@ -390,27 +390,35 @@ class MPM_Solver:
             w_x = [0.5 * (1.5 - dist_x) ** 2, 0.75 - (dist_x - 1) ** 2, 0.5 * (dist_x - 0.5) ** 2]
             w_y = [0.5 * (1.5 - dist_y) ** 2, 0.75 - (dist_y - 1) ** 2, 0.5 * (dist_y - 0.5) ** 2]
 
+            g_y = [dist_y - 1.5, (-2) * (dist_y - 1), dist_y - 0.5]
+
             next_velocity = ti.Vector.zero(float, 2)
-            b_x = ti.Vector.zero(float, 2)
-            b_y = ti.Vector.zero(float, 2)
+            # b_x = ti.Vector.zero(float, 2)
+            # b_y = ti.Vector.zero(float, 2)
+            c_x = ti.Vector.zero(ti.f32, 2)
+            c_y = ti.Vector.zero(ti.f32, 2)
             next_temperature = 0.0
             for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
                 offset = ti.Vector([i, j])
                 c_weight = w_c[i][0] * w_c[j][1]
                 x_weight = w_x[i][0] * w_x[j][1]
                 y_weight = w_y[i][0] * w_y[j][1]
-                x_dpos = ti.cast(offset, ti.f32) - dist_x
-                y_dpos = ti.cast(offset, ti.f32) - dist_y
+                # x_dpos = ti.cast(offset, ti.f32) - dist_x
+                # y_dpos = ti.cast(offset, ti.f32) - dist_y
+                grad_x = ti.Vector([g_x[i][0] * w_x[j][1], w_x[i][0] * g_x[j][1]])
+                grad_y = ti.Vector([g_y[i][0] * w_y[j][1], w_y[i][0] * g_y[j][1]])
 
                 next_temperature += c_weight * self.temperature_c[base_c + offset]
                 x_velocity = x_weight * self.velocity_x[base_x + offset]
                 y_velocity = y_weight * self.velocity_y[base_y + offset]
                 next_velocity += [x_velocity, y_velocity]
-                b_x += x_velocity * x_dpos
-                b_y += y_velocity * y_dpos
+                # b_x += x_velocity * x_dpos
+                # b_y += y_velocity * y_dpos
+                c_x += self.velocity_x[base_x + offset] * grad_x
+                c_y += self.velocity_y[base_y + offset] * grad_y
 
-            c_x = 3 * self.inv_dx * b_x  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
-            c_y = 3 * self.inv_dx * b_y  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
+            # c_x = 3 * self.inv_dx * b_x  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
+            # c_y = 3 * self.inv_dx * b_y  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
             self.C_p[p] = ti.Matrix([[c_x[0], c_y[0]], [c_x[1], c_y[1]]])  # pyright: ignore
             self.position_p[p] += self.dt * next_velocity
             self.velocity_p[p] = next_velocity
