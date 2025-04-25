@@ -246,8 +246,8 @@ class MPM_Solver:
                 offset = ti.Vector([i, j])
                 weight_x = w_x[i][0] * w_x[j][1]
                 weight_y = w_y[i][0] * w_y[j][1]
-                dpos_x = (offset.cast(float) - dist_x) * self.dx
-                dpos_y = (offset.cast(float) - dist_y) * self.dx
+                dpos_x = (ti.cast(offset, ti.f32) - dist_x) * self.dx
+                dpos_y = (ti.cast(offset, ti.f32) - dist_y) * self.dx
 
                 # Rasterize mass to grid faces.
                 self.mass_x[base_x + offset] += weight_x * self.mass_p[p]
