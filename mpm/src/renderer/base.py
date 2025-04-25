@@ -82,12 +82,17 @@ class BaseRenderer:
         self.mpm_solver.temperature_p[index] = geometry.temperature
         self.mpm_solver.capacity_p[index] = geometry.capacity
         self.mpm_solver.velocity_p[index] = geometry.velocity
-        self.mpm_solver.lambda_0_p[index] = geometry.lambda_0
+        # self.mpm_solver.lambda_0_p[index] = geometry.lambda_0
         self.mpm_solver.color_p[index] = geometry.color
         self.mpm_solver.phase_p[index] = geometry.phase
         self.mpm_solver.heat_p[index] = geometry.heat
-        self.mpm_solver.mu_0_p[index] = geometry.mu_0
+        # self.mpm_solver.mu_0_p[index] = geometry.mu_0
         self.mpm_solver.position_p[index] = position
+
+        # TODO: 5e9 would be a good test
+        # self.mpm_solver.lambda_0_p[index] = 5e9
+        self.mpm_solver.lambda_0_p[index] = 1e6
+        self.mpm_solver.mu_0_p[index] = 0
 
         # Set properties to default values:
         self.mpm_solver.mass_p[index] = self.mpm_solver.particle_vol * self.mpm_solver.rho_0
