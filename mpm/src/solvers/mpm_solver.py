@@ -124,6 +124,13 @@ class MPM_Solver:
             self.JE_c[i, j] = 0
             self.JP_c[i, j] = 0
 
+    @ti.func
+    def R(self, M: ti.types.matrix(2, 2, float)) -> ti.types.matrix(2, 2, float):  # pyright: ignore
+        result = ti.Matrix.identity(float, 2) + M
+        while ti.math.determinant(result) < 0:
+            result = (ti.Matrix.identity(float, 2) + (0.5 * result)) ** 2
+        return result
+
     @ti.kernel
     def particle_to_grid(self):
         for p in ti.ndrange(self.n_particles[None]):
@@ -132,7 +139,7 @@ class MPM_Solver:
                 continue
 
             # Deformation gradient update.
-            self.F_p[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C_p[p]) @ self.F_p[p]  # pyright: ignore
+            self.F_p[p] = self.R(self.dt * self.C_p[p]) @ self.F_p[p]  # pyright: ignore
 
             la, mu = self.lambda_0_p[p], self.mu_0_p[p]
             U, sigma, V = ti.svd(self.F_p[p])
