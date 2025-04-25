@@ -15,7 +15,7 @@ parser.add_argument(
     help=ggui_help,
 )
 
-configuration_help = f"Available Configurations:\n{'\n'.join([f'[{i}] -> {c.name}' for i, c in enumerate(configuration_list)])}"
+configuration_help =  f"Available Configurations:\n{'\n'.join([f'[{i}] -> {c.name}' for i, c in enumerate(configuration_list)])}"
 parser.add_argument(
     "-c",
     "--configuration",
@@ -67,4 +67,4 @@ parser.add_argument(
 arguments = parser.parse_args()
 
 # Parsed constants:
-should_use_direct_solver=(arguments.solverType.lower() == "direct")
+should_use_direct_solver = arguments.solverType.lower() == "direct"

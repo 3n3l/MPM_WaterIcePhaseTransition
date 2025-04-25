@@ -59,6 +59,7 @@ class MPM_Solver:
         self.mass_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.JE_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.JP_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.J_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
 
         # Properties on particles.
         self.conductivity_p = ti.field(dtype=ti.float32, shape=max_particles)
@@ -123,9 +124,11 @@ class MPM_Solver:
             self.mass_c[i, j] = 0
             self.JE_c[i, j] = 0
             self.JP_c[i, j] = 0
+            # self.J_c[i, j] = 0
 
     @ti.func
     def R(self, M: ti.types.matrix(2, 2, float)) -> ti.types.matrix(2, 2, float):  # pyright: ignore
+        # TODO: this might not be needed, as the timestep is so small for explicit MPM anyway
         result = ti.Matrix.identity(float, 2) + M
         while ti.math.determinant(result) < 0:
             result = (ti.Matrix.identity(float, 2) + (0.5 * result)) ** 2
@@ -143,7 +146,7 @@ class MPM_Solver:
 
             la, mu = self.lambda_0_p[p], self.mu_0_p[p]
             U, sigma, V = ti.svd(self.F_p[p])
-            JE_p, JP_p = 1.0, 1.0
+            JE_p, JP_p, J_p = 1.0, 1.0, 1.0
 
             # Clamp singular values to simulate plasticity and elasticity.
             for d in ti.static(range(self.n_dimensions)):
@@ -167,13 +170,15 @@ class MPM_Solver:
             else:
                 # Reset elastic deformation gradient to avoid numerical instability.
                 self.F_p[p] = ti.Matrix.identity(float, self.n_dimensions) * JE_p ** (1 / self.n_dimensions)
+                # self.F_p[p] = ti.sqrt(JE_p) * ti.Matrix.identity(float, self.n_dimensions)
                 # Set mu to zero for water TODO: this could just be done in mu_0_p?
                 mu = 0
 
             # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
-            stress = 2 * mu * (self.F_p[p] - U @ V.transpose())
-            stress = stress @ self.F_p[p].transpose()  # pyright: ignore
-            stress += ti.Matrix.identity(float, 2) * la * JE_p * (JE_p - 1)
+            stress = 2 * mu * (self.F_p[p] - U @ V.transpose()) @ self.F_p[p].transpose()  # pyright: ignore
+
+            # FIXME: discretize the dilational component with the pressure correction?!
+            # stress += ti.Matrix.identity(float, 2) * la * JE_p * (JE_p - 1)
 
             # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
             D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
@@ -182,6 +187,7 @@ class MPM_Solver:
             stress *= -self.dt * self.particle_vol * D_inv
 
             # APIC momentum + MLS-MPM stress contribution [Hu et al. 2018, Eqn. 29].
+            # TODO: use cx, cy vectors here directly?
             affine = stress + self.mass_p[p] * self.C_p[p]
             affine_x = affine @ ti.Vector([1, 0])  # pyright: ignore
             affine_y = affine @ ti.Vector([0, 1])  # pyright: ignore
@@ -239,8 +245,9 @@ class MPM_Solver:
 
                 # We use JE^n, JP^n from the last timestep for the transfers, the updated
                 # values will be assigned to the corresponding field at the end of the loop.
-                self.JE_c[base_c + offset] += weight_c * self.mass_p[p] * self.JE_p[p]
-                self.JP_c[base_c + offset] += weight_c * self.mass_p[p] * self.JP_p[p]
+                self.JE_c[base_c + offset] += weight_c * self.mass_p[p] * JE_p
+                self.JP_c[base_c + offset] += weight_c * self.mass_p[p] * JP_p
+                # self.J_c[base_c + offset] += weight_c * self.mass_p[p] * J_p
 
             for i, j in ti.static(ti.ndrange(4, 4)):
                 offset = ti.Vector([i, j])
@@ -263,10 +270,6 @@ class MPM_Solver:
                 conductivity = self.mass_p[p] * self.conductivity_p[p]
                 self.conductivity_x[base_x + offset] += weight_x * conductivity
                 self.conductivity_y[base_y + offset] += weight_y * conductivity
-
-            # Update field values with JE^(n+1), JP^(n+1).
-            self.JE_p[p] = JE_p
-            self.JP_p[p] = JP_p
 
     @ti.kernel
     def momentum_to_velocity(self):
@@ -292,6 +295,7 @@ class MPM_Solver:
                 self.inv_lambda_c[i, j] *= 1 / self.mass_c[i, j]
                 self.capacity_c[i, j] *= 1 / self.mass_c[i, j]
                 self.JE_c[i, j] *= 1 / self.mass_c[i, j]
+                # self.J_c[i, j] *= 1 / self.mass_c[i, j]
                 self.JP_c[i, j] *= 1 / self.mass_c[i, j]
 
     @ti.kernel

@@ -52,6 +52,7 @@ class PressureSolver:
 
             # FIXME: this should be on non empty cells, but then the colliding
             #        simulation boundary results in underdetermined linear system
+
             # if self.classification_c[i, j] != Classification.Empty:
             if self.classification_c[i, j] == Classification.Interior:
                 A_c += self.JP_c[i, j] / (self.dt * self.JE_c[i, j]) * self.inv_lambda_c[i, j]
@@ -68,24 +69,28 @@ class PressureSolver:
                 if i != 0 and self.classification_c[i - 1, j] != Classification.Colliding:
                     inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
                     A_c -= self.dt * inv_dx_squared * inv_rho
+                    # if self.classification_c[i - 1, j] != Classification.Empty:
                     if self.classification_c[i - 1, j] == Classification.Interior:
                         A[idx, idx - self.n_grid] += self.dt * inv_dx_squared * inv_rho
 
                 if i != self.n_grid - 1 and self.classification_c[i + 1, j] != Classification.Colliding:
                     inv_rho = self.volume_x[i + 1, j] / self.mass_x[i + 1, j]
                     A_c -= self.dt * inv_dx_squared * inv_rho
+                    # if self.classification_c[i + 1, j] != Classification.Empty:
                     if self.classification_c[i + 1, j] == Classification.Interior:
                         A[idx, idx + self.n_grid] += self.dt * inv_dx_squared * inv_rho
 
                 if j != 0 and self.classification_c[i, j - 1] != Classification.Colliding:
                     inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
                     A_c -= self.dt * inv_dx_squared * inv_rho
+                    # if self.classification_c[i, j - 1] != Classification.Empty:
                     if self.classification_c[i, j - 1] == Classification.Interior:
                         A[idx, idx - 1] += self.dt * inv_dx_squared * inv_rho
 
                 if j != self.n_grid - 1 and self.classification_c[i, j + 1] != Classification.Colliding:
                     inv_rho = self.volume_y[i, j + 1] / self.mass_y[i, j + 1]
                     A_c -= self.dt * inv_dx_squared * inv_rho
+                    # if self.classification_c[i, j + 1] != Classification.Empty:
                     if self.classification_c[i, j + 1] == Classification.Interior:
                         A[idx, idx + 1] += self.dt * inv_dx_squared * inv_rho
 
@@ -208,6 +213,7 @@ class PressureSolver:
         else:
             solver = SparseCG(A.build(), b, max_iter=100)
             p, _ = solver.solve()
+            # print("min, max =", np.min(p), np.max(p))
 
         # Apply the pressure to the intermediate velocity field:
         self.fill_pressure_field(p)
