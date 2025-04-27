@@ -29,6 +29,7 @@ class MPM_Solver:
         self.n_cells = self.n_grid * self.n_grid
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
+        # self.dt = 2e-3 / quality # TODO: better dt for fluid, test this for solid
         self.dt = 1e-3 / quality
         self.rho_0 = 1000  # TODO: this is kg/m^3 for water, what about ice?
         self.particle_vol = (self.dx * 0.5) ** 2
@@ -310,10 +311,8 @@ class MPM_Solver:
         for i, j in self.velocity_x:
             if (mass := self.mass_x[i, j]) > 0:
                 self.velocity_x[i, j] /= mass
-                collision_right = i > (self.n_grid - self.boundary_width)  # and self.velocity_x[i, j] > 0
-                collision_left = i < self.boundary_width  # and self.velocity_x[i, j] < 0
-                # collision_right = self.is_colliding(i + 1, j) # and self.velocity_x[i, j] > 0
-                # collision_left = self.is_colliding(i, j) # and self.velocity_x[i, j] < 0
+                collision_right = i >= (self.n_grid - self.boundary_width) and self.velocity_x[i, j] > 0
+                collision_left = i <= self.boundary_width and self.velocity_x[i, j] < 0
                 if collision_left or collision_right:
                     self.velocity_x[i, j] = 0
 
@@ -321,12 +320,11 @@ class MPM_Solver:
             if (mass := self.mass_y[i, j]) > 0:
                 self.velocity_y[i, j] /= mass
                 self.velocity_y[i, j] += GRAVITY * self.dt
-                # collision_bottom = self.is_colliding(i, j - 1) # and self.velocity_y[i, j] < 0
-                # collision_top = self.is_colliding(i, j) # and self.velocity_y[i, j] > 0
-                collision_top = j > (self.n_grid - self.boundary_width)  # and self.velocity_y[i, j] > 0
-                collision_bottom = j < self.boundary_width  # and self.velocity_y[i, j] < 0
+                collision_top = j >= (self.n_grid - self.boundary_width) and self.velocity_y[i, j] > 0
+                collision_bottom = j <= self.boundary_width and self.velocity_y[i, j] < 0
                 if collision_top or collision_bottom:
                     self.velocity_y[i, j] = 0
+
         for i, j in self.mass_c:
             if self.mass_c[i, j] > 0:  # No need for epsilon here
                 self.temperature_c[i, j] *= 1 / self.mass_c[i, j]
@@ -338,7 +336,7 @@ class MPM_Solver:
 
     @ti.kernel
     def _classify_cells(self):
-        # FIXME: this is not used at the moment and replaced by 
+        # FIXME: this is not used at the moment and replaced by
         # FIXME: the cell classification is offset to the left, resulting in asymmetry
         for i, j in self.classification_x:
             # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
@@ -426,9 +424,9 @@ class MPM_Solver:
 
     @ti.kernel
     def compute_volumes(self):
+        control_volume = 0.5 * self.dx * self.dx
         for i, j in self.classification_c:
             if self.classification_c[i, j] == Classification.Interior:
-                control_volume = 0.5 * self.dx * self.dx
                 self.volume_x[i + 1, j] += control_volume
                 self.volume_y[i, j + 1] += control_volume
                 self.volume_x[i, j] += control_volume
