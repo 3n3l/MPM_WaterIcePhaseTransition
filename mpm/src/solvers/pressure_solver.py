@@ -59,15 +59,15 @@ class PressureSolver:
             center = 0.0  # to keep max_num_triplets as low as possible
             idx = (i * self.n_grid) + j  # raveled index
 
-            # FIXME: the error is in here:
-            # center += self.JP_c[i, j] / (self.dt * self.JE_c[i, j]) * self.inv_lambda_c[i, j]
-            
             if self.is_interior(i, j):
                 # Build the right-hand side of the linear system.
                 # This uses a modified divergence, where the velocities of faces
                 # bordering colliding (solid) cells are considered to be zero.
 
-                # FIXME: and/or in here:
+                # FIXME: the error is in here:
+                # center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
+                # lambda_c = 1 / self.inv_lambda_c[i, j]
+                # center += self.JP_c[i, j] / (self.dt * self.JE_c[i, j] * lambda_c)
                 # b[idx] = -((self.JE_c[i, j] - 1) / (self.dt * self.JE_c[i, j]))
 
                 if not self.is_colliding(i + 1, j):
