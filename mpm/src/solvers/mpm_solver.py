@@ -273,7 +273,9 @@ class MPM_Solver:
                 self.mass_c[base_c + offset] += weight_c * self.mass_p[p]
 
                 # Rasterize lambda (inverse) to cell centers.
-                self.inv_lambda_c[base_c + offset] += weight_c * (1.0 / self.lambda_0_p[p])
+                # self.inv_lambda_c[base_c + offset] += weight_c * self.mass_p[p] * (1.0 / self.lambda_0_p[p])
+                inv_lambda = self.mass_p[p] * (1.0 / self.lambda_0_p[p])
+                self.inv_lambda_c[base_c + offset] += weight_c * inv_lambda
                 # TODO: this should be la, because of incorporated hardening?
                 # TODO: store the inverse on particles to save computations:
                 # self.inv_lambda_c[base_c + offset] += weight_c * self.inv_lambda_0_p[p]
