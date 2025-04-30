@@ -7,6 +7,6 @@ from src.constants.enums import (
     Density,
     LatentHeat,
     State,
-    PoissonsRatio,
-    YoungsModulus,
+    Lambda,
+    Mu,
 )

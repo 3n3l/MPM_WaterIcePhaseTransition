@@ -9,8 +9,6 @@ from src.constants import (
     Density,
     LatentHeat,
     State,
-    PoissonsRatio,
-    YoungsModulus,
 )
 from src.solvers import PressureSolver, HeatSolver
 
@@ -56,7 +54,7 @@ class MPM_Solver:
         # Properties on MAC-cells.
         self.classification_c = ti.field(dtype=ti.int8, shape=(self.n_grid, self.n_grid))
         self.temperature_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.inv_lambda_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.inv_lambda_c = ti.field(dtype=ti.f64, shape=(self.n_grid, self.n_grid))
         self.capacity_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.pressure_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.mass_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
@@ -67,15 +65,15 @@ class MPM_Solver:
         # Properties on particles.
         self.conductivity_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.temperature_p = ti.field(dtype=ti.float32, shape=max_particles)
-        self.inv_lambda_p = ti.field(dtype=ti.float32, shape=max_particles)
+        # self.inv_lambda_p = ti.field(dtype=ti.f64, shape=max_particles)
         self.position_p = ti.Vector.field(2, dtype=float, shape=max_particles)
         self.velocity_p = ti.Vector.field(2, dtype=float, shape=max_particles)
-        self.lambda_0_p = ti.field(dtype=ti.float32, shape=max_particles)
+        self.lambda_0_p = ti.field(dtype=ti.f64, shape=max_particles)
         self.capacity_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.color_p = ti.Vector.field(3, dtype=float, shape=max_particles)
         self.state_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.phase_p = ti.field(dtype=ti.float32, shape=max_particles)
-        self.mass_p = ti.field(dtype=ti.float32, shape=max_particles)
+        self.mass_p = ti.field(dtype=ti.f64, shape=max_particles)
         self.mu_0_p = ti.field(dtype=ti.float32, shape=max_particles)
         self.FE_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
         self.JE_p = ti.field(dtype=float, shape=max_particles)
@@ -273,12 +271,10 @@ class MPM_Solver:
                 self.mass_c[base_c + offset] += weight_c * self.mass_p[p]
 
                 # Rasterize lambda (inverse) to cell centers.
-                # self.inv_lambda_c[base_c + offset] += weight_c * self.mass_p[p] * (1.0 / self.lambda_0_p[p])
-                inv_lambda = self.mass_p[p] * (1.0 / self.lambda_0_p[p])
-                self.inv_lambda_c[base_c + offset] += weight_c * inv_lambda
+                inv_lambda = self.mass_p[p] / self.lambda_0_p[p]
                 # TODO: this should be la, because of incorporated hardening?
-                # TODO: store the inverse on particles to save computations:
-                # self.inv_lambda_c[base_c + offset] += weight_c * self.inv_lambda_0_p[p]
+                # inv_lambda = self.mass_p[p] * (1.0 / la)
+                self.inv_lambda_c[base_c + offset] += weight_c * inv_lambda
 
                 # We use JE^n, JP^n from the last timestep for the transfers, the updated
                 # values will be assigned to the corresponding field at the end of the loop.
@@ -290,8 +286,8 @@ class MPM_Solver:
                 offset = ti.Vector([i, j])
                 weight_x = w_x[i][0] * w_x[j][1]
                 weight_y = w_y[i][0] * w_y[j][1]
-                dpos_x = (ti.cast(offset, ti.f32) - dist_x) * self.dx
-                dpos_y = (ti.cast(offset, ti.f32) - dist_y) * self.dx
+                dpos_x = ti.cast(offset - dist_x, ti.f32) * self.dx
+                dpos_y = ti.cast(offset - dist_y, ti.f32) * self.dx
 
                 # Rasterize mass to grid faces.
                 self.mass_x[base_x + offset] += weight_x * self.mass_p[p]

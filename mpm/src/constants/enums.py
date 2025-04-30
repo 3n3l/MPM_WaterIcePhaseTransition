@@ -49,12 +49,17 @@ class State:
     Hidden = 1
 
 
-class YoungsModulus:  # = E
-    Water = 1e6
-    Ice = 1e6
+# TODO: find good values for ice???
+# TODO: refactor this, maybe use variable values again???
+_E = 1.4e5
+_nu = 0.2
 
 
-class PoissonsRatio:  # = nu
-    # Water = 0.45 # FIXME: not working with current stress computation
-    Water = 0.15
-    Ice = 0.2
+class Lambda:
+    Water = 5e9  # TODO: this could be lower, and then saved into f32 field again?!
+    Ice = _E * _nu / ((1 + _nu) * (1 - 2 * _nu))
+
+
+class Mu:
+    Water = 0
+    Ice = _nu / (2 * (1 + _E))
