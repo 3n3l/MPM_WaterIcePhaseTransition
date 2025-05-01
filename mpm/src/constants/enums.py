@@ -51,8 +51,8 @@ class State:
 
 # TODO: find good values for ice???
 # TODO: refactor this, maybe use variable values again???
-# FIXME: E = 1.4e2 -> collapse, E = 1.4e3 -> explosion
-_E = 1.4e3
+# FIXME: E = 1.4e3 -> collapse, E = 1.4e4 -> explosion
+_E = 1.4e5
 _nu = 0.2
 
 
@@ -63,4 +63,4 @@ class Lambda:
 
 class Mu:
     Water = 0
-    Ice = _nu / (2 * (1 + _E))
+    Ice = _E / (2 * (1 + _nu))
