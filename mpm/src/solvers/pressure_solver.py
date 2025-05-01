@@ -60,58 +60,54 @@ class PressureSolver:
             idx = (i * self.n_grid) + j  # raveled index
 
             if self.is_interior(i, j):
-                # Build the right-hand side of the linear system.
+                # Build the right-hand side of the linear system:
+                b[idx] = (1 - self.JE_c[i, j]) / (self.dt * self.JE_c[i, j])
+
                 # This uses a modified divergence, where the velocities of faces
                 # bordering colliding (solid) cells are considered to be zero.
-
-                # FIXME: the error is in here:
-                # center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
-                # lambda_c = 1 / self.inv_lambda_c[i, j]
-                # center += self.JP_c[i, j] / (self.dt * self.JE_c[i, j] * lambda_c)
-                # b[idx] = -((self.JE_c[i, j] - 1) / (self.dt * self.JE_c[i, j]))
-
+                # FIXME: the only error left is in here:
                 if not self.is_colliding(i + 1, j):
                     b[idx] += self.inv_dx * self.velocity_x[i + 1, j]
-                    # b[idx] -= self.inv_dx * self.velocity_x[i + 1, j]  # FIXME: should be this
+                    # b[idx] -= self.inv_dx * self.velocity_x[i + 1, j]  # FIXME: should be this?!
                 if not self.is_colliding(i - 1, j):
                     b[idx] -= self.inv_dx * self.velocity_x[i, j]
-                    # b[idx] += self.inv_dx * self.velocity_x[i, j]  # FIXME: should be this
+                    # b[idx] += self.inv_dx * self.velocity_x[i, j]  # FIXME: should be this?!
                 if not self.is_colliding(i, j + 1):
                     b[idx] += self.inv_dx * self.velocity_y[i, j + 1]
-                    # b[idx] -= self.inv_dx * self.velocity_y[i, j + 1]  # FIXME: should be this
+                    # b[idx] -= self.inv_dx * self.velocity_y[i, j + 1]  # FIXME: should be this?!
                 if not self.is_colliding(i, j - 1):
                     b[idx] -= self.inv_dx * self.velocity_y[i, j]
-                    # b[idx] += self.inv_dx * self.velocity_y[i, j]  # FIXME: should be this
+                    # b[idx] += self.inv_dx * self.velocity_y[i, j]  # FIXME: should be this?!
+
+
+                # Build the left-hand side of the linear system:
+                center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
 
                 # We will apply a Neumann boundary condition on the colliding faces,
                 # to guarantee zero flux into colliding cells, by just not adding these
                 # face values in the Laplacian for the off-diagonal values.
-                # NOTE: we can use the raveled index to quickly access adjacent cells with:
-                # idx(i, j) = (i * n) + j
-                #   => idx(i - 1, j) = ((i - 1) * n) + j = (i * n) + j - n = idx(i, j) - n
-                #   => idx(i, j - 1) = (i * n) + j - 1 = idx(i, j) - 1, etc.
                 if not self.is_colliding(i - 1, j):
                     inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
                     center -= coefficient * inv_rho
-                    if not self.is_empty(i - 1, j):
+                    if self.is_interior(i - 1, j):
                         A[idx, idx - self.n_grid] += coefficient * inv_rho
 
                 if not self.is_colliding(i + 1, j):
                     inv_rho = self.volume_x[i + 1, j] / self.mass_x[i + 1, j]
                     center -= coefficient * inv_rho
-                    if not self.is_empty(i + 1, j):
+                    if self.is_interior(i + 1, j):
                         A[idx, idx + self.n_grid] += coefficient * inv_rho
 
                 if not self.is_colliding(i, j - 1):
                     inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
                     center -= coefficient * inv_rho
-                    if not self.is_empty(i, j - 1):
+                    if self.is_interior(i, j - 1):
                         A[idx, idx - 1] += coefficient * inv_rho
 
                 if not self.is_colliding(i, j + 1):
                     inv_rho = self.volume_y[i, j + 1] / self.mass_y[i, j + 1]
                     center -= coefficient * inv_rho
-                    if not self.is_empty(i, j + 1):
+                    if self.is_interior(i, j + 1):
                         A[idx, idx + 1] += coefficient * inv_rho
 
                 A[idx, idx] += center
@@ -136,23 +132,6 @@ class PressureSolver:
                     inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
                     self.velocity_y[i, j] -= inv_rho * coefficient * pressure_gradient
 
-    @ti.kernel
-    def calculate_pressure(self):
-        """Calculate the pressure according to the constitutive model."""
-        for i, j in self.pressure_c:
-            self.pressure_c[i, j] = -(1 / self.inv_lambda_c[i, j]) * (self.JE_c[i, j] - 1)
-
-    @ti.kernel
-    def compare_pressure(self):
-        """Compare the solved for pressure to the pressure according to the constitutive model."""
-        for i, j in self.pressure_c:
-            if self.classification_c[i, j] == Classification.Interior:
-                pressure = -(1 / self.inv_lambda_c[i, j]) * (self.JE_c[i, j] - 1)
-                print(f"INTERIOR  -> solved = {self.pressure_c[i, j]}, constitutive = {pressure}")
-            # elif self.classification_c[i,j] == Classification.Colliding:
-            #     pressure = -(1 / self.inv_lambda_c[i, j]) * (self.JE_c[i, j] - 1)
-            #     print(f"COLLIDING -> solved = {self.pressure_c[i, j]}, constitutive = {pressure}")
-
     def solve(self):
         A = SparseMatrixBuilder(
             max_num_triplets=(5 * self.n_cells),
@@ -173,16 +152,8 @@ class PressureSolver:
             assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
             assert not np.any(np.isnan(pressure)), "NAN VALUE IN PRESSURE ARRAY!"
         else:
-            solver = SparseCG(A.build(), b, max_iter=100)
+            solver = SparseCG(A.build(), b, max_iter=500)
             p, _ = solver.solve()
-            # print("min, max =", np.min(p), np.max(p))
-
-        # Compare constitutive and solved pressure:
-        # self.compare_pressure()
-
-        # Use explicit pressure:
-        self.calculate_pressure()  # Uncomment to use constitutive pressure
 
         # Correct pressure:
-        # self.fill_pressure_field(p)  # Uncomment to use solved pressure
         self.apply_pressure(p)

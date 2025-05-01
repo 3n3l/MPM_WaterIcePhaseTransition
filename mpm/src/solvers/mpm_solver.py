@@ -27,8 +27,8 @@ class MPM_Solver:
         self.n_cells = self.n_grid * self.n_grid
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
-        # self.dt = 2e-3 / quality # TODO: better dt for fluid, test this for solid
-        self.dt = 1e-3 / quality
+        self.dt = 2e-3 / quality  # TODO: better dt for fluid, test this for solid
+        # self.dt = 1e-3 / quality
         self.rho_0 = 1000  # TODO: this is kg/m^3 for water, what about ice?
         self.particle_vol = (self.dx * 0.5) ** 2
         self.n_dimensions = 2
@@ -78,6 +78,7 @@ class MPM_Solver:
         self.FE_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
         self.JE_p = ti.field(dtype=float, shape=max_particles)
         self.JP_p = ti.field(dtype=float, shape=max_particles)
+        self.J_p = ti.field(dtype=float, shape=max_particles)
         self.C_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
 
         # Fields needed for the latent heat and phase change.
@@ -146,7 +147,7 @@ class MPM_Solver:
             self.mass_c[i, j] = 0
             self.JE_c[i, j] = 0
             self.JP_c[i, j] = 0
-            # self.J_c[i, j] = 0
+            self.J_c[i, j] = 0
 
     @ti.func
     def R(self, M: ti.types.matrix(2, 2, float)) -> ti.types.matrix(2, 2, float):  # pyright: ignore
@@ -163,14 +164,15 @@ class MPM_Solver:
             if self.state_p[p] == State.Hidden:
                 continue
 
-            # Deformation gradient update.
+            # Deformation gradient update. TODO: R might not be needed for our small timesteps
             self.FE_p[p] = self.R(self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
 
-            la, mu = self.lambda_0_p[p], self.mu_0_p[p]
-            U, sigma, V = ti.svd(self.FE_p[p])
-            JE_p, JP_p, J_p = 1.0, 1.0, 1.0
+            # Remove the deviatoric component from each fluid particle:
+            if self.phase_p[p] == Phase.Water:
+                self.FE_p[p] = ti.sqrt(self.JE_p[p]) * ti.Matrix.identity(ti.f32, 2)
 
-            # Clamp singular values to simulate plasticity and elasticity.
+            # Clamp singular values to simulate plasticity and elasticity:
+            U, sigma, V = ti.svd(self.FE_p[p])
             for d in ti.static(range(self.n_dimensions)):
                 singular_value = float(sigma[d, d])
                 clamped = singular_value
@@ -179,45 +181,44 @@ class MPM_Solver:
                     clamped = max(clamped, 1 - self.theta_c[None])
                     clamped = min(clamped, 1 + self.theta_s[None])
                     sigma[d, d] = clamped
-                JP_p *= singular_value / clamped
-                JE_p *= clamped
+                # FIXME: error here? because fluid phase seems to work
+                self.JP_p[p] *= singular_value / clamped
+                self.JE_p[p] *= clamped
+                # self.J_p[p] *= singular_value
 
+            la, mu = self.lambda_0_p[p], self.mu_0_p[p]
+            stress = ti.Matrix.zero(ti.f32, 2, 2)
             if self.phase_p[p] == Phase.Ice:
                 # Reconstruct elastic deformation gradient after plasticity
-                self.FE_p[p] = U @ sigma @ V.transpose()
-
-                # Apply ice hardening by adjusting Lame parameters
-                hardening = ti.max(0.1, ti.min(20, ti.exp(self.zeta[None] * (1.0 - JP_p))))
-                la, mu = la * hardening, mu * hardening
-
+                # NOTE: d = 2 => JP^(1/d) = sqrt(JP)
                 # NOTE: further corrections to FE, FP, JE, JP would go here:
                 # FE <- JP^(1/d) * FE
                 # FP <- JP^(-1/d) * FP
                 # NOTE: this would make FP purely deviatoric and set JP = 1,
                 #       while keeping a balance with FE, JE, that are then used
                 #       to compute the deviatoric stress.
-            else:
-                # Reset elastic deformation gradient to avoid numerical instability.
-                # NOTE: this makes FE purely dilational, clearing its deviatoric component
-                # NOTE: that this update to FE is different than the update in the solid phase
-                self.FE_p[p] = ti.Matrix.identity(float, self.n_dimensions) * JE_p ** (1 / self.n_dimensions)
-                # self.F_p[p] = ti.sqrt(JE_p) * ti.Matrix.identity(float, self.n_dimensions)
-                # Set mu to zero for water TODO: this could just be done in mu_0_p?
-                mu = 0
+                self.FE_p[p] = ti.sqrt(self.JP_p[p]) * (U @ sigma @ V.transpose())
+                # self.JE_p[p] *= ti.sqrt(self.JP_p[p]) # TODO: this should work?
+                self.JE_p[p] = ti.math.determinant(self.FE_p[p])
+                self.JP_p[p] = 1.0
 
-            # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
-            stress = 2 * mu * (self.FE_p[p] - U @ V.transpose()) @ self.FE_p[p].transpose()  # pyright: ignore
+                # Apply ice hardening by adjusting Lame parameters: TODO: uncomment this after testing
+                # hardening = ti.max(0.1, ti.min(20, ti.exp(self.zeta[None] * (1.0 - self.JP_p[p]))))
+                # la, mu = la * hardening, mu * hardening
 
-            # FIXME: discretize the dilational component with the pressure correction?!
-            # NOTE: not incorporating this dilational stress is equivalent to setting
-            #       stress to zero in the fluid phase.
-            # stress += ti.Matrix.identity(float, 2) * la * JE_p * (JE_p - 1)
+                # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
+                # FIXME: use corrected FE?
+                FE = self.FE_p[p] * (self.JE_p[p] ** (-1 / 2))
+                UE, _, VE = ti.svd(FE)
+                stress = 2 * mu * (FE - UE @ VE.transpose()) @ self.FE_p[p].transpose()  # pyright: ignore
+                # FIXME: or this?
+                # stress = 2 * mu * (self.FE_p[p] - U @ V.transpose()) @ self.FE_p[p].transpose()  # pyright: ignore
 
-            # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
-            D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
+                # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
+                D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
 
-            # TODO: What happens here exactly? Something with Cauchy-stress?
-            stress *= -self.dt * self.particle_vol * D_inv
+                # TODO: What happens here exactly? Something with Cauchy-stress?
+                stress *= -self.dt * self.particle_vol * D_inv
 
             # APIC momentum + MLS-MPM stress contribution [Hu et al. 2018, Eqn. 29].
             # TODO: use cx, cy vectors here directly?
@@ -276,11 +277,12 @@ class MPM_Solver:
                 # inv_lambda = self.mass_p[p] * (1.0 / la)
                 self.inv_lambda_c[base_c + offset] += weight_c * inv_lambda
 
-                # We use JE^n, JP^n from the last timestep for the transfers, the updated
+                # TODO: remove this:We use JE^n, JP^n from the last timestep for the transfers, the updated
                 # values will be assigned to the corresponding field at the end of the loop.
-                self.JE_c[base_c + offset] += weight_c * self.mass_p[p] * JE_p
-                self.JP_c[base_c + offset] += weight_c * self.mass_p[p] * JP_p
-                # self.J_c[base_c + offset] += weight_c * self.mass_p[p] * J_p
+                self.JE_c[base_c + offset] += weight_c * self.mass_p[p] * self.JE_p[p]
+                self.JP_c[base_c + offset] += weight_c * self.mass_p[p] * self.JP_p[p]
+                # TODO: the paper wants to rasterize JE, J and then set JP = J / JE, but this makes no difference
+                # self.J_c[base_c + offset] += weight_c * self.mass_p[p] * self.J_p[p]
 
             for i, j in ti.static(ti.ndrange(4, 4)):
                 offset = ti.Vector([i, j])
@@ -324,76 +326,77 @@ class MPM_Solver:
                     self.velocity_y[i, j] = 0
 
         for i, j in self.mass_c:
-            if self.mass_c[i, j] > 0:  # No need for epsilon here
+            # if (mass := self.mass_c[i, j]) > 0:
+            if self.mass_c[i, j] > 0:
                 self.temperature_c[i, j] *= 1 / self.mass_c[i, j]
                 self.inv_lambda_c[i, j] *= 1 / self.mass_c[i, j]
                 self.capacity_c[i, j] *= 1 / self.mass_c[i, j]
                 self.JE_c[i, j] *= 1 / self.mass_c[i, j]
-                # self.J_c[i, j] *= 1 / self.mass_c[i, j]
                 self.JP_c[i, j] *= 1 / self.mass_c[i, j]
+                # TODO: the paper wants to rasterize JE, J and then set JP = J / JE, but this makes no difference
+                # self.J_c[i, j] *= 1 / self.mass_c[i, j]
+                # self.JP_c[i, j] = self.J_c[i, j] / self.JE_c[i, j]
 
     @ti.kernel
-    def _classify_cells(self):
-        # FIXME: this is not used at the moment and replaced by
-        # FIXME: the cell classification is offset to the left, resulting in asymmetry
-        for i, j in self.classification_x:
-            # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
-
-            # The simulation boundary is always colliding.
-            x_face_is_colliding = i >= (self.n_grid - self.boundary_width) or i <= self.boundary_width
-            x_face_is_colliding |= j >= (self.n_grid - self.boundary_width) or j <= self.boundary_width
-            if x_face_is_colliding:
-                self.classification_x[i, j] = Classification.Colliding
-                continue
-
-            # For convenience later on: a face is marked interior if it has mass.
-            if self.mass_x[i, j] > 0:
-                self.classification_x[i, j] = Classification.Interior
-                continue
-
-            # All remaining faces are empty.
-            self.classification_x[i, j] = Classification.Empty
-
-        for i, j in self.classification_y:
-            # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
-
-            # The simulation boundary is always colliding.
-            y_face_is_colliding = i >= (self.n_grid - self.boundary_width) or i <= self.boundary_width
-            y_face_is_colliding |= j >= (self.n_grid - self.boundary_width) or j <= self.boundary_width
-            if y_face_is_colliding:
-                self.classification_y[i, j] = Classification.Colliding
-                continue
-
-            # For convenience later on: a face is marked interior if it has mass.
-            if self.mass_y[i, j] > 0:
-                self.classification_y[i, j] = Classification.Interior
-                continue
-
-            # All remaining faces are empty.
-            self.classification_y[i, j] = Classification.Empty
+    def classify_cells(self):
+        # TODO: is it even needed to classify faces?
+        # for i, j in self.classification_x:
+        #     # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
+        #
+        #     # The simulation boundary is always colliding.
+        #     x_face_is_colliding = i >= (self.n_grid - self.boundary_width) or i <= self.boundary_width
+        #     x_face_is_colliding |= j >= (self.n_grid - self.boundary_width) or j <= self.boundary_width
+        #     if x_face_is_colliding:
+        #         self.classification_x[i, j] = Classification.Colliding
+        #         continue
+        #
+        #     # For convenience later on: a face is marked interior if it has mass.
+        #     if self.mass_x[i, j] > 0:
+        #         self.classification_x[i, j] = Classification.Interior
+        #         continue
+        #
+        #     # All remaining faces are empty.
+        #     self.classification_x[i, j] = Classification.Empty
+        #
+        # for i, j in self.classification_y:
+        #     # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
+        #
+        #     # The simulation boundary is always colliding.
+        #     y_face_is_colliding = i >= (self.n_grid - self.boundary_width) or i <= self.boundary_width
+        #     y_face_is_colliding |= j >= (self.n_grid - self.boundary_width) or j <= self.boundary_width
+        #     if y_face_is_colliding:
+        #         self.classification_y[i, j] = Classification.Colliding
+        #         continue
+        #
+        #     # For convenience later on: a face is marked interior if it has mass.
+        #     if self.mass_y[i, j] > 0:
+        #         self.classification_y[i, j] = Classification.Interior
+        #         continue
+        #
+        #     # All remaining faces are empty.
+        #     self.classification_y[i, j] = Classification.Empty
 
         for i, j in self.classification_c:
-            # TODO: Colliding cells are either assigned the temperature of the object it collides with or a user-defined
-            # spatially-varying value depending on the setup. If the free surface is being enforced as a Dirichlet
-            # temperature condition, the ambient air temperature is recorded for empty cells. No other cells
-            # require temperatures to be recorded at this stage.
+            # TODO: Colliding cells are either assigned the temperature of the object it collides with
+            # or a user-defined spatially-varying value depending on the setup.
 
-            # A cell is marked as colliding if all of its surrounding faces are colliding.
-            cell_is_colliding = self.classification_x[i, j] == Classification.Colliding
-            cell_is_colliding &= self.classification_x[i + 1, j] == Classification.Colliding
-            cell_is_colliding &= self.classification_y[i, j] == Classification.Colliding
-            cell_is_colliding &= self.classification_y[i, j + 1] == Classification.Colliding
-            if cell_is_colliding:
-                # self.cell_temperature[i, j] = self.ambient_temperature[None]
-                self.classification_c[i, j] = Classification.Colliding
+            # WARNING: currently this is only set in the beginning, as the colliding boundary is fixed:
+            if self.is_colliding(i, j):
                 continue
+            # A cell is marked as colliding if all of its surrounding faces are colliding.
+            # cell_is_colliding = self.classification_x[i, j] == Classification.Colliding
+            # cell_is_colliding &= self.classification_x[i + 1, j] == Classification.Colliding
+            # cell_is_colliding &= self.classification_y[i, j] == Classification.Colliding
+            # cell_is_colliding &= self.classification_y[i, j + 1] == Classification.Colliding
+            # if cell_is_colliding:
+            #     # self.cell_temperature[i, j] = self.ambient_temperature[None]
+            #     self.classification_c[i, j] = Classification.Colliding
+            #     continue
 
             # A cell is interior if the cell and all of its surrounding faces have mass.
             cell_is_interior = self.mass_c[i, j] > 0
-            cell_is_interior &= self.mass_x[i, j] > 0
-            cell_is_interior &= self.mass_x[i + 1, j] > 0
-            cell_is_interior &= self.mass_y[i, j] > 0
-            cell_is_interior &= self.mass_y[i, j + 1] > 0
+            cell_is_interior &= self.mass_x[i, j] > 0 and self.mass_x[i + 1, j] > 0
+            cell_is_interior &= self.mass_y[i, j] > 0 and self.mass_y[i, j + 1] > 0
             if cell_is_interior:
                 self.classification_c[i, j] = Classification.Interior
                 continue
@@ -401,27 +404,13 @@ class MPM_Solver:
             # All remaining cells are empty.
             self.classification_c[i, j] = Classification.Empty
 
-            # The ambient air temperature is recorded for empty cells.
+            # If the free surface is being enforced as a Dirichlet temperature condition,
+            # the ambient air temperature is recorded for empty cells.
             self.temperature_c[i, j] = self.ambient_temperature[None]
 
     @ti.kernel
-    def classify_cells(self):
-        for i, j in self.classification_c:
-            if not self.is_colliding(i, j):
-                self.classification_c[i, j] = Classification.Empty
-
-        for p in self.velocity_p:
-            # We ignore uninitialized particles:
-            if self.state_p[p] == State.Hidden:
-                continue
-
-            # Find the nearest cell and set it to interior:
-            i, j = ti.cast(self.position_p[p] * self.inv_dx, int)  # pyright: ignore
-            if not self.is_colliding(i, j):  # pyright: ignore
-                self.classification_c[i, j] = Classification.Interior
-
-    @ti.kernel
     def compute_volumes(self):
+        # TODO: this seems to be wrong, the paper has a sum over CDFs
         control_volume = 0.5 * self.dx * self.dx
         for i, j in self.classification_c:
             if self.classification_c[i, j] == Classification.Interior:

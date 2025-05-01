@@ -51,7 +51,8 @@ class State:
 
 # TODO: find good values for ice???
 # TODO: refactor this, maybe use variable values again???
-_E = 1.4e5
+# FIXME: E = 1.4e2 -> collapse, E = 1.4e3 -> explosion
+_E = 1.4e3
 _nu = 0.2
 
 
