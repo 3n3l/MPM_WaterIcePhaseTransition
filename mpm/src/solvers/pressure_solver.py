@@ -126,11 +126,15 @@ class PressureSolver:
                     pressure_gradient = pressure[idx] - pressure[idx - self.n_grid]
                     inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
                     self.velocity_x[i, j] -= inv_rho * coefficient * pressure_gradient
+                else:
+                    self.velocity_x[i, j] = 0
             if self.is_interior(i, j - 1) or self.is_interior(i, j):
                 if not (self.is_colliding(i, j - 1) or self.is_colliding(i, j)):
                     pressure_gradient = pressure[idx] - pressure[idx - 1]
                     inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
                     self.velocity_y[i, j] -= inv_rho * coefficient * pressure_gradient
+                else:
+                    self.velocity_y[i, j] = 0
 
     def solve(self):
         A = SparseMatrixBuilder(

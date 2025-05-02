@@ -115,6 +115,10 @@ class MPM_Solver:
     def is_colliding(self, i: int, j: int) -> bool:
         return self.is_valid(i, j) and self.classification_c[i, j] == Classification.Colliding
 
+    @ti.func
+    def is_interior(self, i: int, j: int) -> bool:
+        return self.is_valid(i, j) and self.classification_c[i, j] == Classification.Interior
+
     @ti.kernel
     def initialize_boundary(self):
         for i, j in self.classification_c:

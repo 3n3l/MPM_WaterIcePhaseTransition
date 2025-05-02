@@ -42,7 +42,6 @@ class TestRenderer(BaseRenderer):
         solver: MPM_Solver,
         configurations: list[Configuration],
         poisson_disk_sampler: PoissonDiskSampler,
-        initial_configuration: int = 0,
     ) -> None:
         super().__init__(mpm_solver=solver, configurations=configurations, poisson_disk_sampler=poisson_disk_sampler)
         self.divergence = ti.ndarray(ti.f32, shape=(solver.n_grid, solver.n_grid))
@@ -50,24 +49,26 @@ class TestRenderer(BaseRenderer):
 
     @ti.kernel
     def compute_divergence(self, div: ti.types.ndarray()):  # pyright: ignore
-        for i, j in self.mpm_solver.pressure_c:
+        for i, j in self.mpm_solver.mass_c:
             div[i, j] = 0
-            if self.mpm_solver.classification_c[i, j] == Classification.Interior:
-                div[i, j] += self.mpm_solver.velocity_x[i + 1, j] - self.mpm_solver.velocity_x[i, j]
-                div[i, j] += self.mpm_solver.velocity_y[i, j + 1] - self.mpm_solver.velocity_y[i, j]
+            if self.mpm_solver.is_interior(i, j):
+                div[i, j] += self.mpm_solver.velocity_x[i + 1, j]
+                div[i, j] -= self.mpm_solver.velocity_x[i, j]
+                div[i, j] += self.mpm_solver.velocity_y[i, j + 1]
+                div[i, j] -= self.mpm_solver.velocity_y[i, j]
 
     def run(self) -> None:
-        for i in range(1, 501):
+        for i in range(1, 301):
             self.substep()
-            prev_min = np.abs(np.min(self.divergence.to_numpy()))
-            prev_max = np.abs(np.max(self.divergence.to_numpy()))
+            prev_min = np.round(np.abs(np.min(self.divergence.to_numpy())))
+            prev_max = np.round(np.abs(np.max(self.divergence.to_numpy())))
             self.compute_divergence(self.divergence)
-            curr_min = np.abs(np.min(self.divergence.to_numpy()))
-            curr_max = np.abs(np.max(self.divergence.to_numpy()))
+            curr_min = np.round(np.abs(np.min(self.divergence.to_numpy())))
+            curr_max = np.round(np.abs(np.max(self.divergence.to_numpy())))
 
             print(".", end=("\n" if i % 10 == 0 else " "), flush=True)
 
-            if np.round(curr_min) > np.round(prev_min) or np.round(curr_max) > np.round(prev_max):
+            if curr_min > prev_min or curr_max > prev_max:
                 # The solver actually increased the divergence :(
                 print("\n\nDivergence increased :(")
                 print(f"prev_min = {prev_min}, prev_max = {prev_max}")
@@ -97,7 +98,6 @@ def main() -> None:
     solver = MPM_Solver(quality=1, max_particles=max_particles)
     poisson_disk_sampler = PoissonDiskSampler(mpm_solver=solver)
     test_renderer = TestRenderer(
-        initial_configuration=arguments.configuration,
         poisson_disk_sampler=poisson_disk_sampler,
         configurations=configuration_list,
         solver=solver,
