@@ -56,7 +56,6 @@ class MPM_Solver:
         self.temperature_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.inv_lambda_c = ti.field(dtype=ti.f64, shape=(self.n_grid, self.n_grid))
         self.capacity_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.pressure_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.mass_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.JE_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
         self.JP_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
@@ -86,8 +85,6 @@ class MPM_Solver:
         self.ambient_temperature = ti.field(dtype=ti.float32, shape=())
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
-        self.stickiness = ti.field(dtype=float, shape=())
-        self.friction = ti.field(dtype=float, shape=())
         self.lambda_0 = ti.field(dtype=float, shape=())
         self.theta_c = ti.field(dtype=float, shape=())
         self.theta_s = ti.field(dtype=float, shape=())
@@ -146,7 +143,6 @@ class MPM_Solver:
         for i, j in self.classification_c:
             self.temperature_c[i, j] = 0
             self.inv_lambda_c[i, j] = 0
-            self.pressure_c[i, j] = 0
             self.capacity_c[i, j] = 0
             self.mass_c[i, j] = 0
             self.JE_c[i, j] = 0

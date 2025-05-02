@@ -15,26 +15,19 @@ class PressureSolver:
         self.boundary_width = mpm_solver.boundary_width
         self.inv_dx = mpm_solver.inv_dx
         self.n_grid = mpm_solver.n_grid
-        self.rho = mpm_solver.rho_0
-        self.dx = mpm_solver.dx
         self.dt = mpm_solver.dt
 
         self.classification_c = mpm_solver.classification_c
         self.inv_lambda_c = mpm_solver.inv_lambda_c
-        self.pressure_c = mpm_solver.pressure_c
         self.JE_c = mpm_solver.JE_c
         self.JP_c = mpm_solver.JP_c
 
-        self.classification_x = mpm_solver.classification_x
-        self.classification_y = mpm_solver.classification_y
         self.velocity_x = mpm_solver.velocity_x
         self.velocity_y = mpm_solver.velocity_y
         self.volume_x = mpm_solver.volume_x
         self.volume_y = mpm_solver.volume_y
         self.mass_x = mpm_solver.mass_x
         self.mass_y = mpm_solver.mass_y
-
-        self.should_use_direct_solver = should_use_direct_solver
 
     @ti.func
     def is_valid(self, i: int, j: int) -> bool:
@@ -78,7 +71,6 @@ class PressureSolver:
                 if not self.is_colliding(i, j - 1):
                     b[idx] -= self.inv_dx * self.velocity_y[i, j]
                     # b[idx] += self.inv_dx * self.velocity_y[i, j]  # FIXME: should be this?!
-
 
                 # Build the left-hand side of the linear system:
                 center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
@@ -147,7 +139,7 @@ class PressureSolver:
         self.fill_linear_system(A, b)
 
         # Solve the linear system:
-        if self.should_use_direct_solver:
+        if should_use_direct_solver:
             solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
             solver.compute(A.build())
             p = solver.solve(b)
