@@ -42,56 +42,57 @@ class MPM_Solver:
         self.upper = 1 - self.lower
 
         # Properties on MAC-faces.
-        self.classification_x = ti.field(dtype=int, shape=(self.n_grid + 1, self.n_grid))
-        self.classification_y = ti.field(dtype=int, shape=(self.n_grid, self.n_grid + 1))
-        self.conductivity_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
-        self.conductivity_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
-        self.velocity_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
-        self.velocity_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
-        self.volume_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
-        self.volume_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
-        self.mass_x = ti.field(dtype=ti.float32, shape=(self.n_grid + 1, self.n_grid))
-        self.mass_y = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid + 1))
+        self.classification_x = ti.field(dtype=ti.i32, shape=(self.n_grid + 1, self.n_grid))
+        self.classification_y = ti.field(dtype=ti.i32, shape=(self.n_grid, self.n_grid + 1))
+        self.conductivity_x = ti.field(dtype=ti.f32, shape=(self.n_grid + 1, self.n_grid))
+        self.conductivity_y = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid + 1))
+        self.velocity_x = ti.field(dtype=ti.f32, shape=(self.n_grid + 1, self.n_grid))
+        self.velocity_y = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid + 1))
+        self.volume_x = ti.field(dtype=ti.f32, shape=(self.n_grid + 1, self.n_grid))
+        self.volume_y = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid + 1))
+        self.mass_x = ti.field(dtype=ti.f32, shape=(self.n_grid + 1, self.n_grid))
+        self.mass_y = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid + 1))
 
         # Properties on MAC-cells.
-        self.classification_c = ti.field(dtype=ti.int8, shape=(self.n_grid, self.n_grid))
-        self.temperature_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.classification_c = ti.field(dtype=ti.i32, shape=(self.n_grid, self.n_grid))
+        self.temperature_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
         self.inv_lambda_c = ti.field(dtype=ti.f64, shape=(self.n_grid, self.n_grid))
-        self.capacity_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.mass_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.JE_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.JP_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
-        self.J_c = ti.field(dtype=ti.float32, shape=(self.n_grid, self.n_grid))
+        self.capacity_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
+        self.mass_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
+        self.JE_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
+        self.JP_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
+        self.J_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
 
         # Properties on particles.
-        self.conductivity_p = ti.field(dtype=ti.float32, shape=max_particles)
-        self.temperature_p = ti.field(dtype=ti.float32, shape=max_particles)
-        # self.inv_lambda_p = ti.field(dtype=ti.f64, shape=max_particles)
-        self.position_p = ti.Vector.field(2, dtype=float, shape=max_particles)
-        self.velocity_p = ti.Vector.field(2, dtype=float, shape=max_particles)
-        self.lambda_0_p = ti.field(dtype=ti.f64, shape=max_particles)
-        self.capacity_p = ti.field(dtype=ti.float32, shape=max_particles)
-        self.color_p = ti.Vector.field(3, dtype=float, shape=max_particles)
-        self.state_p = ti.field(dtype=ti.float32, shape=max_particles)
-        self.phase_p = ti.field(dtype=ti.float32, shape=max_particles)
-        self.mass_p = ti.field(dtype=ti.f64, shape=max_particles)
-        self.mu_0_p = ti.field(dtype=ti.float32, shape=max_particles)
-        self.FE_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
-        self.JE_p = ti.field(dtype=float, shape=max_particles)
-        self.JP_p = ti.field(dtype=float, shape=max_particles)
-        self.J_p = ti.field(dtype=float, shape=max_particles)
-        self.C_p = ti.Matrix.field(2, 2, dtype=float, shape=max_particles)
+        self.conductivity_p = ti.field(dtype=ti.f32, shape=max_particles)
+        self.temperature_p = ti.field(dtype=ti.f32, shape=max_particles)
+        # self.inv_lambda_p = ti.field(dtype=ti.f32, shape=max_particles)
+        self.position_p = ti.Vector.field(2, dtype=ti.f32, shape=max_particles)
+        self.velocity_p = ti.Vector.field(2, dtype=ti.f32, shape=max_particles)
+        self.lambda_0_p = ti.field(dtype=ti.f32, shape=max_particles)
+        self.capacity_p = ti.field(dtype=ti.f32, shape=max_particles)
+        self.color_p = ti.Vector.field(3, dtype=ti.f32, shape=max_particles)
+        self.state_p = ti.field(dtype=ti.f32, shape=max_particles)
+        self.phase_p = ti.field(dtype=ti.f32, shape=max_particles)
+        self.mass_p = ti.field(dtype=ti.f32, shape=max_particles)
+        # self.mass_p = ti.field(dtype=ti.f32, shape=max_particles)
+        self.mu_0_p = ti.field(dtype=ti.f32, shape=max_particles)
+        self.FE_p = ti.Matrix.field(2, 2, dtype=ti.f32, shape=max_particles)
+        self.JE_p = ti.field(dtype=ti.f32, shape=max_particles)
+        self.JP_p = ti.field(dtype=ti.f32, shape=max_particles)
+        self.J_p = ti.field(dtype=ti.f32, shape=max_particles)
+        self.C_p = ti.Matrix.field(2, 2, dtype=ti.f32, shape=max_particles)
 
         # Fields needed for the latent heat and phase change.
-        self.heat_p = ti.field(dtype=ti.float32, shape=max_particles)  # U_p
-        self.ambient_temperature = ti.field(dtype=ti.float32, shape=())
+        self.heat_p = ti.field(dtype=ti.f32, shape=max_particles)  # U_p
+        self.ambient_temperature = ti.field(dtype=ti.f32, shape=())
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
-        self.theta_c = ti.field(dtype=float, shape=())
-        self.theta_s = ti.field(dtype=float, shape=())
-        self.zeta = ti.field(dtype=int, shape=())
         # self.lambda_0 = ti.field(dtype=float, shape=())
+        self.theta_c = ti.field(dtype=ti.f32, shape=())
+        self.theta_s = ti.field(dtype=ti.f32, shape=())
         # self.mu_0 = ti.field(dtype=float, shape=())
+        self.zeta = ti.field(dtype=ti.f32, shape=())
         # self.nu = ti.field(dtype=float, shape=())
         # self.E = ti.field(dtype=float, shape=())
 
@@ -274,9 +275,9 @@ class MPM_Solver:
                 self.mass_c[base_c + offset] += weight_c * self.mass_p[p]
 
                 # Rasterize lambda (inverse) to cell centers.
-                inv_lambda = self.mass_p[p] / self.lambda_0_p[p]
+                inv_lambda = ti.cast(self.mass_p[p], ti.f64) / self.lambda_0_p[p]
                 # TODO: this should be la, because of incorporated hardening?
-                # inv_lambda = self.mass_p[p] * (1.0 / la)
+                # inv_lambda = self.mass_p[p] / la
                 self.inv_lambda_c[base_c + offset] += weight_c * inv_lambda
 
                 # TODO: remove this:We use JE^n, JP^n from the last timestep for the transfers, the updated
@@ -446,7 +447,7 @@ class MPM_Solver:
             g_x = [dist_x - 1.5, (-2) * (dist_x - 1), dist_x - 0.5]
             g_y = [dist_y - 1.5, (-2) * (dist_y - 1), dist_y - 0.5]
 
-            next_velocity = ti.Vector.zero(float, 2)
+            next_velocity = ti.Vector.zero(ti.f32, 2)
             # b_x = ti.Vector.zero(float, 2)
             # b_y = ti.Vector.zero(float, 2)
             c_x = ti.Vector.zero(ti.f32, 2)
