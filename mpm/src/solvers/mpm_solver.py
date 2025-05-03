@@ -309,16 +309,16 @@ class MPM_Solver:
     @ti.kernel
     def momentum_to_velocity(self):
         for i, j in self.velocity_x:
-            if (mass := self.mass_x[i, j]) > 0:
-                self.velocity_x[i, j] /= mass
+            if (mass_x := self.mass_x[i, j]) > 0:
+                self.velocity_x[i, j] /= mass_x
                 collision_right = i >= (self.n_grid - self.boundary_width) and self.velocity_x[i, j] > 0
                 collision_left = i <= self.boundary_width and self.velocity_x[i, j] < 0
                 if collision_left or collision_right:
                     self.velocity_x[i, j] = 0
 
         for i, j in self.velocity_y:
-            if (mass := self.mass_y[i, j]) > 0:
-                self.velocity_y[i, j] /= mass
+            if (mass_y := self.mass_y[i, j]) > 0:
+                self.velocity_y[i, j] /= mass_y
                 self.velocity_y[i, j] += GRAVITY * self.dt
                 collision_top = j >= (self.n_grid - self.boundary_width) and self.velocity_y[i, j] > 0
                 collision_bottom = j <= self.boundary_width and self.velocity_y[i, j] < 0
@@ -326,13 +326,12 @@ class MPM_Solver:
                     self.velocity_y[i, j] = 0
 
         for i, j in self.mass_c:
-            # if (mass := self.mass_c[i, j]) > 0:
-            if self.mass_c[i, j] > 0:
-                self.temperature_c[i, j] *= 1 / self.mass_c[i, j]
-                self.inv_lambda_c[i, j] *= 1 / self.mass_c[i, j]
-                self.capacity_c[i, j] *= 1 / self.mass_c[i, j]
-                self.JE_c[i, j] *= 1 / self.mass_c[i, j]
-                self.JP_c[i, j] *= 1 / self.mass_c[i, j]
+            if (mass_c := self.mass_c[i, j]) > 0:
+                self.temperature_c[i, j] /= mass_c
+                self.inv_lambda_c[i, j] /= mass_c
+                self.capacity_c[i, j] /= mass_c
+                self.JE_c[i, j] /= mass_c
+                self.JP_c[i, j] /= mass_c
                 # TODO: the paper wants to rasterize JE, J and then set JP = J / JE, but this makes no difference
                 # self.J_c[i, j] *= 1 / self.mass_c[i, j]
                 # self.JP_c[i, j] = self.J_c[i, j] / self.JE_c[i, j]
