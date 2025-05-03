@@ -9,6 +9,8 @@ from src.constants import (
     Density,
     LatentHeat,
     State,
+    Lambda,
+    Mu,
 )
 from src.solvers import PressureSolver, HeatSolver
 
@@ -85,13 +87,13 @@ class MPM_Solver:
         self.ambient_temperature = ti.field(dtype=ti.float32, shape=())
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
-        self.lambda_0 = ti.field(dtype=float, shape=())
         self.theta_c = ti.field(dtype=float, shape=())
         self.theta_s = ti.field(dtype=float, shape=())
-        self.mu_0 = ti.field(dtype=float, shape=())
         self.zeta = ti.field(dtype=int, shape=())
-        self.nu = ti.field(dtype=float, shape=())
-        self.E = ti.field(dtype=float, shape=())
+        # self.lambda_0 = ti.field(dtype=float, shape=())
+        # self.mu_0 = ti.field(dtype=float, shape=())
+        # self.nu = ti.field(dtype=float, shape=())
+        # self.E = ti.field(dtype=float, shape=())
 
         # Poisson solvers for pressure and heat.
         self.pressure_solver = PressureSolver(self)
@@ -499,9 +501,8 @@ class MPM_Solver:
             #     # everything is then reset according to the new phase.
             #     if self.heat_p[p] >= LatentHeat.Water:
             #         # TODO: Shouldn't this just be set to ~inf, 0?
-            #         E, nu = YoungsModulus.Water, PoissonsRatio.Water
-            #         self.lambda_0_p[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
-            #         self.mu_0_p[p] = E / (2 * (1 + nu))
+            #         self.lambda_0_p[p] = Lambda.Water
+            #         self.mu_0_p[p] = Mu.Water
             #         self.capacity_p[p] = Capacity.Water
             #         self.conductivity_p[p] = Conductivity.Water
             #         self.color_p[p] = Color.Water
@@ -518,9 +519,8 @@ class MPM_Solver:
             #     # If the heat buffer is empty the particle changes its phase to ice,
             #     # everything is then reset according to the new phase.
             #     if self.heat_p[p] <= LatentHeat.Ice:
-            #         E, nu = YoungsModulus.Ice, PoissonsRatio.Ice
-            #         self.lambda_0_p[p] = E * nu / ((1 + nu) * (1 - 2 * nu))
-            #         self.mu_0_p[p] = E / (2 * (1 + nu))
+            #         self.lambda_0_p[p] = Lambda.Ice
+            #         self.mu_0_p[p] = Mu.Ice
             #         self.capacity_p[p] = Capacity.Ice
             #         self.color_p[p] = Color.Ice
             #         self.conductivity_p[p] = Conductivity.Ice

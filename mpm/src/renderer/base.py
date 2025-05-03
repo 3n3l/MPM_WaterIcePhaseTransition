@@ -1,7 +1,7 @@
+from src.constants.enums import State, Density, Phase
 from src.configurations import Configuration
 from src.samplers import PoissonDiskSampler
 from src.solvers import MPM_Solver
-from src.constants import State
 
 from abc import abstractmethod
 from datetime import datetime
@@ -91,7 +91,7 @@ class BaseRenderer:
         self.mpm_solver.position_p[index] = position
 
         # Set properties to default values:
-        self.mpm_solver.mass_p[index] = self.mpm_solver.particle_vol * self.mpm_solver.rho_0
+        self.mpm_solver.mass_p[index] = self.mpm_solver.particle_vol * geometry.density
         self.mpm_solver.FE_p[index] = ti.Matrix([[1, 0], [0, 1]])
         self.mpm_solver.C_p[index] = ti.Matrix.zero(float, 2, 2)
         self.mpm_solver.state_p[index] = State.Active
@@ -136,13 +136,13 @@ class BaseRenderer:
             configuration: Configuration
         """
         self.mpm_solver.ambient_temperature[None] = configuration.ambient_temperature
-        self.mpm_solver.lambda_0[None] = configuration.lambda_0
+        # self.mpm_solver.lambda_0[None] = configuration.lambda_0
         self.mpm_solver.theta_c[None] = configuration.theta_c
         self.mpm_solver.theta_s[None] = configuration.theta_s
         self.mpm_solver.zeta[None] = configuration.zeta
-        self.mpm_solver.mu_0[None] = configuration.mu_0
-        self.mpm_solver.nu[None] = configuration.nu
-        self.mpm_solver.E[None] = configuration.E
+        # self.mpm_solver.mu_0[None] = configuration.mu_0
+        # self.mpm_solver.nu[None] = configuration.nu
+        # self.mpm_solver.E[None] = configuration.E
         self.configuration = configuration
         self.reset()
 
