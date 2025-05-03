@@ -15,9 +15,9 @@ configuration_list = [
         E=1.4e5,  # Young's modulus (1.4e5)
         nu=0.2,  # Poisson's ratio (0.2)
         zeta=10,  # Hardening coefficient (10)
-        theta_c=8.5e-2,  # Critical compression (2.5e-2)
-        theta_s=5.0e-3,  # Critical stretch (7.5e-3)
-        ambient_temperature=500.0,
+        theta_c=2.5e-2,  # Critical compression (2.5e-2)
+        theta_s=7.5e-3,  # Critical stretch (7.5e-3)
+        ambient_temperature=1000.0,
     ),
     Configuration(
         name="Waterspout Hits Body of Water [Water]",
@@ -208,7 +208,7 @@ configuration_list = [
         name="Spherefall [Ice]",
         geometries=[
             Circle(
-                center=(0.5, 0.35),
+                center=(0.5, 0.5),
                 velocity=(0, -2),
                 phase=Phase.Ice,
                 radius=0.08,
@@ -217,8 +217,31 @@ configuration_list = [
         E=1.4e5,  # Young's modulus (1.4e5)
         nu=0.2,  # Poisson's ratio (0.2)
         zeta=10,  # Hardening coefficient (10)
-        theta_c=8.5e-2,  # Critical compression (2.5e-2)
-        theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        theta_c=2.5e-2,  # Critical compression (2.5e-2)
+        theta_s=7.5e-3,  # Critical stretch (7.5e-3)
+        ambient_temperature=-20.0,
+    ),
+    Configuration(
+        name="Double Spherefall [Water, Ice]",
+        geometries=[
+            Circle(
+                center=(0.25, 0.5),
+                velocity=(0, -3),
+                phase=Phase.Ice,
+                radius=0.06,
+            ),
+            Circle(
+                center=(0.75, 0.5),
+                velocity=(0, -3),
+                phase=Phase.Water,
+                radius=0.06,
+            ),
+        ],
+        E=1.4e5,  # Young's modulus (1.4e5)
+        nu=0.2,  # Poisson's ratio (0.2)
+        zeta=10,  # Hardening coefficient (10)
+        theta_c=2.5e-2,  # Critical compression (2.5e-2)
+        theta_s=7.5e-3,  # Critical stretch (7.5e-3)
         ambient_temperature=-20.0,
     ),
 ]
