@@ -31,7 +31,7 @@ class MPM_Solver:
         self.inv_dx = float(self.n_grid)
         self.dt = 1e-4 / quality  # FIXME: dt for solid, fluid behaves wrong
         # self.dt = 1e-3 / quality  # FIXME: dt for fluid, solid explodes
-        self.particle_vol = (self.dx * 0.5) ** 2
+        self.vol_0_p = (self.dx * 0.5) ** 2
         self.n_dimensions = 2
 
         # The width of the simulation boundary in grid nodes and offsets to
@@ -514,7 +514,7 @@ class MPM_Solver:
             #         self.color_p[p] = Color.Water
             #         self.temperature_p[p] = 0.0
             #         self.phase_p[p] = Phase.Water
-            #         self.mass_p[p] = self.particle_vol * Density.Water
+            #         self.mass_p[p] = self.vol_0_p * Density.Water
             #         self.heat_p[p] = LatentHeat.Water
             #
             # elif (self.phase_p[p] == Phase.Water) and (next_temperature < 0):
@@ -532,7 +532,7 @@ class MPM_Solver:
             #         self.conductivity_p[p] = Conductivity.Ice
             #         self.temperature_p[p] = 0.0
             #         self.phase_p[p] = Phase.Ice
-            #         self.mass_p[p] = self.particle_vol * Density.Ice
+            #         self.mass_p[p] = self.vol_0_p * Density.Ice
             #         self.heat_p[p] = LatentHeat.Ice
             #
             # else:

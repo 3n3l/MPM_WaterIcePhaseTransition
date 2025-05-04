@@ -91,7 +91,7 @@ class BaseRenderer:
         self.mpm_solver.position_p[index] = position
 
         # Set properties to default values:
-        self.mpm_solver.mass_p[index] = self.mpm_solver.particle_vol * geometry.density
+        self.mpm_solver.mass_p[index] = self.mpm_solver.vol_0_p * geometry.density
         self.mpm_solver.FE_p[index] = ti.Matrix([[1, 0], [0, 1]])
         self.mpm_solver.C_p[index] = ti.Matrix.zero(float, 2, 2)
         self.mpm_solver.state_p[index] = State.Active
