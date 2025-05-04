@@ -29,9 +29,8 @@ class MPM_Solver:
         self.n_cells = self.n_grid * self.n_grid
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
-        self.dt = 2e-3 / quality  # TODO: better dt for fluid, test this for solid
-        # self.dt = 1e-3 / quality
-        self.rho_0 = 1000  # TODO: this is kg/m^3 for water, what about ice?
+        self.dt = 1e-4 / quality  # FIXME: dt for solid, fluid behaves wrong
+        # self.dt = 1e-3 / quality  # FIXME: dt for fluid, solid explodes
         self.particle_vol = (self.dx * 0.5) ** 2
         self.n_dimensions = 2
 
@@ -75,7 +74,6 @@ class MPM_Solver:
         self.state_p = ti.field(dtype=ti.f32, shape=max_particles)
         self.phase_p = ti.field(dtype=ti.f32, shape=max_particles)
         self.mass_p = ti.field(dtype=ti.f32, shape=max_particles)
-        # self.mass_p = ti.field(dtype=ti.f32, shape=max_particles)
         self.mu_0_p = ti.field(dtype=ti.f32, shape=max_particles)
         self.FE_p = ti.Matrix.field(2, 2, dtype=ti.f32, shape=max_particles)
         self.JE_p = ti.field(dtype=ti.f32, shape=max_particles)
@@ -168,59 +166,64 @@ class MPM_Solver:
                 continue
 
             # Deformation gradient update. TODO: R might not be needed for our small timesteps
-            self.FE_p[p] = self.R(self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
+            # self.FE_p[p] = self.R(self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
+            self.FE_p[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
+            # TODO: could this just be: (or would this be unstable?)
+            # self.FE_p[p] += (self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
 
             # Remove the deviatoric component from each fluid particle:
             if self.phase_p[p] == Phase.Water:
                 self.FE_p[p] = ti.sqrt(self.JE_p[p]) * ti.Matrix.identity(ti.f32, 2)
 
-            # Clamp singular values to simulate plasticity and elasticity:
+            # # Clamp singular values to simulate plasticity and elasticity:
             U, sigma, V = ti.svd(self.FE_p[p])
+            self.JE_p[p] = 1.0
             for d in ti.static(range(self.n_dimensions)):
                 singular_value = float(sigma[d, d])
-                clamped = singular_value
                 if self.phase_p[p] == Phase.Ice:
                     # Clamp singular values to [1 - theta_c, 1 + theta_s]
-                    clamped = max(clamped, 1 - self.theta_c[None])
-                    clamped = min(clamped, 1 + self.theta_s[None])
-                    sigma[d, d] = clamped
-                # FIXME: error here? because fluid phase seems to work
-                self.JP_p[p] *= singular_value / clamped
-                self.JE_p[p] *= clamped
-                # self.J_p[p] *= singular_value
+                    singular_value = max(singular_value, 1 - self.theta_c[None])
+                    singular_value = min(singular_value, 1 + self.theta_s[None])
+                self.JP_p[p] *= sigma[d, d] / singular_value
+                self.JE_p[p] *= singular_value
+                sigma[d, d] = singular_value
+
+            # WARNING: if elasticity/plasticity is applied in the fluid phase, we also need this corrections:
+            # if self.phase_p[p] == Phase.Water:
+            #     self.FE_p[p] *= ti.sqrt(self.JP_p[p])  # * (U @ sigma @ V.transpose())
+            #     self.JE_p[p] = ti.math.determinant(self.FE_p[p])
+            #     self.JP_p[p] = 1.0
 
             la, mu = self.lambda_0_p[p], self.mu_0_p[p]
             stress = ti.Matrix.zero(ti.f32, 2, 2)
             if self.phase_p[p] == Phase.Ice:
                 # Reconstruct elastic deformation gradient after plasticity
-                # NOTE: d = 2 => JP^(1/d) = sqrt(JP)
-                # NOTE: further corrections to FE, FP, JE, JP would go here:
-                # FE <- JP^(1/d) * FE
-                # FP <- JP^(-1/d) * FP
-                # NOTE: this would make FP purely deviatoric and set JP = 1,
-                #       while keeping a balance with FE, JE, that are then used
-                #       to compute the deviatoric stress.
-                self.FE_p[p] = ti.sqrt(self.JP_p[p]) * (U @ sigma @ V.transpose())
-                # self.JE_p[p] *= ti.sqrt(self.JP_p[p]) # TODO: this should work?
-                self.JE_p[p] = ti.math.determinant(self.FE_p[p])
-                self.JP_p[p] = 1.0
+                self.FE_p[p] = U @ sigma @ V.transpose()
 
                 # Apply ice hardening by adjusting Lame parameters: TODO: uncomment this after testing
-                # hardening = ti.max(0.1, ti.min(20, ti.exp(self.zeta[None] * (1.0 - self.JP_p[p]))))
-                # la, mu = la * hardening, mu * hardening
+                hardening = ti.max(0.1, ti.min(20, ti.exp(self.zeta[None] * (1.0 - self.JP_p[p]))))
+                la, mu = la * hardening, mu * hardening
+
+                # TODO: explicit stress update wants small timestep, implicit pressure solve want bigger timestep
+                # TODO: should the b offset in pressure solver be non-zero in the fluid phase (=> JE != 1)?
+                #       otherwise we can't subtract the divergence from the right-hand side there
 
                 # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
-                # FIXME: use corrected FE?
-                FE = self.FE_p[p] * (self.JE_p[p] ** (-1 / 2))
-                UE, _, VE = ti.svd(FE)
-                stress = 2 * mu * (FE - UE @ VE.transpose()) @ self.FE_p[p].transpose()  # pyright: ignore
-                # FIXME: or this?
-                # stress = 2 * mu * (self.FE_p[p] - U @ V.transpose()) @ self.FE_p[p].transpose()  # pyright: ignore
+                # TODO: this is already converted to Cauchy stress??
+                #       but that depends on the formulation for the whole energy density function
+                #       and needs to be adjusted???
+
+                # F_dev = self.FE_p[p] / ti.sqrt(self.JE_p[p])  # TODO: could just be this for d = 2?
+                F_dev = (self.JE_p[p] ** (-1 / 2)) * self.FE_p[p]
+                U_dev, _, V_dev = ti.svd(F_dev)  # TODO: can we just correct U?
+                stress = 2 * mu * (F_dev - U_dev @ V_dev.transpose()) @ self.FE_p[p].transpose()  # pyright: ignore
+                # TODO: is it @ F_dev or @ FE_p?
+                # stress = 2 * mu * (F_dev - U_dev @ V_dev.transpose()) @ F_dev.transpose()  # pyright: ignore
 
                 # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
                 D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
 
-                # TODO: What happens here exactly? Something with Cauchy-stress?
+                # Cauchy stress times dt and inv_dx
                 stress *= -self.dt * self.particle_vol * D_inv
 
             # APIC momentum + MLS-MPM stress contribution [Hu et al. 2018, Eqn. 29].
@@ -382,9 +385,11 @@ class MPM_Solver:
             # TODO: Colliding cells are either assigned the temperature of the object it collides with
             # or a user-defined spatially-varying value depending on the setup.
 
-            # WARNING: currently this is only set in the beginning, as the colliding boundary is fixed:
+            # NOTE: currently this is only set in the beginning, as the colliding boundary is fixed:
+            # TODO: decide if this should be done here for better integration of colliding objects
             if self.is_colliding(i, j):
                 continue
+
             # A cell is marked as colliding if all of its surrounding faces are colliding.
             # cell_is_colliding = self.classification_x[i, j] == Classification.Colliding
             # cell_is_colliding &= self.classification_x[i + 1, j] == Classification.Colliding
@@ -472,8 +477,8 @@ class MPM_Solver:
                 c_x += self.velocity_x[base_x + offset] * grad_x
                 c_y += self.velocity_y[base_y + offset] * grad_y
 
-            # c_x = 3 * self.inv_dx * b_x  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
-            # c_y = 3 * self.inv_dx * b_y  # C = B @ (D^(-1)), 1 / dx cancelled out by dx in dpos, Cubic kernels in P2G
+            # c_x = 3 * self.inv_dx * b_x  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
+            # c_y = 3 * self.inv_dx * b_y  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
             self.C_p[p] = ti.Matrix([[c_x[0], c_y[0]], [c_x[1], c_y[1]]])  # pyright: ignore
             self.position_p[p] += self.dt * next_velocity
             self.velocity_p[p] = next_velocity

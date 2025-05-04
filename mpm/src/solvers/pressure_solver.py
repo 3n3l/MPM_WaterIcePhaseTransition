@@ -73,7 +73,9 @@ class PressureSolver:
                     # b[idx] += self.inv_dx * self.velocity_y[i, j]  # FIXME: should be this?!
 
                 # Build the left-hand side of the linear system:
-                center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
+                # center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
+                lambda_c = 1.0 / self.inv_lambda_c[i, j]
+                center += self.JP_c[i, j] / (self.dt * lambda_c * self.JE_c[i, j])
 
                 # We will apply a Neumann boundary condition on the colliding faces,
                 # to guarantee zero flux into colliding cells, by just not adding these
@@ -148,7 +150,7 @@ class PressureSolver:
             assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
             assert not np.any(np.isnan(pressure)), "NAN VALUE IN PRESSURE ARRAY!"
         else:
-            solver = SparseCG(A.build(), b, max_iter=500)
+            solver = SparseCG(A.build(), b, atol=1e-6, max_iter=500)
             p, _ = solver.solve()
 
         # Correct pressure:

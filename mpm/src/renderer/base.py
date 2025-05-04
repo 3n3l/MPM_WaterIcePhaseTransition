@@ -65,8 +65,8 @@ class BaseRenderer:
                 geometry = self.subsequent_geometries.pop(0)
                 self.add_geometry(geometry)
 
-        # for _ in range(int(2e-3 // self.mpm_solver.dt)):
-        for _ in range(4):
+        # TODO: find good dt and number of iterations
+        for _ in range(int(2e-3 // self.mpm_solver.dt)):
             self.mpm_solver.reset_grids()
             self.mpm_solver.particle_to_grid()
             self.mpm_solver.momentum_to_velocity()
