@@ -191,10 +191,10 @@ configuration_list = [
         name="Spherefall [Water]",
         geometries=[
             Circle(
-                center=(0.5, 0.35),
+                center=(0.5, 0.5),
                 phase=Phase.Water,
-                velocity=(0, -2),
-                radius=0.08,
+                velocity=(0, -3),
+                radius=0.1,
             )
         ],
         E=1.4e5,  # Young's modulus (1.4e5)
@@ -209,9 +209,9 @@ configuration_list = [
         geometries=[
             Circle(
                 center=(0.5, 0.5),
-                velocity=(0, -2),
+                velocity=(0, -3),
                 phase=Phase.Ice,
-                radius=0.08,
+                radius=0.1,
             ),
         ],
         E=1.4e5,  # Young's modulus (1.4e5)
