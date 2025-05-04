@@ -58,19 +58,15 @@ class PressureSolver:
 
                 # This uses a modified divergence, where the velocities of faces
                 # bordering colliding (solid) cells are considered to be zero.
-                # FIXME: the only error left is in here:
+                # NOTE: we subtract the divergence, instead of adding it.
                 if not self.is_colliding(i + 1, j):
-                    b[idx] += self.inv_dx * self.velocity_x[i + 1, j]
-                    # b[idx] -= self.inv_dx * self.velocity_x[i + 1, j]  # FIXME: should be this?!
+                    b[idx] -= self.inv_dx * self.velocity_x[i + 1, j]
                 if not self.is_colliding(i - 1, j):
-                    b[idx] -= self.inv_dx * self.velocity_x[i, j]
-                    # b[idx] += self.inv_dx * self.velocity_x[i, j]  # FIXME: should be this?!
+                    b[idx] += self.inv_dx * self.velocity_x[i, j]
                 if not self.is_colliding(i, j + 1):
-                    b[idx] += self.inv_dx * self.velocity_y[i, j + 1]
-                    # b[idx] -= self.inv_dx * self.velocity_y[i, j + 1]  # FIXME: should be this?!
+                    b[idx] -= self.inv_dx * self.velocity_y[i, j + 1]
                 if not self.is_colliding(i, j - 1):
-                    b[idx] -= self.inv_dx * self.velocity_y[i, j]
-                    # b[idx] += self.inv_dx * self.velocity_y[i, j]  # FIXME: should be this?!
+                    b[idx] += self.inv_dx * self.velocity_y[i, j]
 
                 # Build the left-hand side of the linear system:
                 # center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
@@ -116,17 +112,18 @@ class PressureSolver:
         for i, j in ti.ndrange(self.n_grid, self.n_grid):
             idx = i * self.n_grid + j
             if self.is_interior(i - 1, j) or self.is_interior(i, j):
+                # NOTE: we add the pressure, instead of subtracting it.
                 if not (self.is_colliding(i - 1, j) or self.is_colliding(i, j)):
                     pressure_gradient = pressure[idx] - pressure[idx - self.n_grid]
                     inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
-                    self.velocity_x[i, j] -= inv_rho * coefficient * pressure_gradient
+                    self.velocity_x[i, j] += inv_rho * coefficient * pressure_gradient
                 else:
                     self.velocity_x[i, j] = 0
             if self.is_interior(i, j - 1) or self.is_interior(i, j):
                 if not (self.is_colliding(i, j - 1) or self.is_colliding(i, j)):
                     pressure_gradient = pressure[idx] - pressure[idx - 1]
                     inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
-                    self.velocity_y[i, j] -= inv_rho * coefficient * pressure_gradient
+                    self.velocity_y[i, j] += inv_rho * coefficient * pressure_gradient
                 else:
                     self.velocity_y[i, j] = 0
 
