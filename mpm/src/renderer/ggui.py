@@ -65,14 +65,12 @@ class GGUI(BaseRenderer):
         Parameters:
             subwindow: GGUI subwindow
         """
-        # TODO: Implement back stickiness + friction or remove them entirely
-        # self.solver.stickiness[None] = subwindow.slider_float("stickiness", self.solver.stickiness[None], 1.0, 5.0)
-        # self.solver.friction[None] = subwindow.slider_float("friction", self.solver.friction[None], 1.0, 5.0)
         self.mpm_solver.theta_c[None] = subwindow.slider_float("theta_c", self.mpm_solver.theta_c[None], 1e-2, 10e-2)
         self.mpm_solver.theta_s[None] = subwindow.slider_float("theta_s", self.mpm_solver.theta_s[None], 1e-3, 10e-3)
         self.mpm_solver.zeta[None] = subwindow.slider_int("zeta", self.mpm_solver.zeta[None], 3, 20)
         self.mpm_solver.nu[None] = subwindow.slider_float("nu", self.mpm_solver.nu[None], 0.1, 0.4)
         self.mpm_solver.E[None] = subwindow.slider_float("E", self.mpm_solver.E[None], 4.8e4, 5.5e5)
+
         E = self.mpm_solver.E[None]
         nu = self.mpm_solver.nu[None]
         self.mpm_solver.lambda_0[None] = E * nu / ((1 + nu) * (1 - 2 * nu))
@@ -137,9 +135,14 @@ class GGUI(BaseRenderer):
 
     def run(self) -> None:
         """Runs this simulation."""
+        # iteration = 0
         while self.window.running:
+            # if iteration == 600:
+                # self.create_video()
+                # self.window.running = False
             self.handle_events()
             self.show_settings()
             if not self.is_paused:
                 self.substep()
+                # iteration += 1
             self.render()

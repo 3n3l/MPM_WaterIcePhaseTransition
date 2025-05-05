@@ -199,9 +199,9 @@ configuration_list = [
         ],
         E=1.4e5,  # Young's modulus (1.4e5)
         nu=0.2,  # Poisson's ratio (0.2)
-        zeta=10,  # Hardening coefficient (10)
+        zeta=20,  # Hardening coefficient (10)
         theta_c=2.5e-2,  # Critical compression (2.5e-2)
-        theta_s=5.0e-3,  # Critical stretch (7.5e-3)
+        theta_s=7.5e-3,  # Critical stretch (7.5e-3)
         ambient_temperature=-20.0,
     ),
     Configuration(

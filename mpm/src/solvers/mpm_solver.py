@@ -13,6 +13,7 @@ from src.constants import (
     Mu,
 )
 from src.solvers import PressureSolver, HeatSolver
+from src.parsing import should_use_b_i_computation
 
 import taichi as ti
 
@@ -29,8 +30,9 @@ class MPM_Solver:
         self.n_cells = self.n_grid * self.n_grid
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
-        # self.dt = 1e-4 / quality  # FIXME: dt for solid, fluid behaves wrong
-        self.dt = 3e-4 / quality  # FIXME: dt for fluid, solid explodes
+        self.dt = 1e-4 / quality  # FIXME: dt for solid, fluid behaves wrong
+        # self.dt = 2e-3 / quality  # FIXME: dt for fluid, solid explodes
+        # self.dt = 3e-4 / quality # FIXME: this should be working for both phases, but isn't
         self.vol_0_p = (self.dx * 0.5) ** 2
         self.n_dimensions = 2
 
@@ -86,13 +88,13 @@ class MPM_Solver:
         self.ambient_temperature = ti.field(dtype=ti.f32, shape=())
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
-        # self.lambda_0 = ti.field(dtype=float, shape=())
+        self.lambda_0 = ti.field(dtype=float, shape=())
         self.theta_c = ti.field(dtype=ti.f32, shape=())
         self.theta_s = ti.field(dtype=ti.f32, shape=())
-        # self.mu_0 = ti.field(dtype=float, shape=())
+        self.mu_0 = ti.field(dtype=float, shape=())
         self.zeta = ti.field(dtype=ti.i32, shape=())
-        # self.nu = ti.field(dtype=float, shape=())
-        # self.E = ti.field(dtype=float, shape=())
+        self.nu = ti.field(dtype=float, shape=())
+        self.E = ti.field(dtype=float, shape=())
 
         # Poisson solvers for pressure and heat.
         self.pressure_solver = PressureSolver(self)
@@ -177,13 +179,14 @@ class MPM_Solver:
 
             # # Clamp singular values to simulate plasticity and elasticity:
             U, sigma, V = ti.svd(self.FE_p[p])
-            self.JE_p[p], J = 1.0, 1.0
+            # self.JE_p[p], self.JP_p[p] = 1.0, 1.0
+            self.JE_p[p] = 1.0
             for d in ti.static(range(self.n_dimensions)):
                 singular_value = float(sigma[d, d])
                 clamped = float(sigma[d, d])
                 if self.phase_p[p] == Phase.Ice:
                     # Clamp singular values to [1 - theta_c, 1 + theta_s]
-                    clamped = max(singular_value, 1 - self.theta_c[None])
+                    clamped = max(clamped, 1 - self.theta_c[None])
                     clamped = min(clamped, 1 + self.theta_s[None])
                 self.JP_p[p] *= singular_value / clamped
                 self.JE_p[p] *= clamped
@@ -196,6 +199,15 @@ class MPM_Solver:
             #     self.JE_p[p] = ti.math.determinant(self.FE_p[p])
             #     self.JP_p[p] = 1.0
 
+            # TODO: explicit stress update wants small timestep, implicit pressure solve want bigger timestep
+
+            # la, mu = 1.0, 1.0
+            # FIXME: this is just for testing purposes, to change values from the gui, remove this later
+            #        (or make gui sliders for water and ice values separate)
+            # if self.phase_p[p] == Phase.Ice:
+            #     la, mu = self.lambda_0[None], self.mu_0[None]
+            # else:
+            # la, mu = self.lambda_0[None], self.mu_0[None]
             la, mu = self.lambda_0_p[p], self.mu_0_p[p]
             cauchy_stress = ti.Matrix.zero(ti.f32, 2, 2)
             if self.phase_p[p] == Phase.Ice:
@@ -206,25 +218,31 @@ class MPM_Solver:
                 hardening = ti.max(0.1, ti.min(20, ti.exp(self.zeta[None] * (1.0 - self.JP_p[p]))))
                 la, mu = la * hardening, mu * hardening
 
-                # TODO: explicit stress update wants small timestep, implicit pressure solve want bigger timestep
-                # TODO: should the b offset in pressure solver be non-zero in the fluid phase (=> JE != 1)?
-                #       otherwise we can't subtract the divergence from the right-hand side there
-
-                # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
-                F_dev = (self.JE_p[p] ** (-1 / 2)) * self.FE_p[p]
-                U_dev, _, V_dev = ti.svd(F_dev)  # TODO: can we just correct U?
-                piola_kirchhoff = 2 * mu * (F_dev - U_dev @ V_dev.transpose())
-                # TODO: could just be this for d == 2?:
-                # F_dev = self.FE_p[p] / ti.sqrt(self.JE_p[p])
-
                 # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
                 D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
 
+                # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
+                # NOTE: this is the stress update to be used with the pressure correction
+                F_dev = (self.JE_p[p] ** (-1 / 2)) * self.FE_p[p]
+                # TODO: could just be this for d == 2?:
+                # F_dev = self.FE_p[p] / ti.sqrt(self.JE_p[p])
+                U_dev, _, V_dev = ti.svd(F_dev)  # TODO: can we just correct U?
+                piola_kirchhoff = 2 * mu * (F_dev - U_dev @ V_dev.transpose())
+                piola_kirchhoff = piola_kirchhoff @ self.FE_p[p].transpose()  # pyright: ignore
+                # piola_kirchhoff += ti.Matrix.identity(ti.f32, 2) * la * self.JE_p[p] * (self.JE_p[p] - 1)
                 # Cauchy stress times dt and D_inv
+                cauchy_stress = -self.dt * self.vol_0_p * D_inv * piola_kirchhoff
                 # TODO: the 1 / J is probably cancelled out by V^n and leaves us V^0 (self.vol_0_p)?!
                 # cauchy_stress = (1 / J) * (piola_kirchhoff @ self.FE_p[p].transpose())  # pyright: ignore
-                cauchy_stress = piola_kirchhoff @ self.FE_p[p].transpose()  # pyright: ignore
-                cauchy_stress = -self.dt * self.vol_0_p * D_inv
+
+                # # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
+                # # NOTE: this is the usual MPM stress update
+                # piola_kirchhoff = 2 * mu * (self.FE_p[p] - U @ V.transpose())
+                # piola_kirchhoff = piola_kirchhoff @ self.FE_p[p].transpose()  # pyright: ignore
+                # piola_kirchhoff += ti.Matrix.identity(ti.f32, 2) * la * self.JE_p[p] * (self.JE_p[p] - 1)
+                # # Cauchy stress times dt and D_inv
+                # # cauchy_stress = piola_kirchhoff @ self.FE_p[p].transpose()
+                # cauchy_stress = -self.dt * self.vol_0_p * D_inv * piola_kirchhoff
 
             # APIC momentum + MLS-MPM stress contribution [Hu et al. 2018, Eqn. 29].
             # TODO: use cx, cy vectors here directly?
@@ -244,6 +262,7 @@ class MPM_Solver:
 
             # Cubic kernels (JST16 Eqn. 122 with x=fx, abs(fx-1), abs(fx-2), (and abs(fx-3) for faces).
             # Based on https://www.bilibili.com/opus/662560355423092789
+            # FIXME: the weights might be wrong?
             w_c = [
                 ((-0.166 * dist_c**3) + (dist_c**2) - (2 * dist_c) + 1.33),
                 ((0.5 * ti.abs(dist_c - 1.0) ** 3) - ((dist_c - 1.0) ** 2) + 0.66),
@@ -447,52 +466,58 @@ class MPM_Solver:
             w_x = [0.5 * (1.5 - dist_x) ** 2, 0.75 - (dist_x - 1) ** 2, 0.5 * (dist_x - 0.5) ** 2]
             w_y = [0.5 * (1.5 - dist_y) ** 2, 0.75 - (dist_y - 1) ** 2, 0.5 * (dist_y - 0.5) ** 2]
 
+            # NOTE: Computing b_i and setting c_i <- D^{-1} * b_i
+            b_x = ti.Vector.zero(ti.f32, 2)
+            b_y = ti.Vector.zero(ti.f32, 2)
+
+            # NOTE: Computing c_i directly:
+            c_x = ti.Vector.zero(ti.f32, 2)
+            c_y = ti.Vector.zero(ti.f32, 2)
             g_x = [dist_x - 1.5, (-2) * (dist_x - 1), dist_x - 0.5]
             g_y = [dist_y - 1.5, (-2) * (dist_y - 1), dist_y - 0.5]
 
             next_velocity = ti.Vector.zero(ti.f32, 2)
-            # b_x = ti.Vector.zero(float, 2)
-            # b_y = ti.Vector.zero(float, 2)
-            c_x = ti.Vector.zero(ti.f32, 2)
-            c_y = ti.Vector.zero(ti.f32, 2)
             next_temperature = 0.0
             for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
                 offset = ti.Vector([i, j])
                 c_weight = w_c[i][0] * w_c[j][1]
                 x_weight = w_x[i][0] * w_x[j][1]
                 y_weight = w_y[i][0] * w_y[j][1]
-                # x_dpos = ti.cast(offset, ti.f32) - dist_x
-                # y_dpos = ti.cast(offset, ti.f32) - dist_y
-                grad_x = ti.Vector([g_x[i][0] * w_x[j][1], w_x[i][0] * g_x[j][1]])
-                grad_y = ti.Vector([g_y[i][0] * w_y[j][1], w_y[i][0] * g_y[j][1]])
-
                 next_temperature += c_weight * self.temperature_c[base_c + offset]
                 x_velocity = x_weight * self.velocity_x[base_x + offset]
                 y_velocity = y_weight * self.velocity_y[base_y + offset]
                 next_velocity += [x_velocity, y_velocity]
-                # b_x += x_velocity * x_dpos
-                # b_y += y_velocity * y_dpos
+                # NOTE: Computing b_i and setting c_i <- D^{-1} * b_i
+                x_dpos = ti.cast(offset, ti.f32) - dist_x
+                y_dpos = ti.cast(offset, ti.f32) - dist_y
+                b_x += x_velocity * x_dpos
+                b_y += y_velocity * y_dpos
+
+                # NOTE: Computing c_i directly:
+                grad_x = ti.Vector([g_x[i][0] * w_x[j][1], w_x[i][0] * g_x[j][1]])
+                grad_y = ti.Vector([g_y[i][0] * w_y[j][1], w_y[i][0] * g_y[j][1]])
                 c_x += self.velocity_x[base_x + offset] * grad_x
                 c_y += self.velocity_y[base_y + offset] * grad_y
 
-            # c_x = 3 * self.inv_dx * b_x  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
-            # c_y = 3 * self.inv_dx * b_y  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
+            if ti.static(should_use_b_i_computation):
+                c_x = 3 * self.inv_dx * b_x  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
+                c_y = 3 * self.inv_dx * b_y  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
             self.C_p[p] = ti.Matrix([[c_x[0], c_y[0]], [c_x[1], c_y[1]]])  # pyright: ignore
             self.position_p[p] += self.dt * next_velocity
             self.velocity_p[p] = next_velocity
 
-            # DONE: set temperature for empty cells
-            # DONE: set temperature for particles, ideally per geometry
-            # DONE: set heat capacity per particle depending on phase
-            # DONE: set heat conductivity per particle depending on phase
-            # DONE: set particle mass per phase
-            # DONE: set E and nu for each particle depending on phase
-            # DONE: apply latent heat
-            # TODO: move this to a ti.func? (or keep this here but assign values in func and use when adding particles)
-            # TODO: set theta_c, theta_s per phase? Water probably wants very small values, ice depends on temperature
-            # TODO: in theory all of the constitutive parameters must be functions of temperature
-            #       in the ice phase to range from solid ice to slushy ice?
-
+            # # DONE: set temperature for empty cells
+            # # DONE: set temperature for particles, ideally per geometry
+            # # DONE: set heat capacity per particle depending on phase
+            # # DONE: set heat conductivity per particle depending on phase
+            # # DONE: set particle mass per phase
+            # # DONE: set E and nu for each particle depending on phase
+            # # DONE: apply latent heat
+            # # TODO: move this to a ti.func? (or keep this here but assign values in func and use when adding particles)
+            # # TODO: set theta_c, theta_s per phase? Water probably wants very small values, ice depends on temperature
+            # # TODO: in theory all of the constitutive parameters must be functions of temperature
+            # #       in the ice phase to range from solid ice to slushy ice?
+            #
             # # Initially, we allow each particle to freely change its temperature according to the heat equation.
             # # But whenever the freezing point is reached, any additional temperature change is multiplied by
             # # conductivity and mass and added to the buffer, with the particle temperature kept unchanged.

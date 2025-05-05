@@ -52,8 +52,9 @@ class State:
 # TODO: find good values for ice???
 # TODO: refactor this, maybe use variable values again???
 # FIXME: E = 1.4e3 -> collapse, E = 1.4e4 -> explosion
-ice_E = 1.4e4
-ice_nu = 0.2
+# ice_E = 2.8e6
+ice_E = 1.8e4
+ice_nu = 0.3
 # water_E = 5e5
 # water_nu = 0.45
 

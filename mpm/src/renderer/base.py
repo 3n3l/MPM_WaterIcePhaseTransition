@@ -136,13 +136,13 @@ class BaseRenderer:
             configuration: Configuration
         """
         self.mpm_solver.ambient_temperature[None] = configuration.ambient_temperature
-        # self.mpm_solver.lambda_0[None] = configuration.lambda_0
+        self.mpm_solver.lambda_0[None] = configuration.lambda_0
         self.mpm_solver.theta_c[None] = configuration.theta_c
         self.mpm_solver.theta_s[None] = configuration.theta_s
         self.mpm_solver.zeta[None] = configuration.zeta
-        # self.mpm_solver.mu_0[None] = configuration.mu_0
-        # self.mpm_solver.nu[None] = configuration.nu
-        # self.mpm_solver.E[None] = configuration.E
+        self.mpm_solver.mu_0[None] = configuration.mu_0
+        self.mpm_solver.nu[None] = configuration.nu
+        self.mpm_solver.E[None] = configuration.E
         self.configuration = configuration
         self.reset()
 
