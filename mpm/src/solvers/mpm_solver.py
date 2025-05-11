@@ -1,4 +1,5 @@
 # TODO: Use enums Water, Ice to hold everything instead 300000 different enums
+from operator import inv
 from src.constants import (
     Capacity,
     Classification,
@@ -42,22 +43,12 @@ class MPM_Solver:
         self.lower = self.boundary_width * self.dx
         self.upper = 1 - self.lower
 
-        # Properties on MAC-faces.
-        self.classification_x = ti.field(dtype=ti.i32, shape=(self.n_grid + 1, self.n_grid))
-        self.classification_y = ti.field(dtype=ti.i32, shape=(self.n_grid, self.n_grid + 1))
-        self.conductivity_x = ti.field(dtype=ti.f32, shape=(self.n_grid + 1, self.n_grid))
-        self.conductivity_y = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid + 1))
-        self.velocity_x = ti.field(dtype=ti.f32, shape=(self.n_grid + 1, self.n_grid))
-        self.velocity_y = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid + 1))
-        self.volume_x = ti.field(dtype=ti.f32, shape=(self.n_grid + 1, self.n_grid))
-        self.volume_y = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid + 1))
-        self.mass_x = ti.field(dtype=ti.f32, shape=(self.n_grid + 1, self.n_grid))
-        self.mass_y = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid + 1))
-
         # Properties on MAC-cells.
         self.classification_c = ti.field(dtype=ti.i32, shape=(self.n_grid, self.n_grid))
+        self.velocity_c = ti.Vector.field(2, dtype=ti.f32, shape=(self.n_grid + 1, self.n_grid))
         self.temperature_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
         self.inv_lambda_c = ti.field(dtype=ti.f64, shape=(self.n_grid, self.n_grid))
+        self.volume_c = ti.field(dtype=ti.f32, shape=(self.n_grid + 1, self.n_grid))
         self.capacity_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
         self.mass_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
         self.JE_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
@@ -98,7 +89,7 @@ class MPM_Solver:
 
         # Poisson solvers for pressure and heat.
         self.pressure_solver = PressureSolver(self)
-        self.heat_solver = HeatSolver(self)
+        # self.heat_solver = HeatSolver(self)
 
         # Set the initial boundary:
         self.initialize_boundary()
@@ -131,22 +122,11 @@ class MPM_Solver:
 
     @ti.kernel
     def reset_grids(self):
-        for i, j in self.classification_x:
-            self.conductivity_x[i, j] = 0
-            self.velocity_x[i, j] = 0
-            self.volume_x[i, j] = 0
-            self.mass_x[i, j] = 0
-
-        for i, j in self.classification_y:
-            self.conductivity_y[i, j] = 0
-            self.velocity_y[i, j] = 0
-            self.volume_y[i, j] = 0
-            self.mass_y[i, j] = 0
-
         for i, j in self.classification_c:
             self.temperature_c[i, j] = 0
             self.inv_lambda_c[i, j] = 0
             self.capacity_c[i, j] = 0
+            self.velocity_c[i, j] = 0
             self.mass_c[i, j] = 0
             self.JE_c[i, j] = 0
             self.JP_c[i, j] = 0
@@ -247,17 +227,11 @@ class MPM_Solver:
             # APIC momentum + MLS-MPM stress contribution [Hu et al. 2018, Eqn. 29].
             # TODO: use cx, cy vectors here directly?
             affine = cauchy_stress + self.mass_p[p] * self.C_p[p]
-            affine_x = affine @ ti.Vector([1, 0])  # pyright: ignore
-            affine_y = affine @ ti.Vector([0, 1])  # pyright: ignore
 
             # Lower left corner of the interpolation grid:
-            base_x = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([1.0, 1.5])), dtype=ti.i32)
-            base_y = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([1.5, 1.0])), dtype=ti.i32)
             base_c = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([0.5, 0.5])), dtype=ti.i32)
 
             # Distance between lower left corner and particle position:
-            dist_x = self.position_p[p] * self.inv_dx - ti.cast(base_x, ti.f32) - ti.Vector([0.0, 0.5])
-            dist_y = self.position_p[p] * self.inv_dx - ti.cast(base_y, ti.f32) - ti.Vector([0.5, 0.0])
             dist_c = self.position_p[p] * self.inv_dx - ti.cast(base_c, ti.f32)
 
             # Cubic kernels (JST16 Eqn. 122 with x=fx, abs(fx-1), abs(fx-2), (and abs(fx-3) for faces).
@@ -267,18 +241,6 @@ class MPM_Solver:
                 ((-0.166 * dist_c**3) + (dist_c**2) - (2 * dist_c) + 1.33),
                 ((0.5 * ti.abs(dist_c - 1.0) ** 3) - ((dist_c - 1.0) ** 2) + 0.66),
                 ((0.5 * ti.abs(dist_c - 2.0) ** 3) - ((dist_c - 2.0) ** 2) + 0.66),
-            ]
-            w_x = [
-                ((-0.166 * dist_x**3) + (dist_x**2) - (2 * dist_x) + 1.33),
-                ((0.5 * ti.abs(dist_x - 1.0) ** 3) - ((dist_x - 1.0) ** 2) + 0.66),
-                ((0.5 * ti.abs(dist_x - 2.0) ** 3) - ((dist_x - 2.0) ** 2) + 0.66),
-                ((-0.166 * ti.abs(dist_x - 3.0) ** 3) + ((dist_x - 3.0) ** 2) - (2 * ti.abs(dist_x - 3.0)) + 1.33),
-            ]
-            w_y = [
-                ((-0.166 * dist_y**3) + (dist_y**2) - (2 * dist_y) + 1.33),
-                ((0.5 * ti.abs(dist_y - 1.0) ** 3) - ((dist_y - 1.0) ** 2) + 0.66),
-                ((0.5 * ti.abs(dist_y - 2.0) ** 3) - ((dist_y - 2.0) ** 2) + 0.66),
-                ((-0.166 * ti.abs(dist_y - 3.0) ** 3) + ((dist_y - 3.0) ** 2) - (2 * ti.abs(dist_y - 3.0)) + 1.33),
             ]
 
             for i, j in ti.static(ti.ndrange(3, 3)):
@@ -307,141 +269,96 @@ class MPM_Solver:
                 # TODO: the paper wants to rasterize JE, J and then set JP = J / JE, but this makes no difference
                 # self.J_c[base_c + offset] += weight_c * self.mass_p[p] * self.J_p[p]
 
-            for i, j in ti.static(ti.ndrange(4, 4)):
-                offset = ti.Vector([i, j])
-                weight_x = w_x[i][0] * w_x[j][1]
-                weight_y = w_y[i][0] * w_y[j][1]
-                dpos_x = ti.cast(offset - dist_x, ti.f32) * self.dx
-                dpos_y = ti.cast(offset - dist_y, ti.f32) * self.dx
-
-                # Rasterize mass to grid faces.
-                self.mass_x[base_x + offset] += weight_x * self.mass_p[p]
-                self.mass_y[base_y + offset] += weight_y * self.mass_p[p]
+                dpos_c = ti.cast(offset - dist_c, ti.f32) * self.dx
 
                 # Rasterize velocity to grid faces.
-                velocity_x = self.mass_p[p] * self.velocity_p[p][0] + affine_x @ dpos_x
-                velocity_y = self.mass_p[p] * self.velocity_p[p][1] + affine_y @ dpos_y
-                self.velocity_x[base_x + offset] += weight_x * velocity_x
-                self.velocity_y[base_y + offset] += weight_y * velocity_y
+                velocity_c = self.mass_p[p] * self.velocity_p[p] + affine @ dpos_c  # pyright: ignore
+                self.velocity_c[base_c + offset] += weight_c * velocity_c
 
                 # Rasterize conductivity to grid faces.
-                conductivity = self.mass_p[p] * self.conductivity_p[p]
-                self.conductivity_x[base_x + offset] += weight_x * conductivity
-                self.conductivity_y[base_y + offset] += weight_y * conductivity
+                # conductivity = self.mass_p[p] * self.conductivity_p[p]
+                # self.conductivity_x[base_x + offset] += weight_x * conductivity
+                # self.conductivity_y[base_y + offset] += weight_y * conductivity
 
     @ti.kernel
     def momentum_to_velocity(self):
-        for i, j in self.velocity_x:
-            if (mass_x := self.mass_x[i, j]) > 0:
-                self.velocity_x[i, j] /= mass_x
-                collision_right = i >= (self.n_grid - self.boundary_width) and self.velocity_x[i, j] > 0
-                collision_left = i <= self.boundary_width and self.velocity_x[i, j] < 0
+        for i, j in self.velocity_c:
+            if (mass := self.mass_c[i, j]) > 0:
+                # Normalize:
+                self.temperature_c[i, j] /= mass
+                self.inv_lambda_c[i, j] /= mass
+                self.capacity_c[i, j] /= mass
+                self.velocity_c[i, j] /= mass
+                self.JE_c[i, j] /= mass
+                self.JP_c[i, j] /= mass
+
+                # Apply gravity:
+                self.velocity_c[i, j] += [0, GRAVITY * self.dt]
+
+                # Slip boundary condition:
+                collision_right = i >= (self.n_grid - self.boundary_width) and self.velocity_c[i, j][0] > 0
+                collision_left = i <= self.boundary_width and self.velocity_c[i, j][0] < 0
                 if collision_left or collision_right:
-                    self.velocity_x[i, j] = 0
-
-        for i, j in self.velocity_y:
-            if (mass_y := self.mass_y[i, j]) > 0:
-                self.velocity_y[i, j] /= mass_y
-                self.velocity_y[i, j] += GRAVITY * self.dt
-                collision_top = j >= (self.n_grid - self.boundary_width) and self.velocity_y[i, j] > 0
-                collision_bottom = j <= self.boundary_width and self.velocity_y[i, j] < 0
+                    self.velocity_c[i, j][0] = 0
+                collision_top = j >= (self.n_grid - self.boundary_width) and self.velocity_c[i, j][1] > 0
+                collision_bottom = j <= self.boundary_width and self.velocity_c[i, j][1] < 0
                 if collision_top or collision_bottom:
-                    self.velocity_y[i, j] = 0
-
-        for i, j in self.mass_c:
-            if (mass_c := self.mass_c[i, j]) > 0:
-                self.temperature_c[i, j] /= mass_c
-                self.inv_lambda_c[i, j] /= mass_c
-                self.capacity_c[i, j] /= mass_c
-                self.JE_c[i, j] /= mass_c
-                self.JP_c[i, j] /= mass_c
-                # TODO: the paper wants to rasterize JE, J and then set JP = J / JE, but this makes no difference
-                # self.J_c[i, j] *= 1 / self.mass_c[i, j]
-                # self.JP_c[i, j] = self.J_c[i, j] / self.JE_c[i, j]
+                    self.velocity_c[i, j][1] = 0
 
     @ti.kernel
     def classify_cells(self):
-        # TODO: is it even needed to classify faces?
-        # for i, j in self.classification_x:
-        #     # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
-        #
-        #     # The simulation boundary is always colliding.
-        #     x_face_is_colliding = i >= (self.n_grid - self.boundary_width) or i <= self.boundary_width
-        #     x_face_is_colliding |= j >= (self.n_grid - self.boundary_width) or j <= self.boundary_width
-        #     if x_face_is_colliding:
-        #         self.classification_x[i, j] = Classification.Colliding
-        #         continue
-        #
-        #     # For convenience later on: a face is marked interior if it has mass.
-        #     if self.mass_x[i, j] > 0:
-        #         self.classification_x[i, j] = Classification.Interior
-        #         continue
-        #
-        #     # All remaining faces are empty.
-        #     self.classification_x[i, j] = Classification.Empty
-        #
-        # for i, j in self.classification_y:
-        #     # TODO: A MAC face is colliding if the level set computed by any collision object is negative at the face center.
-        #
-        #     # The simulation boundary is always colliding.
-        #     y_face_is_colliding = i >= (self.n_grid - self.boundary_width) or i <= self.boundary_width
-        #     y_face_is_colliding |= j >= (self.n_grid - self.boundary_width) or j <= self.boundary_width
-        #     if y_face_is_colliding:
-        #         self.classification_y[i, j] = Classification.Colliding
-        #         continue
-        #
-        #     # For convenience later on: a face is marked interior if it has mass.
-        #     if self.mass_y[i, j] > 0:
-        #         self.classification_y[i, j] = Classification.Interior
-        #         continue
-        #
-        #     # All remaining faces are empty.
-        #     self.classification_y[i, j] = Classification.Empty
-
         for i, j in self.classification_c:
-            # TODO: Colliding cells are either assigned the temperature of the object it collides with
-            # or a user-defined spatially-varying value depending on the setup.
+            # Reset all the cells that don't belong to the colliding boundary:
+            if not self.is_colliding(i, j):
+                self.classification_c[i, j] = Classification.Empty
 
-            # NOTE: currently this is only set in the beginning, as the colliding boundary is fixed:
-            # TODO: decide if this should be done here for better integration of colliding objects
-            if self.is_colliding(i, j):
+        for p in self.velocity_p:
+            # We ignore uninitialized particles:
+            if self.state_p[p] == State.Hidden:
                 continue
 
-            # A cell is marked as colliding if all of its surrounding faces are colliding.
-            # cell_is_colliding = self.classification_x[i, j] == Classification.Colliding
-            # cell_is_colliding &= self.classification_x[i + 1, j] == Classification.Colliding
-            # cell_is_colliding &= self.classification_y[i, j] == Classification.Colliding
-            # cell_is_colliding &= self.classification_y[i, j + 1] == Classification.Colliding
-            # if cell_is_colliding:
-            #     # self.cell_temperature[i, j] = self.ambient_temperature[None]
-            #     self.classification_c[i, j] = Classification.Colliding
-            #     continue
-
-            # A cell is interior if the cell and all of its surrounding faces have mass.
-            cell_is_interior = self.mass_c[i, j] > 0
-            cell_is_interior &= self.mass_x[i, j] > 0 and self.mass_x[i + 1, j] > 0
-            cell_is_interior &= self.mass_y[i, j] > 0 and self.mass_y[i, j + 1] > 0
-            if cell_is_interior:
+            # Find the nearest cell and set it to interior:
+            i, j = ti.cast(self.position_p[p] * self.inv_dx, int)  # pyright: ignore
+            if not self.is_colliding(i, j):  # pyright: ignore
                 self.classification_c[i, j] = Classification.Interior
-                continue
 
-            # All remaining cells are empty.
-            self.classification_c[i, j] = Classification.Empty
+    # # NOTE: this classification doesn't work on a collocated grid
+    # @ti.kernel
+    # def _classify_cells(self):
+    #     for i, j in self.classification_c:
+    #         # TODO: Colliding cells are either assigned the temperature of the object it collides with
+    #         # or a user-defined spatially-varying value depending on the setup.
+    #
+    #         # NOTE: currently this is only set in the beginning, as the colliding boundary is fixed:
+    #         # TODO: decide if this should be done here for better integration of colliding objects
+    #         if self.is_colliding(i, j):
+    #             continue
+    #
+    #         # A cell is interior if the cell and all of its surrounding faces have mass.
+    #         cell_is_interior = self.mass_c[i, j] > 0
+    #         # cell_is_interior &= self.mass_x[i, j] > 0 and self.mass_x[i + 1, j] > 0
+    #         # cell_is_interior &= self.mass_y[i, j] > 0 and self.mass_y[i, j + 1] > 0
+    #         if cell_is_interior:
+    #             self.classification_c[i, j] = Classification.Interior
+    #             continue
+    #
+    #         # All remaining cells are empty.
+    #         self.classification_c[i, j] = Classification.Empty
+    #
+    #         # If the free surface is being enforced as a Dirichlet temperature condition,
+    #         # the ambient air temperature is recorded for empty cells.
+    #         self.temperature_c[i, j] = self.ambient_temperature[None]
 
-            # If the free surface is being enforced as a Dirichlet temperature condition,
-            # the ambient air temperature is recorded for empty cells.
-            self.temperature_c[i, j] = self.ambient_temperature[None]
-
-    @ti.kernel
-    def compute_volumes(self):
-        # TODO: this seems to be wrong, the paper has a sum over CDFs
-        control_volume = 0.5 * self.dx * self.dx
-        for i, j in self.classification_c:
-            if self.classification_c[i, j] == Classification.Interior:
-                self.volume_x[i + 1, j] += control_volume
-                self.volume_y[i, j + 1] += control_volume
-                self.volume_x[i, j] += control_volume
-                self.volume_y[i, j] += control_volume
+    # @ti.kernel
+    # def compute_volumes(self):
+    #     # TODO: this seems to be wrong, the paper has a sum over CDFs
+    #     control_volume = 0.5 * self.dx * self.dx
+    #     for i, j in self.classification_c:
+    #         if self.classification_c[i, j] == Classification.Interior:
+    #             self.volume_x[i + 1, j] += control_volume
+    #             self.volume_y[i, j + 1] += control_volume
+    #             self.volume_x[i, j] += control_volume
+    #             self.volume_y[i, j] += control_volume
 
     @ti.kernel
     def grid_to_particle(self):
@@ -451,58 +368,27 @@ class MPM_Solver:
                 continue
 
             # Lower left corner of the interpolation grid:
-            base_x = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([0.5, 1.0])), dtype=ti.i32)
-            base_y = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([1.0, 0.5])), dtype=ti.i32)
             base_c = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([0.5, 0.5])), dtype=ti.i32)
 
             # Distance between lower left corner and particle position:
-            dist_x = self.position_p[p] * self.inv_dx - ti.cast(base_x, ti.f32) - ti.Vector([0.0, 0.5])
-            dist_y = self.position_p[p] * self.inv_dx - ti.cast(base_y, ti.f32) - ti.Vector([0.5, 0.0])
             dist_c = self.position_p[p] * self.inv_dx - ti.cast(base_c, ti.f32)
 
             # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1, fx-2)
             # Based on https://www.bilibili.com/opus/662560355423092789
             w_c = [0.5 * (1.5 - dist_c) ** 2, 0.75 - (dist_c - 1) ** 2, 0.5 * (dist_c - 0.5) ** 2]
-            w_x = [0.5 * (1.5 - dist_x) ** 2, 0.75 - (dist_x - 1) ** 2, 0.5 * (dist_x - 0.5) ** 2]
-            w_y = [0.5 * (1.5 - dist_y) ** 2, 0.75 - (dist_y - 1) ** 2, 0.5 * (dist_y - 0.5) ** 2]
-
-            # NOTE: Computing b_i and setting c_i <- D^{-1} * b_i
-            b_x = ti.Vector.zero(ti.f32, 2)
-            b_y = ti.Vector.zero(ti.f32, 2)
-
-            # NOTE: Computing c_i directly:
-            c_x = ti.Vector.zero(ti.f32, 2)
-            c_y = ti.Vector.zero(ti.f32, 2)
-            g_x = [dist_x - 1.5, (-2) * (dist_x - 1), dist_x - 0.5]
-            g_y = [dist_y - 1.5, (-2) * (dist_y - 1), dist_y - 0.5]
 
             next_velocity = ti.Vector.zero(ti.f32, 2)
+            B = ti.Matrix.zero(ti.f32, 2, 2)
             next_temperature = 0.0
             for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
                 offset = ti.Vector([i, j])
-                c_weight = w_c[i][0] * w_c[j][1]
-                x_weight = w_x[i][0] * w_x[j][1]
-                y_weight = w_y[i][0] * w_y[j][1]
-                next_temperature += c_weight * self.temperature_c[base_c + offset]
-                x_velocity = x_weight * self.velocity_x[base_x + offset]
-                y_velocity = y_weight * self.velocity_y[base_y + offset]
-                next_velocity += [x_velocity, y_velocity]
-                # NOTE: Computing b_i and setting c_i <- D^{-1} * b_i
-                x_dpos = ti.cast(offset, ti.f32) - dist_x
-                y_dpos = ti.cast(offset, ti.f32) - dist_y
-                b_x += x_velocity * x_dpos
-                b_y += y_velocity * y_dpos
+                weight_c = w_c[i][0] * w_c[j][1]
+                dpos_c = ti.cast(offset, ti.f32) - dist_c
+                next_velocity += weight_c * self.velocity_c[base_c + offset]
+                next_temperature += weight_c * self.temperature_c[base_c + offset]
+                B += weight_c * self.velocity_c[base_c + offset].outer_product(dpos_c)
 
-                # NOTE: Computing c_i directly:
-                grad_x = ti.Vector([g_x[i][0] * w_x[j][1], w_x[i][0] * g_x[j][1]])
-                grad_y = ti.Vector([g_y[i][0] * w_y[j][1], w_y[i][0] * g_y[j][1]])
-                c_x += self.velocity_x[base_x + offset] * grad_x
-                c_y += self.velocity_y[base_y + offset] * grad_y
-
-            if ti.static(should_use_b_i_computation):
-                c_x = 3 * self.inv_dx * b_x  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
-                c_y = 3 * self.inv_dx * b_y  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
-            self.C_p[p] = ti.Matrix([[c_x[0], c_y[0]], [c_x[1], c_y[1]]])  # pyright: ignore
+            self.C_p[p] = 3 * self.inv_dx * B
             self.position_p[p] += self.dt * next_velocity
             self.velocity_p[p] = next_velocity
 

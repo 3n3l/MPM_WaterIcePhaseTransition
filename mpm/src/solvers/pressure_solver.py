@@ -22,12 +22,9 @@ class PressureSolver:
         self.JE_c = mpm_solver.JE_c
         self.JP_c = mpm_solver.JP_c
 
-        self.velocity_x = mpm_solver.velocity_x
-        self.velocity_y = mpm_solver.velocity_y
-        self.volume_x = mpm_solver.volume_x
-        self.volume_y = mpm_solver.volume_y
-        self.mass_x = mpm_solver.mass_x
-        self.mass_y = mpm_solver.mass_y
+        self.velocity_c = mpm_solver.velocity_c
+        self.volume_c = mpm_solver.volume_c
+        self.mass_c = mpm_solver.mass_c
 
     @ti.func
     def is_valid(self, i: int, j: int) -> bool:
@@ -60,13 +57,13 @@ class PressureSolver:
                 # bordering colliding (solid) cells are considered to be zero.
                 # NOTE: we subtract the divergence, instead of adding it.
                 if not self.is_colliding(i + 1, j):
-                    b[idx] -= self.inv_dx * self.velocity_x[i + 1, j]
+                    b[idx] -= self.inv_dx * self.velocity_c[i + 1, j][0]
                 if not self.is_colliding(i - 1, j):
-                    b[idx] += self.inv_dx * self.velocity_x[i, j]
+                    b[idx] += self.inv_dx * self.velocity_c[i, j][0]
                 if not self.is_colliding(i, j + 1):
-                    b[idx] -= self.inv_dx * self.velocity_y[i, j + 1]
+                    b[idx] -= self.inv_dx * self.velocity_c[i, j + 1][1]
                 if not self.is_colliding(i, j - 1):
-                    b[idx] += self.inv_dx * self.velocity_y[i, j]
+                    b[idx] += self.inv_dx * self.velocity_c[i, j][1]
 
                 # Build the left-hand side of the linear system:
                 # center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
@@ -77,25 +74,25 @@ class PressureSolver:
                 # to guarantee zero flux into colliding cells, by just not adding these
                 # face values in the Laplacian for the off-diagonal values.
                 if not self.is_colliding(i - 1, j):
-                    inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
+                    inv_rho = 1 / 1000  # self.volume_x[i, j] / self.mass_x[i, j]
                     center -= coefficient * inv_rho
                     if self.is_interior(i - 1, j):
                         A[idx, idx - self.n_grid] += coefficient * inv_rho
 
                 if not self.is_colliding(i + 1, j):
-                    inv_rho = self.volume_x[i + 1, j] / self.mass_x[i + 1, j]
+                    inv_rho = 1 / 1000  # self.volume_x[i + 1, j] / self.mass_x[i + 1, j]
                     center -= coefficient * inv_rho
                     if self.is_interior(i + 1, j):
                         A[idx, idx + self.n_grid] += coefficient * inv_rho
 
                 if not self.is_colliding(i, j - 1):
-                    inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
+                    inv_rho = 1 / 1000  # self.volume_y[i, j] / self.mass_y[i, j]
                     center -= coefficient * inv_rho
                     if self.is_interior(i, j - 1):
                         A[idx, idx - 1] += coefficient * inv_rho
 
                 if not self.is_colliding(i, j + 1):
-                    inv_rho = self.volume_y[i, j + 1] / self.mass_y[i, j + 1]
+                    inv_rho = 1 / 1000  # self.volume_y[i, j + 1] / self.mass_y[i, j + 1]
                     center -= coefficient * inv_rho
                     if self.is_interior(i, j + 1):
                         A[idx, idx + 1] += coefficient * inv_rho
@@ -115,17 +112,17 @@ class PressureSolver:
                 # NOTE: we add the pressure, instead of subtracting it.
                 if not (self.is_colliding(i - 1, j) or self.is_colliding(i, j)):
                     pressure_gradient = pressure[idx] - pressure[idx - self.n_grid]
-                    inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
-                    self.velocity_x[i, j] += inv_rho * coefficient * pressure_gradient
+                    inv_rho = 1 / 1000  # self.volume_x[i, j] / self.mass_x[i, j]
+                    self.velocity_c[i, j][0] += inv_rho * coefficient * pressure_gradient
                 else:
-                    self.velocity_x[i, j] = 0
+                    self.velocity_c[i, j][0] = 0
             if self.is_interior(i, j - 1) or self.is_interior(i, j):
                 if not (self.is_colliding(i, j - 1) or self.is_colliding(i, j)):
                     pressure_gradient = pressure[idx] - pressure[idx - 1]
-                    inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
-                    self.velocity_y[i, j] += inv_rho * coefficient * pressure_gradient
+                    inv_rho = 1 / 1000  # self.volume_y[i, j] / self.mass_y[i, j]
+                    self.velocity_c[i, j][1] += inv_rho * coefficient * pressure_gradient
                 else:
-                    self.velocity_y[i, j] = 0
+                    self.velocity_c[i, j][1] = 0
 
     def solve(self):
         A = SparseMatrixBuilder(
