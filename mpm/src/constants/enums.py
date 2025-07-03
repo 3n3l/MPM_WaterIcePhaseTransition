@@ -1,3 +1,6 @@
+from taichi import hex_to_rgb
+
+
 class Classification:
     Empty = 22
     Colliding = 33
@@ -9,15 +12,16 @@ class Phase:
     Water = 66
 
 
-class Color:
-    Ice = (0.81, 0.88, 1.0)
-    Water = (0.27, 0.35, 1.0)
-    Background = (0.09, 0.07, 0.07)
-    # TODO: GUI and GGUI expect the colors in different forms
-    #       unify this somehow
-    _Ice = 0xEDF5FF
-    _Water = 0x4589FF
-    _Background = 0x171414
+class ColorHEX:
+    Background = 0x007D79  # teal 60
+    Water = 0x78A9FF  # blue 40
+    Ice = 0xD0E2FF  # blue 20
+
+
+class ColorRGB:
+    Background = hex_to_rgb(ColorHEX.Background)
+    Water = hex_to_rgb(ColorHEX.Water)
+    Ice = hex_to_rgb(ColorHEX.Ice)
 
 
 class Capacity:

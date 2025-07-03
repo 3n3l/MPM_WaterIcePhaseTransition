@@ -1,4 +1,4 @@
-from src.constants import Capacity, Color, Conductivity, Phase, LatentHeat, Lambda, Mu, Density
+from src.constants import Capacity, ColorRGB, Conductivity, Phase, LatentHeat, Lambda, Mu, Density
 
 from abc import ABC, abstractmethod
 from typing import Tuple
@@ -18,8 +18,8 @@ class Geometry(ABC):
         self.capacity = Capacity.Water if phase == Phase.Water else Capacity.Ice
         self.heat = LatentHeat.Water if phase == Phase.Water else LatentHeat.Ice
         self.density = Density.Water if phase == Phase.Water else Density.Ice
+        self.color = ColorRGB.Water if phase == Phase.Water else ColorRGB.Ice
         self.lambda_0 = Lambda.Water if phase == Phase.Water else Lambda.Ice
-        self.color = Color.Water if phase == Phase.Water else Color.Ice
         self.mu_0 = Mu.Water if phase == Phase.Water else Mu.Ice
         self.frame_threshold = frame_threshold
         self.temperature = temperature

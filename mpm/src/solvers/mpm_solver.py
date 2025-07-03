@@ -2,7 +2,7 @@
 from src.constants import (
     Capacity,
     Classification,
-    Color,
+    ColorRGB,
     Conductivity,
     Density,
     Phase,
@@ -534,7 +534,7 @@ class MPM_Solver:
             #         self.mu_0_p[p] = Mu.Water
             #         self.capacity_p[p] = Capacity.Water
             #         self.conductivity_p[p] = Conductivity.Water
-            #         self.color_p[p] = Color.Water
+            #         self.color_p[p] = ColorRGB.Water
             #         self.temperature_p[p] = 0.0
             #         self.phase_p[p] = Phase.Water
             #         self.mass_p[p] = self.vol_0_p * Density.Water
@@ -551,7 +551,7 @@ class MPM_Solver:
             #         self.lambda_0_p[p] = Lambda.Ice
             #         self.mu_0_p[p] = Mu.Ice
             #         self.capacity_p[p] = Capacity.Ice
-            #         self.color_p[p] = Color.Ice
+            #         self.color_p[p] = ColorRGB.Ice
             #         self.conductivity_p[p] = Conductivity.Ice
             #         self.temperature_p[p] = 0.0
             #         self.phase_p[p] = Phase.Ice

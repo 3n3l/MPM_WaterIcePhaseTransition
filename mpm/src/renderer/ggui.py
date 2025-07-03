@@ -2,7 +2,7 @@ from src.configurations import Configuration
 from src.samplers import PoissonDiskSampler
 from src.renderer import BaseRenderer
 from src.solvers import MPM_Solver
-from src.constants import Color
+from src.constants import ColorRGB
 
 import taichi as ti
 
@@ -123,7 +123,7 @@ class GGUI(BaseRenderer):
 
     def render(self) -> None:
         """Renders the simulation with the data from the MLS-MPM solver."""
-        self.canvas.set_background_color(Color.Background)
+        self.canvas.set_background_color(ColorRGB.Background)
         self.canvas.circles(
             per_vertex_color=self.mpm_solver.color_p,
             centers=self.mpm_solver.position_p,
