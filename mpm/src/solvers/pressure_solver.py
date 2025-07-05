@@ -51,7 +51,8 @@ class PressureSolver:
 
             if self.is_interior(i, j):
                 # Build the right-hand side of the linear system:
-                b[idx] = (1 - self.JE_c[i, j]) / (self.dt * self.JE_c[i, j])
+                # FIXME: this pushes the solids apart :(
+                # b[idx] = (1 - self.JE_c[i, j]) / (self.dt * self.JE_c[i, j])
 
                 # This uses a modified divergence, where the velocities of faces
                 # bordering colliding (solid) cells are considered to be zero.
@@ -66,9 +67,8 @@ class PressureSolver:
                     b[idx] += self.inv_dx * self.velocity_c[i, j][1]
 
                 # Build the left-hand side of the linear system:
-                # center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
-                lambda_c = 1.0 / self.inv_lambda_c[i, j]
-                center += self.JP_c[i, j] / (self.dt * lambda_c * self.JE_c[i, j])
+                # FIXME: this here breaks everything :(
+                # center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) / self.inv_lambda_c[i, j]
 
                 # We will apply a Neumann boundary condition on the colliding faces,
                 # to guarantee zero flux into colliding cells, by just not adding these
@@ -113,7 +113,6 @@ class PressureSolver:
                 if not (self.is_colliding(i - 1, j) or self.is_colliding(i, j)):
                     pressure_gradient = pressure[idx] - pressure[idx - self.n_grid]
                     inv_rho = 1 / 1000  # self.volume_x[i, j] / self.mass_x[i, j]
-                    # FIXME: this crashes everything with the implicit update???
                     self.velocity_c[i, j][0] += inv_rho * coefficient * pressure_gradient
                 else:
                     self.velocity_c[i, j][0] = 0
@@ -121,7 +120,6 @@ class PressureSolver:
                 if not (self.is_colliding(i, j - 1) or self.is_colliding(i, j)):
                     pressure_gradient = pressure[idx] - pressure[idx - 1]
                     inv_rho = 1 / 1000  # self.volume_y[i, j] / self.mass_y[i, j]
-                    # FIXME: this crashes everything with the implicit update???
                     self.velocity_c[i, j][1] += inv_rho * coefficient * pressure_gradient
                 else:
                     self.velocity_c[i, j][1] = 0
