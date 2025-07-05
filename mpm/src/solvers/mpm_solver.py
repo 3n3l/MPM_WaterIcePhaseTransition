@@ -44,12 +44,12 @@ class MPM_Solver:
         self.upper = 1 - self.lower
 
         # Properties on MAC-cells.
+        self.velocity_c = ti.Vector.field(2, dtype=ti.f32, shape=(self.n_grid, self.n_grid))
         self.classification_c = ti.field(dtype=ti.i32, shape=(self.n_grid, self.n_grid))
-        self.velocity_c = ti.Vector.field(2, dtype=ti.f32, shape=(self.n_grid + 1, self.n_grid))
         self.temperature_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
         self.inv_lambda_c = ti.field(dtype=ti.f64, shape=(self.n_grid, self.n_grid))
-        self.volume_c = ti.field(dtype=ti.f32, shape=(self.n_grid + 1, self.n_grid))
         self.capacity_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
+        self.volume_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
         self.mass_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
         self.JE_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
         self.JP_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
