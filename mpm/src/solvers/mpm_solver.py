@@ -30,9 +30,7 @@ class MPM_Solver:
         self.n_cells = self.n_grid * self.n_grid
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
-        # self.dt = 1e-4 / quality  # FIXME: dt for solid, fluid behaves wrong
-        self.dt = 1e-3 / quality  # FIXME: dt for fluid, solid explodes
-        # self.dt = 3e-4 / quality # FIXME: this should be working for both phases, but isn't
+        self.dt = 1e-3 / quality
         self.vol_0_p = (self.dx * 0.5) ** 2
         self.n_dimensions = 2
 
@@ -167,10 +165,11 @@ class MPM_Solver:
             if self.state_p[p] == State.Hidden:
                 continue
 
-            # Deformation gradient update. TODO: R might not be needed for our small timesteps
-            # self.FE_p[p] = self.R(self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
+            # Deformation gradient update.
             self.FE_p[p] = (ti.Matrix.identity(float, 2) + self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
-            # TODO: could this just be: (or would this be unstable?)
+            # TODO: R might not be needed for our small timesteps? then remove R and everything
+            # self.FE_p[p] = self.R(self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
+            # TODO: could this just be simplified to: (or would this be unstable?)
             # self.FE_p[p] += (self.dt * self.C_p[p]) @ self.FE_p[p]  # pyright: ignore
 
             # Remove the deviatoric component from each fluid particle:
@@ -193,21 +192,12 @@ class MPM_Solver:
                 sigma[d, d] = clamped
                 # J *= singular_value
 
-            # WARNING: if elasticity/plasticity is applied in the fluid phase, we also need this corrections:
+            # TODO: if elasticity/plasticity is applied in the fluid phase, we also need this corrections:
             # if self.phase_p[p] == Phase.Water:
             #     self.FE_p[p] *= ti.sqrt(self.JP_p[p]) * (U @ sigma @ V.transpose())
             #     self.JE_p[p] = ti.math.determinant(self.FE_p[p])
             #     self.JP_p[p] = 1.0
 
-            # TODO: explicit stress update wants small timestep, implicit pressure solve want bigger timestep
-
-            # la, mu = 1.0, 1.0
-            # FIXME: this is just for testing purposes, to change values from the gui, remove this later
-            #        (or make gui sliders for water and ice values separate)
-            # if self.phase_p[p] == Phase.Ice:
-            #     la, mu = self.lambda_0[None], self.mu_0[None]
-            # else:
-            # la, mu = self.lambda_0[None], self.mu_0[None]
             la, mu = self.lambda_0_p[p], self.mu_0_p[p]
             cauchy_stress = ti.Matrix.zero(ti.f32, 2, 2)
             if self.phase_p[p] == Phase.Ice:
@@ -221,34 +211,29 @@ class MPM_Solver:
                 # Compute D^(-1), which equals constant scaling for quadratic/cubic kernels.
                 D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
 
-                # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
-                # NOTE: this is the stress update to be used with the pressure correction
+                # Compute deviatoric Piola-Kirchhoff stress P(F), (JST16, Eqn. 52):
                 F_dev = (self.JE_p[p] ** (-1 / 2)) * self.FE_p[p]
                 # TODO: could just be this for d == 2?:
                 # F_dev = self.FE_p[p] / ti.sqrt(self.JE_p[p])
                 U_dev, _, V_dev = ti.svd(F_dev)  # TODO: can we just correct U?
                 piola_kirchhoff = 2 * mu * (F_dev - U_dev @ V_dev.transpose())
                 piola_kirchhoff = piola_kirchhoff @ self.FE_p[p].transpose()  # pyright: ignore
+
+                # TODO: these should be the dilational part and is handled by the pressure projection?!
                 # piola_kirchhoff += ti.Matrix.identity(ti.f32, 2) * la * self.JE_p[p] * (self.JE_p[p] - 1)
+
                 # Cauchy stress times dt and D_inv
                 cauchy_stress = -self.dt * self.vol_0_p * D_inv * piola_kirchhoff
                 # TODO: the 1 / J is probably cancelled out by V^n and leaves us V^0 (self.vol_0_p)?!
                 # cauchy_stress = (1 / J) * (piola_kirchhoff @ self.FE_p[p].transpose())  # pyright: ignore
 
-                # # Compute Piola-Kirchhoff stress P(F), (JST16, Eqn. 52)
-                # # NOTE: this is the usual MPM stress update
-                # piola_kirchhoff = 2 * mu * (self.FE_p[p] - U @ V.transpose())
-                # piola_kirchhoff = piola_kirchhoff @ self.FE_p[p].transpose()  # pyright: ignore
-                # piola_kirchhoff += ti.Matrix.identity(ti.f32, 2) * la * self.JE_p[p] * (self.JE_p[p] - 1)
-                # # Cauchy stress times dt and D_inv
-                # # cauchy_stress = piola_kirchhoff @ self.FE_p[p].transpose()
-                # cauchy_stress = -self.dt * self.vol_0_p * D_inv * piola_kirchhoff
-
             # APIC momentum + MLS-MPM stress contribution [Hu et al. 2018, Eqn. 29].
-            # TODO: use cx, cy vectors here directly?
             affine = cauchy_stress + self.mass_p[p] * self.C_p[p]
             affine_x = affine @ ti.Vector([1, 0])  # pyright: ignore
             affine_y = affine @ ti.Vector([0, 1])  # pyright: ignore
+            # TODO: use cx, cy vectors here directly?
+            # affine_x = cauchy_stress + self.mass_p[p] * self.c_x[p]
+            # affine_y = cauchy_stress + self.mass_p[p] * self.c_y[p]
 
             # Lower left corner of the interpolation grid:
             base_x = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([1.0, 1.5])), dtype=ti.i32)
@@ -487,6 +472,7 @@ class MPM_Solver:
                 x_velocity = x_weight * self.velocity_x[base_x + offset]
                 y_velocity = y_weight * self.velocity_y[base_y + offset]
                 next_velocity += [x_velocity, y_velocity]
+
                 # NOTE: Computing b_i and setting c_i <- D^{-1} * b_i
                 x_dpos = ti.cast(offset, ti.f32) - dist_x
                 y_dpos = ti.cast(offset, ti.f32) - dist_y
@@ -502,6 +488,7 @@ class MPM_Solver:
             if ti.static(should_use_b_i_computation):
                 c_x = 3 * self.inv_dx * b_x  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
                 c_y = 3 * self.inv_dx * b_y  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
+
             self.C_p[p] = ti.Matrix([[c_x[0], c_y[0]], [c_x[1], c_y[1]]])  # pyright: ignore
             self.position_p[p] += self.dt * next_velocity
             self.velocity_p[p] = next_velocity
@@ -517,7 +504,7 @@ class MPM_Solver:
             # # TODO: set theta_c, theta_s per phase? Water probably wants very small values, ice depends on temperature
             # # TODO: in theory all of the constitutive parameters must be functions of temperature
             # #       in the ice phase to range from solid ice to slushy ice?
-            #
+
             # # Initially, we allow each particle to freely change its temperature according to the heat equation.
             # # But whenever the freezing point is reached, any additional temperature change is multiplied by
             # # conductivity and mass and added to the buffer, with the particle temperature kept unchanged.
@@ -525,11 +512,10 @@ class MPM_Solver:
             #     # Ice reached the melting point, additional temperature change is added to heat buffer.
             #     difference = next_temperature - self.temperature_p[p]
             #     self.heat_p[p] += self.conductivity_p[p] * self.mass_p[p] * difference
-            #
+
             #     # If the heat buffer is full the particle changes its phase to water,
             #     # everything is then reset according to the new phase.
             #     if self.heat_p[p] >= LatentHeat.Water:
-            #         # TODO: Shouldn't this just be set to ~inf, 0?
             #         self.lambda_0_p[p] = Lambda.Water
             #         self.mu_0_p[p] = Mu.Water
             #         self.capacity_p[p] = Capacity.Water
@@ -539,12 +525,12 @@ class MPM_Solver:
             #         self.phase_p[p] = Phase.Water
             #         self.mass_p[p] = self.vol_0_p * Density.Water
             #         self.heat_p[p] = LatentHeat.Water
-            #
+
             # elif (self.phase_p[p] == Phase.Water) and (next_temperature < 0):
             #     # Water particle reached the freezing point, additional temperature change is added to heat buffer.
             #     difference = next_temperature - self.temperature_p[p]
             #     self.heat_p[p] += self.conductivity_p[p] * self.mass_p[p] * difference
-            #
+
             #     # If the heat buffer is empty the particle changes its phase to ice,
             #     # everything is then reset according to the new phase.
             #     if self.heat_p[p] <= LatentHeat.Ice:
@@ -557,7 +543,7 @@ class MPM_Solver:
             #         self.phase_p[p] = Phase.Ice
             #         self.mass_p[p] = self.vol_0_p * Density.Ice
             #         self.heat_p[p] = LatentHeat.Ice
-            #
+
             # else:
             #     # Freely change temperature according to heat equation.
             #     self.temperature_p[p] = next_temperature
