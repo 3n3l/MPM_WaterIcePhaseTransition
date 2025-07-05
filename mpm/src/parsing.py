@@ -15,7 +15,7 @@ parser.add_argument(
     help=ggui_help,
 )
 
-configuration_help = f"Available Configurations:\n{'\n'.join([f'[{i}] -> {c.name}' for i, c in enumerate(configuration_list)])}"
+configuration_help =  f"Available Configurations:\n{'\n'.join([f'[{i}] -> {c.name}' for i, c in enumerate(configuration_list)])}"
 parser.add_argument(
     "-c",
     "--configuration",
@@ -64,7 +64,17 @@ parser.add_argument(
     help=solver_type_help,
 )
 
+bi_type_help = "Use b_i for the P2G rasterization."
+parser.add_argument(
+    "-bi",
+    "--compute_b_i",
+    default=False,
+    action="store_true",
+    help=bi_type_help,
+)
+
 arguments = parser.parse_args()
 
 # Parsed constants:
-should_use_direct_solver=(arguments.solverType.lower() == "direct")
+should_use_direct_solver = arguments.solverType.lower() == "direct"
+should_use_b_i_computation = arguments.compute_b_i

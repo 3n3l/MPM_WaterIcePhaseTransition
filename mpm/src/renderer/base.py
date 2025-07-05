@@ -1,7 +1,7 @@
+from src.constants.enums import State, Density, Phase
 from src.configurations import Configuration
 from src.samplers import PoissonDiskSampler
 from src.solvers import MPM_Solver
-from src.constants import State
 
 from abc import abstractmethod
 from datetime import datetime
@@ -65,6 +65,7 @@ class BaseRenderer:
                 geometry = self.subsequent_geometries.pop(0)
                 self.add_geometry(geometry)
 
+        # TODO: find good dt and number of iterations
         for _ in range(int(2e-3 // self.mpm_solver.dt)):
             self.mpm_solver.reset_grids()
             self.mpm_solver.particle_to_grid()
@@ -90,9 +91,8 @@ class BaseRenderer:
         self.mpm_solver.position_p[index] = position
 
         # Set properties to default values:
-        self.mpm_solver.mass_p[index] = self.mpm_solver.particle_vol * self.mpm_solver.rho_0
-        self.mpm_solver.inv_lambda_p[index] = 1 / self.mpm_solver.lambda_0[None]
-        self.mpm_solver.F_p[index] = ti.Matrix([[1, 0], [0, 1]])
+        self.mpm_solver.mass_p[index] = self.mpm_solver.vol_0_p * geometry.density
+        self.mpm_solver.FE_p[index] = ti.Matrix([[1, 0], [0, 1]])
         self.mpm_solver.C_p[index] = ti.Matrix.zero(float, 2, 2)
         self.mpm_solver.state_p[index] = State.Active
         self.mpm_solver.JE_p[index] = 1.0

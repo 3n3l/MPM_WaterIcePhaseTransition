@@ -6,7 +6,7 @@ import taichi as ti
 
 @ti.data_oriented
 class PoissonDiskSampler:
-    def __init__(self, mpm_solver: MPM_Solver, r: float = 0.005, k: int = 100) -> None:
+    def __init__(self, mpm_solver: MPM_Solver, r: float = 0.0025, k: int = 300) -> None:
         # Some of the solver's constants wills be used:
         self.solver = mpm_solver
 

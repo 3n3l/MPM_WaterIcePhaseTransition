@@ -5,6 +5,8 @@ from src.constants import Classification
 import taichi as ti
 import numpy as np
 
+GRAVITY = -9.81
+
 
 @ti.data_oriented
 class PressureSolver:
@@ -13,17 +15,13 @@ class PressureSolver:
         self.boundary_width = mpm_solver.boundary_width
         self.inv_dx = mpm_solver.inv_dx
         self.n_grid = mpm_solver.n_grid
-        self.dx = mpm_solver.dx
         self.dt = mpm_solver.dt
 
         self.classification_c = mpm_solver.classification_c
         self.inv_lambda_c = mpm_solver.inv_lambda_c
-        self.pressure_c = mpm_solver.pressure_c
         self.JE_c = mpm_solver.JE_c
         self.JP_c = mpm_solver.JP_c
 
-        self.classification_x = mpm_solver.classification_x
-        self.classification_y = mpm_solver.classification_y
         self.velocity_x = mpm_solver.velocity_x
         self.velocity_y = mpm_solver.velocity_y
         self.volume_x = mpm_solver.volume_x
@@ -31,168 +29,107 @@ class PressureSolver:
         self.mass_x = mpm_solver.mass_x
         self.mass_y = mpm_solver.mass_y
 
-        self.should_use_direct_solver = should_use_direct_solver
+    @ti.func
+    def is_valid(self, i: int, j: int) -> bool:
+        return i >= 0 and i <= self.n_grid - 1 and j >= 0 and j <= self.n_grid - 1
+
+    @ti.func
+    def is_colliding(self, i: int, j: int) -> bool:
+        return self.is_valid(i, j) and self.classification_c[i, j] == Classification.Colliding
+
+    @ti.func
+    def is_interior(self, i: int, j: int) -> bool:
+        return self.is_valid(i, j) and self.classification_c[i, j] == Classification.Interior
+
+    @ti.func
+    def is_empty(self, i: int, j: int) -> bool:
+        return self.is_valid(i, j) and self.classification_c[i, j] == Classification.Empty
 
     @ti.kernel
     def fill_linear_system(self, A: ti.types.sparse_matrix_builder(), b: ti.types.ndarray()):  # pyright: ignore
-        inv_dx_squared = self.inv_dx * self.inv_dx
-
+        coefficient = self.dt * self.inv_dx * self.inv_dx
         for i, j in ti.ndrange(self.n_grid, self.n_grid):
-            # Raveled index.
-            idx = (i * self.n_grid) + j
+            center = 0.0  # to keep max_num_triplets as low as possible
+            idx = (i * self.n_grid) + j  # raveled index
 
-            # FIXME: these variables are just used to print everything and can be removed after debugging
-            A_t = 0.0
-            A_l = 0.0
-            A_c = 0.0
-            A_r = 0.0
-            A_b = 0.0
+            if self.is_interior(i, j):
+                # Build the right-hand side of the linear system:
+                # FIXME: this pushes the solids apart :(
+                b[idx] = (1 - self.JE_c[i, j]) / (self.dt * self.JE_c[i, j])
 
-            # FIXME: this should be on non empty cells, but then the colliding
-            #        simulation boundary results in underdetermined linear system
-            # if self.classification_c[i, j] != Classification.Empty:
-            if self.classification_c[i, j] == Classification.Interior:
-                A_c += self.JP_c[i, j] / (self.dt * self.JE_c[i, j]) * self.inv_lambda_c[i, j]
+                # This uses a modified divergence, where the velocities of faces
+                # bordering colliding (solid) cells are considered to be zero.
+                # NOTE: we subtract the divergence, instead of adding it.
+                if not self.is_colliding(i + 1, j):
+                    b[idx] -= self.inv_dx * self.velocity_x[i + 1, j]
+                if not self.is_colliding(i - 1, j):
+                    b[idx] += self.inv_dx * self.velocity_x[i, j]
+                if not self.is_colliding(i, j + 1):
+                    b[idx] -= self.inv_dx * self.velocity_y[i, j + 1]
+                if not self.is_colliding(i, j - 1):
+                    b[idx] += self.inv_dx * self.velocity_y[i, j]
 
-                # Build the right-hand side of the linear system.
-                # b[idx] = (1 - self.JE_c[i, j]) / (self.dt * self.JE_c[i, j])
-                b[idx] = -((self.JE_c[i, j] - 1) / (self.dt * self.JE_c[i, j]))
-                b[idx] -= self.inv_dx * (self.velocity_x[i + 1, j] - self.velocity_x[i, j])
-                b[idx] -= self.inv_dx * (self.velocity_y[i, j + 1] - self.velocity_y[i, j])
+                # Build the left-hand side of the linear system:
+                # FIXME: this here breaks everything :(
+                # center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
 
                 # We will apply a Neumann boundary condition on the colliding faces,
                 # to guarantee zero flux into colliding cells, by just not adding these
                 # face values in the Laplacian for the off-diagonal values.
-                if i != 0 and self.classification_c[i - 1, j] != Classification.Colliding:
+                if not self.is_colliding(i - 1, j):
                     inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
-                    A_c -= self.dt * inv_dx_squared * inv_rho
-                if i != 0 and self.classification_c[i - 1, j] == Classification.Interior:
-                    inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
-                    A[idx, idx - self.n_grid] += self.dt * inv_dx_squared * inv_rho
-                    A_l += self.dt * inv_dx_squared * inv_rho
+                    center -= coefficient * inv_rho
+                    if self.is_interior(i - 1, j):
+                        A[idx, idx - self.n_grid] += coefficient * inv_rho
 
-                if i != self.n_grid - 1 and self.classification_c[i + 1, j] != Classification.Colliding:
+                if not self.is_colliding(i + 1, j):
                     inv_rho = self.volume_x[i + 1, j] / self.mass_x[i + 1, j]
-                    A_c -= self.dt * inv_dx_squared * inv_rho
-                if i != self.n_grid - 1 and self.classification_c[i + 1, j] == Classification.Interior:
-                    inv_rho = self.volume_x[i + 1, j] / self.mass_x[i + 1, j]
-                    A[idx, idx + self.n_grid] += self.dt * inv_dx_squared * inv_rho
-                    A_r += self.dt * inv_dx_squared * inv_rho
+                    center -= coefficient * inv_rho
+                    if self.is_interior(i + 1, j):
+                        A[idx, idx + self.n_grid] += coefficient * inv_rho
 
-                if j != 0 and self.classification_c[i, j - 1] != Classification.Colliding:
+                if not self.is_colliding(i, j - 1):
                     inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
-                    A_c -= self.dt * inv_dx_squared * inv_rho
-                if j != 0 and self.classification_c[i, j - 1] == Classification.Interior:
-                    inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
-                    A[idx, idx - 1] += self.dt * inv_dx_squared * inv_rho
-                    A_b += self.dt * inv_dx_squared * inv_rho
+                    center -= coefficient * inv_rho
+                    if self.is_interior(i, j - 1):
+                        A[idx, idx - 1] += coefficient * inv_rho
 
-                if j != self.n_grid - 1 and self.classification_c[i, j + 1] != Classification.Colliding:
+                if not self.is_colliding(i, j + 1):
                     inv_rho = self.volume_y[i, j + 1] / self.mass_y[i, j + 1]
-                    A_c -= self.dt * inv_dx_squared * inv_rho
-                if j != self.n_grid - 1 and self.classification_c[i, j + 1] == Classification.Interior:
-                    inv_rho = self.volume_y[i, j + 1] / self.mass_y[i, j + 1]
-                    A[idx, idx + 1] += self.dt * inv_dx_squared * inv_rho
-                    A_t += self.dt * inv_dx_squared * inv_rho
+                    center -= coefficient * inv_rho
+                    if self.is_interior(i, j + 1):
+                        A[idx, idx + 1] += coefficient * inv_rho
 
-                A[idx, idx] += A_c
+                A[idx, idx] += center
 
             else:  # Homogeneous Dirichlet boundary condition.
                 A[idx, idx] += 1.0
                 b[idx] = 0.0
-                A_c += 1.0
-
-            continue
-            # if self.classification_c[i, j] != Classification.Colliding:
-            #     continue
-            if self.classification_c[i, j] != Classification.Interior:
-                continue
-            # if self.classification_c[i, j] != Classification.Empty:
-            #     continue
-            print("~" * 100)
-            print()
-            if self.classification_c[i, j] == Classification.Interior:
-                print(f">>> INTERIOR, idx = {idx}, i = {i}, j = {j}")
-            elif self.classification_c[i, j] == Classification.Colliding:
-                print(f">>> COLLIDING, idx = {idx}, i = {i}, j = {j}")
-            else:
-                print(f">>> EMPTY, idx = {idx}, i = {i}, j = {j}")
-
-            print()
-            print(f"A[{idx}, {idx} + 1]   ->", A_t)
-            print(f"A[{idx} - 1, {idx}]   ->", A_l)
-            print(f"A[{idx}, {idx}]       ->", A_c)
-            print(f"A[{idx} + 1, {idx}]   ->", A_r)
-            print(f"A[{idx}, {idx} - 1]   ->", A_b)
-
-            print()
-            print(f"velocity_x[i, j]      ->", self.velocity_x[i, j])
-            print(f"velocity_x[i + 1, j]  ->", self.velocity_x[i + 1, j])
-            print(f"velocity_x[i - 1, j]  ->", self.velocity_x[i - 1, j])
-
-            print()
-            print(f"velocity_y[i, j]      ->", self.velocity_y[i, j])
-            print(f"velocity_y[i, j + 1]  ->", self.velocity_y[i, j + 1])
-            print(f"velocity_y[i, j - 1]  ->", self.velocity_y[i, j - 1])
-
-            print()
-            print(f"JE_c[i, j]            ->", self.JE_c[i, j])
-            print(f"JP_c[i, j]            ->", self.JP_c[i, j])
-            print(f"inv_lambda_c[i, j]    ->", self.inv_lambda_c[i, j])
-            print(f"1 / inv_lambda_c[i, j]->", 1.0 / self.inv_lambda_c[i, j])
-
-            print()
-            print(f"b[{idx}]                ->", b[idx])
-            print()
 
     @ti.kernel
-    def fill_pressure_field(self, p: ti.types.ndarray()):  # pyright: ignore
-        # TODO: move this to apply_pressure, delete self.cell_pressure (IF POSSIBLE)
-        for i, j in self.pressure_c:
-            row = (i * self.n_grid) + j
-            self.pressure_c[i, j] = p[row]
-
-    @ti.kernel
-    def apply_pressure(self):
-        z = self.inv_dx * self.dt
-        for i, j in ti.ndrange((1, self.n_grid), (0, self.n_grid - 1)):
-            # # TODO: this could just be done for the classification step and then saved into a field?
-            x_face_is_not_interior = self.classification_c[i - 1, j] != Classification.Interior
-            x_face_is_not_interior &= self.classification_c[i, j] != Classification.Interior
-            if x_face_is_not_interior:
-                continue  # don't bother
-
-            x_face_is_colliding = self.classification_c[i - 1, j] == Classification.Colliding
-            x_face_is_colliding |= self.classification_c[i, j] == Classification.Colliding
-            if x_face_is_colliding:
-                self.velocity_x[i, j] = 0
-                continue
-
-            # Backward difference between the two adjacent cells.
-            inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
-            self.velocity_x[i, j] -= z * inv_rho * (self.pressure_c[i, j] - self.pressure_c[i - 1, j])
-
-        for i, j in ti.ndrange((0, self.n_grid - 1), (1, self.n_grid)):
-            y_face_is_not_interior = self.classification_c[i, j - 1] != Classification.Interior
-            y_face_is_not_interior &= self.classification_c[i, j] != Classification.Interior
-            if y_face_is_not_interior:
-                continue  # don't bother
-
-            y_face_is_colliding = self.classification_c[i, j - 1] == Classification.Colliding
-            y_face_is_colliding |= self.classification_c[i, j] == Classification.Colliding
-            if y_face_is_colliding:
-                self.velocity_y[i, j] = 0
-                continue
-
-            # Backward difference between the two adjacent cells.
-            inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
-            self.velocity_y[i, j] -= z * inv_rho * (self.pressure_c[i, j] - self.pressure_c[i, j - 1])
+    def apply_pressure(self, pressure: ti.types.ndarray()):  # pyright: ignore
+        coefficient = self.dt * self.inv_dx
+        for i, j in ti.ndrange(self.n_grid, self.n_grid):
+            idx = i * self.n_grid + j
+            if self.is_interior(i - 1, j) or self.is_interior(i, j):
+                # NOTE: we add the pressure, instead of subtracting it.
+                if not (self.is_colliding(i - 1, j) or self.is_colliding(i, j)):
+                    pressure_gradient = pressure[idx] - pressure[idx - self.n_grid]
+                    inv_rho = self.volume_x[i, j] / self.mass_x[i, j]
+                    self.velocity_x[i, j] += inv_rho * coefficient * pressure_gradient
+                else:
+                    self.velocity_x[i, j] = 0
+            if self.is_interior(i, j - 1) or self.is_interior(i, j):
+                if not (self.is_colliding(i, j - 1) or self.is_colliding(i, j)):
+                    pressure_gradient = pressure[idx] - pressure[idx - 1]
+                    inv_rho = self.volume_y[i, j] / self.mass_y[i, j]
+                    self.velocity_y[i, j] += inv_rho * coefficient * pressure_gradient
+                else:
+                    self.velocity_y[i, j] = 0
 
     def solve(self):
-        # TODO: max_num_triplets could be optimized to N * 5?
         A = SparseMatrixBuilder(
-            # max_num_triplets=(self.n_cells * self.n_cells),
-            max_num_triplets=(10 * self.n_cells),
+            max_num_triplets=(5 * self.n_cells),
             num_rows=self.n_cells,
             num_cols=self.n_cells,
             dtype=ti.f32,
@@ -201,19 +138,17 @@ class PressureSolver:
         self.fill_linear_system(A, b)
 
         # Solve the linear system:
-        if self.should_use_direct_solver:
+        if should_use_direct_solver:
             solver = SparseSolver(dtype=ti.f32, solver_type="LLT")
             solver.compute(A.build())
             p = solver.solve(b)
             # FIXME: remove this debugging statements or move to test file
             solver_succeeded, pressure = solver.info(), p.to_numpy()
-
             assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
             assert not np.any(np.isnan(pressure)), "NAN VALUE IN PRESSURE ARRAY!"
         else:
-            solver = SparseCG(A.build(), b, max_iter=100)
+            solver = SparseCG(A.build(), b, atol=1e-6, max_iter=500)
             p, _ = solver.solve()
 
-        # Apply the pressure to the intermediate velocity field:
-        self.fill_pressure_field(p)
-        self.apply_pressure()
+        # Correct pressure:
+        self.apply_pressure(p)

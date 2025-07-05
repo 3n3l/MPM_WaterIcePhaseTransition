@@ -1,12 +1,13 @@
 from src.constants.enums import (
     Classification,
     Phase,
-    Color,
+    ColorHEX,
+    ColorRGB,
     Capacity,
     Conductivity,
     Density,
     LatentHeat,
     State,
-    PoissonsRatio,
-    YoungsModulus,
+    Lambda,
+    Mu,
 )

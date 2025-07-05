@@ -1,6 +1,6 @@
 from src.configurations import Configuration
 from src.samplers import PoissonDiskSampler
-from src.constants import Phase, Color
+from src.constants import Phase, ColorHEX
 from src.renderer import BaseRenderer
 from src.solvers import MPM_Solver
 
@@ -31,10 +31,11 @@ class GUI(BaseRenderer):
             poisson_disk_sampler=poisson_disk_sampler,
             configurations=configurations,
             mpm_solver=mpm_solver,
-        )
+
+)
 
         # GUI.
-        self.gui = ti.GUI(name, res=res, background_color=Color._Background)
+        self.gui = ti.GUI(name, res=res, background_color=ColorHEX.Background)
 
     def render(self) -> None:
         """Renders the simulation with the data from the MLS-MPM solver."""
@@ -42,7 +43,7 @@ class GUI(BaseRenderer):
         # TODO: colors?
         indices = [0 if p == Phase.Ice else 1 for p in self.mpm_solver.phase_p.to_numpy()]
         position = self.mpm_solver.position_p.to_numpy()
-        palette = [Color._Ice, Color._Water]
+        palette = [ColorHEX.Ice, ColorHEX.Water]
         radius = 1.5
         self.gui.circles(position, radius, palette=palette, palette_indices=indices)  # pyright: ignore
         self.gui.show()  # change to gui.show(f'{frame:06d}.png') to write images to disk
