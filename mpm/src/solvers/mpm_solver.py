@@ -30,8 +30,8 @@ class MPM_Solver:
         self.n_cells = self.n_grid * self.n_grid
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
-        self.dt = 1e-4 / quality  # FIXME: dt for solid, fluid behaves wrong
-        # self.dt = 2e-3 / quality  # FIXME: dt for fluid, solid explodes
+        # self.dt = 1e-4 / quality  # FIXME: dt for solid, fluid behaves wrong
+        self.dt = 1e-3 / quality  # FIXME: dt for fluid, solid explodes
         # self.dt = 3e-4 / quality # FIXME: this should be working for both phases, but isn't
         self.vol_0_p = (self.dx * 0.5) ** 2
         self.n_dimensions = 2

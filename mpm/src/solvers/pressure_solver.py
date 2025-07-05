@@ -54,7 +54,8 @@ class PressureSolver:
 
             if self.is_interior(i, j):
                 # Build the right-hand side of the linear system:
-                b[idx] = (1 - self.JE_c[i, j]) / (self.dt * self.JE_c[i, j])
+                # FIXME: this pushes the solids apart :(
+                # b[idx] = (1 - self.JE_c[i, j]) / (self.dt * self.JE_c[i, j])
 
                 # This uses a modified divergence, where the velocities of faces
                 # bordering colliding (solid) cells are considered to be zero.
@@ -69,9 +70,8 @@ class PressureSolver:
                     b[idx] += self.inv_dx * self.velocity_y[i, j]
 
                 # Build the left-hand side of the linear system:
+                # FIXME: this here breaks everything :(
                 # center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
-                lambda_c = 1.0 / self.inv_lambda_c[i, j]
-                center += self.JP_c[i, j] / (self.dt * lambda_c * self.JE_c[i, j])
 
                 # We will apply a Neumann boundary condition on the colliding faces,
                 # to guarantee zero flux into colliding cells, by just not adding these
