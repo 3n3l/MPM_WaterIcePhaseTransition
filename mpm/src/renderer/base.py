@@ -67,12 +67,14 @@ class BaseRenderer:
 
         # TODO: find good dt and number of iterations
         for _ in range(int(2e-3 // self.mpm_solver.dt)):
+            self.mpm_solver.reinitialize()
             self.mpm_solver.reset_grids()
             self.mpm_solver.particle_to_grid()
-            self.mpm_solver.momentum_to_velocity()
+            self.mpm_solver.backwardEulerStep()
+            # self.mpm_solver.momentum_to_velocity()
             self.mpm_solver.classify_cells()
-            self.mpm_solver.compute_volumes()
-            self.mpm_solver.pressure_solver.solve()
+            # self.mpm_solver.compute_volumes()
+            # self.mpm_solver.pressure_solver.solve()
             # self.mpm_solver.heat_solver.solve()
             self.mpm_solver.grid_to_particle()
 
