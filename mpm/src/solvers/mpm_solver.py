@@ -396,8 +396,13 @@ class MPM_Solver:
 
         # Momentum to Velocity:
         for i, j in self.mass_c:
-            if self.mass_c[i, j] > 0:
-                self.velocity_c[i, j] /= self.mass_c[i, j]
+            if (mass := self.mass_c[i, j]) > 0:
+                self.temperature_c[i, j] /= mass
+                self.inv_lambda_c[i, j] /= mass
+                self.velocity_c[i, j] /= mass
+                self.capacity_c[i, j] /= mass
+                self.JE_c[i, j] /= mass
+                self.JP_c[i, j] /= mass
 
     @ti.kernel
     def momentum_to_velocity(self):
