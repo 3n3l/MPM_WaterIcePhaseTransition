@@ -228,13 +228,13 @@ configuration_list = [
                 center=(0.25, 0.5),
                 velocity=(0, -3),
                 phase=Phase.Ice,
-                radius=0.06,
+                radius=0.1,
             ),
             Circle(
                 center=(0.75, 0.5),
                 velocity=(0, -3),
                 phase=Phase.Water,
-                radius=0.06,
+                radius=0.1,
             ),
         ],
         E=1.4e5,  # Young's modulus (1.4e5)

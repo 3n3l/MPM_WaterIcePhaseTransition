@@ -56,11 +56,8 @@ class State:
 # TODO: find good values for ice???
 # TODO: refactor this, maybe use variable values again???
 # FIXME: E = 1.4e3 -> collapse, E = 1.4e4 -> explosion
-# ice_E = 2.8e6
-ice_E = 1.8e4
-ice_nu = 0.3
-# water_E = 5e5
-# water_nu = 0.45
+ice_E = 1.4e6
+ice_nu = 0.2
 
 # import numpy as np
 
@@ -76,12 +73,11 @@ ice_nu = 0.3
 
 
 class Lambda:
-    Water = 5e9  # TODO: this could be lower, and then saved into f32 field again?!
-    # Water = water_E * water_nu / ((1 + water_nu) * (1 - 2 * water_nu))
-    Ice = ice_E * ice_nu / ((1 + ice_nu) * (1 - 2 * ice_nu))
+    # Ice = ice_E * ice_nu / ((1 + ice_nu) * (1 - 2 * ice_nu))
+    Ice = 5e9
+    Water = 5e9
 
 
 class Mu:
-    Water = 0
-    # Water = water_E / (2 * (1 + water_nu))
     Ice = ice_E / (2 * (1 + ice_nu))
+    Water = 0

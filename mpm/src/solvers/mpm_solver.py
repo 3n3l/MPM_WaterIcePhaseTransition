@@ -178,11 +178,10 @@ class MPM_Solver:
 
             # # Clamp singular values to simulate plasticity and elasticity:
             U, sigma, V = ti.svd(self.FE_p[p])
-            # self.JE_p[p], self.JP_p[p] = 1.0, 1.0
             self.JE_p[p] = 1.0
             for d in ti.static(range(self.n_dimensions)):
-                singular_value = float(sigma[d, d])
-                clamped = float(sigma[d, d])
+                singular_value = ti.f32(sigma[d, d])
+                clamped = ti.f32(sigma[d, d])
                 if self.phase_p[p] == Phase.Ice:
                     # Clamp singular values to [1 - theta_c, 1 + theta_s]
                     clamped = max(clamped, 1 - self.theta_c[None])
@@ -190,7 +189,6 @@ class MPM_Solver:
                 self.JP_p[p] *= singular_value / clamped
                 self.JE_p[p] *= clamped
                 sigma[d, d] = clamped
-                # J *= singular_value
 
             # TODO: if elasticity/plasticity is applied in the fluid phase, we also need this corrections:
             # if self.phase_p[p] == Phase.Water:
@@ -224,6 +222,7 @@ class MPM_Solver:
 
                 # Cauchy stress times dt and D_inv
                 cauchy_stress = -self.dt * self.vol_0_p * D_inv * piola_kirchhoff
+                # cauchy_stress = -self.dt * self.vol_0_p * D_inv * piola_kirchhoff @ self.FE_p[p].transpose()
                 # TODO: the 1 / J is probably cancelled out by V^n and leaves us V^0 (self.vol_0_p)?!
                 # cauchy_stress = (1 / J) * (piola_kirchhoff @ self.FE_p[p].transpose())  # pyright: ignore
 
@@ -473,17 +472,18 @@ class MPM_Solver:
                 y_velocity = y_weight * self.velocity_y[base_y + offset]
                 next_velocity += [x_velocity, y_velocity]
 
-                # NOTE: Computing b_i and setting c_i <- D^{-1} * b_i
-                x_dpos = ti.cast(offset, ti.f32) - dist_x
-                y_dpos = ti.cast(offset, ti.f32) - dist_y
-                b_x += x_velocity * x_dpos
-                b_y += y_velocity * y_dpos
-
-                # NOTE: Computing c_i directly:
-                grad_x = ti.Vector([g_x[i][0] * w_x[j][1], w_x[i][0] * g_x[j][1]])
-                grad_y = ti.Vector([g_y[i][0] * w_y[j][1], w_y[i][0] * g_y[j][1]])
-                c_x += self.velocity_x[base_x + offset] * grad_x
-                c_y += self.velocity_y[base_y + offset] * grad_y
+                if ti.static(should_use_b_i_computation):
+                    # NOTE: Computing b_i and setting c_i <- D^{-1} * b_i
+                    x_dpos = ti.cast(offset, ti.f32) - dist_x
+                    y_dpos = ti.cast(offset, ti.f32) - dist_y
+                    b_x += x_velocity * x_dpos
+                    b_y += y_velocity * y_dpos
+                else:
+                    # NOTE: Computing c_i directly:
+                    grad_x = ti.Vector([g_x[i][0] * w_x[j][1], w_x[i][0] * g_x[j][1]])
+                    grad_y = ti.Vector([g_y[i][0] * w_y[j][1], w_y[i][0] * g_y[j][1]])
+                    c_x += self.velocity_x[base_x + offset] * grad_x
+                    c_y += self.velocity_y[base_y + offset] * grad_y
 
             if ti.static(should_use_b_i_computation):
                 c_x = 3 * self.inv_dx * b_x  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos

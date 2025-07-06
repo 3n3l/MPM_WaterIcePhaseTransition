@@ -34,7 +34,7 @@ class GGUI(BaseRenderer):
         )
 
         # GGUI.
-        self.window = ti.ui.Window(name, res)
+        self.window = ti.ui.Window(name, res, fps_limit=60)
         self.canvas = self.window.get_canvas()
         self.gui = self.window.get_gui()
 
@@ -137,9 +137,9 @@ class GGUI(BaseRenderer):
         """Runs this simulation."""
         # iteration = 0
         while self.window.running:
-            # if iteration == 600:
-                # self.create_video()
-                # self.window.running = False
+            # if iteration == 1200:
+            #     self.create_video()
+            #     self.window.running = False
             self.handle_events()
             self.show_settings()
             if not self.is_paused:

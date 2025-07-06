@@ -71,7 +71,7 @@ class PressureSolver:
 
                 # Build the left-hand side of the linear system:
                 # FIXME: this here breaks everything :(
-                # center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
+                center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
 
                 # We will apply a Neumann boundary condition on the colliding faces,
                 # to guarantee zero flux into colliding cells, by just not adding these
