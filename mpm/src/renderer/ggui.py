@@ -48,15 +48,15 @@ class GGUI(BaseRenderer):
         self.foreground_options = [
             # DrawOption("Temperature", False, lambda: self._show_contour(self.mpm_solver.temperature_p)),
             # TODO: map temperature to colormap, draw the colormap
-            DrawingOption("Temperature", False, lambda: self._render_particles(self.mpm_solver.color_p)),
+            DrawingOption("Temperature", False, lambda: self.show_particles(self.mpm_solver.color_p)),
             DrawingOption("Nothing", False, lambda: None),
-            DrawingOption("Phase", True, lambda: self._render_particles(self.mpm_solver.color_p)),
+            DrawingOption("Phase", True, lambda: self.show_particles(self.mpm_solver.color_p)),
         ]
 
         # Background Options.
         self.background_options = [
-            DrawingOption("Classification", False, lambda: self._show_contour(self.mpm_solver.classification_c)),
-            DrawingOption("Temperature", False, lambda: self._show_contour(self.mpm_solver.temperature_c)),
+            DrawingOption("Classification", False, lambda: self.show_contour(self.mpm_solver.classification_c)),
+            DrawingOption("Temperature", False, lambda: self.show_contour(self.mpm_solver.temperature_c)),
             DrawingOption("Background", True, lambda: self.canvas.set_background_color(ColorRGB.Background)),
         ]
 
@@ -66,7 +66,7 @@ class GGUI(BaseRenderer):
         load that configuration and reset the solver.
         """
         prev_configuration_id = self.configuration_id
-        with self.gui.sub_window("Configurations", 0.01, 0.01, 0.48, 0.49) as subwindow:
+        with self.gui.sub_window("Configurations", 0.01, 0.01, 0.48, 0.74) as subwindow:
             for i in range(len(self.configurations)):
                 name = self.configurations[i].name
                 if subwindow.checkbox(name, self.configuration_id == i):
@@ -99,19 +99,31 @@ class GGUI(BaseRenderer):
                         _option.is_active = False
                     option.is_active = True
 
+
     def show_parameters(self) -> None:
         """
         Show all parameters in the subwindow, the user can then adjust these values
         with sliders which will update the correspoding value in the solver.
         """
-        # with self.gui.sub_window("Parameters", 0.01, 0.51, 0.98, 0.24) as subwindow:
-        with self.gui.sub_window("Parameters", 0.01, 0.51, 0.98, 0.48) as subwindow:
+        with self.gui.sub_window("Parameters", 0.01, 0.76, 0.98, 0.23) as subwindow:
+        # with self.gui.sub_window("Parameters", 0.01, 0.51, 0.98, 0.48) as subwindow:
             self.mpm_solver.theta_c[None] = subwindow.slider_float("theta_c", self.mpm_solver.theta_c[None], 1e-2, 10e-2)
             self.mpm_solver.theta_s[None] = subwindow.slider_float("theta_s", self.mpm_solver.theta_s[None], 1e-3, 10e-3)
             self.mpm_solver.zeta[None] = subwindow.slider_int("zeta", self.mpm_solver.zeta[None], 3, 20)
             self.mpm_solver.nu[None] = subwindow.slider_float("nu", self.mpm_solver.nu[None], 0.1, 0.4)
             self.mpm_solver.E[None] = subwindow.slider_float("E", self.mpm_solver.E[None], 4.8e4, 5.5e5)
 
+        # TODO: E, nu, lamba and mu are not used right now.
+        E = self.mpm_solver.E[None]
+        nu = self.mpm_solver.nu[None]
+        self.mpm_solver.lambda_0[None] = E * nu / ((1 + nu) * (1 - 2 * nu))
+        self.mpm_solver.mu_0[None] = E / (2 * (1 + nu))
+
+    def show_buttons(self) -> None:
+        """
+        Show a set of buttons in the subwindow, this mainly holds functions to control the simulation.
+        """
+        with self.gui.sub_window("Settings", 0.5, 0.51, 0.49, 0.24) as subwindow:
             if subwindow.button(" Stop recording  " if self.should_write_to_disk else " Start recording "):
                 # This button toggles between saving frames and not saving frames.
                 self.should_write_to_disk = not self.should_write_to_disk
@@ -124,29 +136,6 @@ class GGUI(BaseRenderer):
             if subwindow.button(" Start Simulation"):
                 self.is_paused = False
 
-        # TODO: E, nu, lamba and mu are not used right now.
-        E = self.mpm_solver.E[None]
-        nu = self.mpm_solver.nu[None]
-        self.mpm_solver.lambda_0[None] = E * nu / ((1 + nu) * (1 - 2 * nu))
-        self.mpm_solver.mu_0[None] = E / (2 * (1 + nu))
-
-    # def show_buttons(self) -> None:
-    #     """
-    #     Show a set of buttons in the subwindow, this mainly holds functions to control the simulation.
-    #     """
-    #     with self.gui.sub_window("AAAAAAAAAAA", 0.01, 0.76, 0.48, 0.23) as subwindow:
-    #         if subwindow.button(" Stop recording  " if self.should_write_to_disk else " Start recording "):
-    #             # This button toggles between saving frames and not saving frames.
-    #             self.should_write_to_disk = not self.should_write_to_disk
-    #             if self.should_write_to_disk:
-    #                 self.dump_frames()
-    #             else:
-    #                 self.create_video()
-    #         if subwindow.button(" Reset Particles "):
-    #             self.reset()
-    #         if subwindow.button(" Start Simulation"):
-    #             self.is_paused = False
-
     def show_settings(self) -> None:
         """
         Show settings in a GGUI subwindow, this should be called once per generated frames
@@ -157,10 +146,11 @@ class GGUI(BaseRenderer):
             return  # don't bother
 
         self.is_showing_settings = True
-        self.show_parameters()
-        self.show_configurations()
         self.show_foreground_options()
         self.show_background_options()
+        self.show_configurations()
+        self.show_parameters()
+        self.show_buttons()
 
     def handle_events(self) -> None:
         """
@@ -176,13 +166,13 @@ class GGUI(BaseRenderer):
             elif self.window.event.key in [ti.GUI.ESCAPE, ti.GUI.EXIT]:
                 self.window.running = False  # Stop the simulation
 
-    def _render_particles(self, per_vertex_color) -> None:
+    def show_particles(self, per_vertex_color) -> None:
         """
         Show the particles in a given color.
         """
         self.canvas.circles(per_vertex_color=per_vertex_color, centers=self.mpm_solver.position_p, radius=self.radius)
 
-    def _show_contour(self, scalar_field) -> None:
+    def show_contour(self, scalar_field) -> None:
         """
         Show the contour of a given scalar field.
         """

@@ -147,8 +147,9 @@ class BaseRenderer:
         self.reset()
 
     def reset(self) -> None:
-        """Reset the simulation."""
-
+        """
+        Reset the simulation.
+        """
         # Reset the simulation:
         self.mpm_solver.state_p.fill(State.Hidden)
         self.mpm_solver.position_p.fill([42, 42])
@@ -163,7 +164,9 @@ class BaseRenderer:
             self.add_geometry(geometry)
 
     def dump_frames(self) -> None:
-        """Creates an output directory, a VideoManager in this directory and then dumps frames to this directory."""
+        """
+        Creates an output directory, a VideoManager in this directory and then dumps frames to this directory.
+        """
         date = datetime.now().strftime("%d%m%Y_%H%M%S")
         output_dir = f"{self.parent_dir}/{date}"
         os.makedirs(output_dir)
@@ -174,5 +177,7 @@ class BaseRenderer:
         )
 
     def create_video(self) -> None:
-        """Converts stored frames in the before created output directory to a video."""
+        """
+        Converts stored frames in the before created output directory to a video.
+        """
         self.video_manager.make_video(gif=True, mp4=True)
