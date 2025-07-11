@@ -1,15 +1,19 @@
-from typing import Callable
 from src.configurations import Configuration
 from src.samplers import PoissonDiskSampler
 from src.renderer import BaseRenderer
 from src.constants import ColorRGB
 from src.solvers import MPM_Solver
 
+from typing import Callable
+
 import taichi as ti
 
 
 class DrawingOption:
-    """This holds name, state and a callable for drawing a chosen foreground/background."""
+    """
+    This holds name, state and a callable for drawing a chosen foreground/background.
+    """
+
     def __init__(self, name: str, is_active: bool, call_draw: Callable) -> None:
         self.name = name
         self.is_active = is_active
@@ -27,14 +31,6 @@ class GGUI(BaseRenderer):
         poisson_disk_sampler: PoissonDiskSampler,
         initial_configuration: int = 0,
     ) -> None:
-        """Constructs a  GGUI renderer, this advances the MLS-MPM solver and renders the updated particle positions.
-        ---
-        Parameters:
-            name: string displayed at the top of the window
-            res: tuple holding window width and height
-            solver: the MLS-MPM solver
-            configurations: list of configurations for the solver
-        """
         super().__init__(
             initial_configuration=initial_configuration,
             poisson_disk_sampler=poisson_disk_sampler,
@@ -53,6 +49,7 @@ class GGUI(BaseRenderer):
             # DrawOption("Temperature", False, lambda: self._show_contour(self.mpm_solver.temperature_p)),
             # TODO: map temperature to colormap, draw the colormap
             DrawingOption("Temperature", False, lambda: self._render_particles(self.mpm_solver.color_p)),
+            DrawingOption("Nothing", False, lambda: None),
             DrawingOption("Phase", True, lambda: self._render_particles(self.mpm_solver.color_p)),
         ]
 
@@ -81,29 +78,25 @@ class GGUI(BaseRenderer):
                 self.is_paused = True
 
     def show_foreground_options(self) -> None:
-        """Show the foreground drawing options as checkboxes inside own subwindow."""
-
-        def reset_foreground_options():
-            for option in self.foreground_options:
-                option.is_active = False
-
+        """
+        Show the foreground drawing options as checkboxes inside own subwindow.
+        """
         with self.gui.sub_window("Foreground", 0.5, 0.01, 0.49, 0.24) as subwindow:
             for option in self.foreground_options:
                 if subwindow.checkbox(option.name, option.is_active):
-                    reset_foreground_options()
+                    for _option in self.foreground_options:
+                        _option.is_active = False
                     option.is_active = True
 
     def show_background_options(self) -> None:
-        """Show the background drawing options as checkboxes inside own subwindow."""
-
-        def reset_background_options():
-            for option in self.background_options:
-                option.is_active = False
-
+        """
+        Show the background drawing options as checkboxes inside own subwindow.
+        """
         with self.gui.sub_window("Background", 0.5, 0.26, 0.49, 0.24) as subwindow:
             for option in self.background_options:
                 if subwindow.checkbox(option.name, option.is_active):
-                    reset_background_options()
+                    for _option in self.background_options:
+                        _option.is_active = False
                     option.is_active = True
 
     def show_parameters(self) -> None:
@@ -131,26 +124,28 @@ class GGUI(BaseRenderer):
             if subwindow.button(" Start Simulation"):
                 self.is_paused = False
 
+        # TODO: E, nu, lamba and mu are not used right now.
         E = self.mpm_solver.E[None]
         nu = self.mpm_solver.nu[None]
         self.mpm_solver.lambda_0[None] = E * nu / ((1 + nu) * (1 - 2 * nu))
         self.mpm_solver.mu_0[None] = E / (2 * (1 + nu))
 
-    def show_buttons(self) -> None:
-        """Show a set of buttons in the subwindow, this mainly holds functions to control the simulation."""
-
-        with self.gui.sub_window("AAAAAAAAAAA", 0.01, 0.76, 0.48, 0.23) as subwindow:
-            if subwindow.button(" Stop recording  " if self.should_write_to_disk else " Start recording "):
-                # This button toggles between saving frames and not saving frames.
-                self.should_write_to_disk = not self.should_write_to_disk
-                if self.should_write_to_disk:
-                    self.dump_frames()
-                else:
-                    self.create_video()
-            if subwindow.button(" Reset Particles "):
-                self.reset()
-            if subwindow.button(" Start Simulation"):
-                self.is_paused = False
+    # def show_buttons(self) -> None:
+    #     """
+    #     Show a set of buttons in the subwindow, this mainly holds functions to control the simulation.
+    #     """
+    #     with self.gui.sub_window("AAAAAAAAAAA", 0.01, 0.76, 0.48, 0.23) as subwindow:
+    #         if subwindow.button(" Stop recording  " if self.should_write_to_disk else " Start recording "):
+    #             # This button toggles between saving frames and not saving frames.
+    #             self.should_write_to_disk = not self.should_write_to_disk
+    #             if self.should_write_to_disk:
+    #                 self.dump_frames()
+    #             else:
+    #                 self.create_video()
+    #         if subwindow.button(" Reset Particles "):
+    #             self.reset()
+    #         if subwindow.button(" Start Simulation"):
+    #             self.is_paused = False
 
     def show_settings(self) -> None:
         """
@@ -162,15 +157,15 @@ class GGUI(BaseRenderer):
             return  # don't bother
 
         self.is_showing_settings = True
-        # with self.gui.sub_window("Settings", 0.01, 0.8, 0.98, 0.48) as subwindow:
         self.show_parameters()
         self.show_configurations()
         self.show_foreground_options()
         self.show_background_options()
-        # self.show_buttons()
 
     def handle_events(self) -> None:
-        """Handle key presses arising from window events."""
+        """
+        Handle key presses arising from window events.
+        """
         if self.window.get_event(ti.ui.PRESS):
             if self.window.event.key == "r":
                 self.reset()
@@ -182,33 +177,29 @@ class GGUI(BaseRenderer):
                 self.window.running = False  # Stop the simulation
 
     def _render_particles(self, per_vertex_color) -> None:
-        self.canvas.circles(
-            per_vertex_color=per_vertex_color,
-            centers=self.mpm_solver.position_p,
-            radius=self.radius,
-        )
+        """
+        Show the particles in a given color.
+        """
+        self.canvas.circles(per_vertex_color=per_vertex_color, centers=self.mpm_solver.position_p, radius=self.radius)
 
     def _show_contour(self, scalar_field) -> None:
+        """
+        Show the contour of a given scalar field.
+        """
         self.canvas.contour(scalar_field, cmap_name="magma", normalize=True)
 
-    def _show_vector_field(self, vector_field) -> None:
-        self.canvas.vector_field(vector_field)
-
     def render(self) -> None:
-        """Renders the simulation with the data from the MLS-MPM solver."""
-
-        # Background.
-        for option in self.background_options:
-            if option.is_active:
-                option.call_draw()
-
-        # Foreground.
-        for option in self.foreground_options:
+        """
+        Renders the simulation with the data from the MLS-MPM solver.
+        """
+        # Draw chosen foreground/brackground, NOTE: foreground must be drawn last.
+        for option in self.background_options + self.foreground_options:
             if option.is_active:
                 option.call_draw()
 
         if self.should_write_to_disk and not self.is_paused and not self.is_showing_settings:
             self.video_manager.write_frame(self.window.get_image_buffer_as_numpy())
+
         self.window.show()
 
     def run(self) -> None:
@@ -222,5 +213,5 @@ class GGUI(BaseRenderer):
             self.show_settings()
             if not self.is_paused:
                 self.substep()
-                # iteration += 1
+
             self.render()
