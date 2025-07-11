@@ -7,11 +7,14 @@ from src.solvers import MPM_Solver
 
 import taichi as ti
 
-class DrawOption:
+
+class DrawingOption:
+    """This holds name, state and a callable for drawing a chosen foreground/background."""
     def __init__(self, name: str, is_active: bool, call_draw: Callable) -> None:
         self.name = name
         self.is_active = is_active
         self.call_draw = call_draw
+
 
 @ti.data_oriented
 class GGUI(BaseRenderer):
@@ -39,32 +42,31 @@ class GGUI(BaseRenderer):
             mpm_solver=mpm_solver,
         )
 
-        # Foreground.
-        self.should_show_temperature_p = False
-        self.should_show_phase = True
-
-        # self.show_temperature_p = DrawOption("Temperature", False, self._show_contour())
-        # self.show_phase = DrawOption("Phase", True, self._render_particles)
-        # self.foreground_options = [self.show_phase]
-
-        # Background.
-        self.should_show_classification = False
-        self.should_show_temperature_c = False
-        self.should_show_background = True
-
         # GGUI.
         self.window = ti.ui.Window(name, res, fps_limit=60)
         self.canvas = self.window.get_canvas()
         self.gui = self.window.get_gui()
         self.radius = 0.0015
 
+        # Foreground.
+        self.foreground_options = [
+            # DrawOption("Temperature", False, lambda: self._show_contour(self.mpm_solver.temperature_p)),
+            # TODO: map temperature to colormap, draw the colormap
+            DrawingOption("Temperature", False, lambda: self._render_particles(self.mpm_solver.color_p)),
+            DrawingOption("Phase", True, lambda: self._render_particles(self.mpm_solver.color_p)),
+        ]
+
+        # Background Options.
+        self.background_options = [
+            DrawingOption("Classification", False, lambda: self._show_contour(self.mpm_solver.classification_c)),
+            DrawingOption("Temperature", False, lambda: self._show_contour(self.mpm_solver.temperature_c)),
+            DrawingOption("Background", True, lambda: self.canvas.set_background_color(ColorRGB.Background)),
+        ]
+
     def show_configurations(self) -> None:
         """
-        Show all possible configurations in the subwindow, choosing one will
+        Show all possible configurations inside own subwindow, choosing one will
         load that configuration and reset the solver.
-        ---
-        Parameters:
-            subwindow: GGUI subwindow
         """
         prev_configuration_id = self.configuration_id
         with self.gui.sub_window("Configurations", 0.01, 0.01, 0.48, 0.49) as subwindow:
@@ -79,45 +81,30 @@ class GGUI(BaseRenderer):
                 self.is_paused = True
 
     def show_foreground_options(self) -> None:
-        """
-        TODO: write this!
-        """
+        """Show the foreground drawing options as checkboxes inside own subwindow."""
+
         def reset_foreground_options():
-            self.should_show_temperature_p = False
-            self.should_show_phase = False
+            for option in self.foreground_options:
+                option.is_active = False
 
         with self.gui.sub_window("Foreground", 0.5, 0.01, 0.49, 0.24) as subwindow:
-            if subwindow.checkbox("Phase", self.should_show_phase):
-                reset_foreground_options()
-                self.should_show_phase = True
-
-            if subwindow.checkbox("Temperature", self.should_show_temperature_p):
-                reset_foreground_options()
-                self.should_show_temperature_p = True
-
-        # TODO: show more information on particles
+            for option in self.foreground_options:
+                if subwindow.checkbox(option.name, option.is_active):
+                    reset_foreground_options()
+                    option.is_active = True
 
     def show_background_options(self) -> None:
-        """
-        TODO: write this!
-        """
+        """Show the background drawing options as checkboxes inside own subwindow."""
+
         def reset_background_options():
-            self.should_show_classification = False
-            self.should_show_temperature_c = False
-            self.should_show_background = False
+            for option in self.background_options:
+                option.is_active = False
 
         with self.gui.sub_window("Background", 0.5, 0.26, 0.49, 0.24) as subwindow:
-            if subwindow.checkbox("Background", self.should_show_background):
-                reset_background_options()
-                self.should_show_background = True
-
-            if subwindow.checkbox("Classification", self.should_show_classification):
-                reset_background_options()
-                self.should_show_classification = True
-
-            if subwindow.checkbox("Temperature", self.should_show_temperature_c):
-                reset_background_options()
-                self.should_show_temperature_c = True
+            for option in self.background_options:
+                if subwindow.checkbox(option.name, option.is_active):
+                    reset_background_options()
+                    option.is_active = True
 
     def show_parameters(self) -> None:
         """
@@ -150,12 +137,8 @@ class GGUI(BaseRenderer):
         self.mpm_solver.mu_0[None] = E / (2 * (1 + nu))
 
     def show_buttons(self) -> None:
-        """
-        Show a set of buttons in the subwindow, this mainly holds functions to control the simulation.
-        ---
-        Parameters:
-            subwindow: GGUI subwindow
-        """
+        """Show a set of buttons in the subwindow, this mainly holds functions to control the simulation."""
+
         with self.gui.sub_window("AAAAAAAAAAA", 0.01, 0.76, 0.48, 0.23) as subwindow:
             if subwindow.button(" Stop recording  " if self.should_write_to_disk else " Start recording "):
                 # This button toggles between saving frames and not saving frames.
@@ -177,6 +160,7 @@ class GGUI(BaseRenderer):
         if not self.is_paused:
             self.is_showing_settings = False
             return  # don't bother
+
         self.is_showing_settings = True
         # with self.gui.sub_window("Settings", 0.01, 0.8, 0.98, 0.48) as subwindow:
         self.show_parameters()
@@ -214,20 +198,14 @@ class GGUI(BaseRenderer):
         """Renders the simulation with the data from the MLS-MPM solver."""
 
         # Background.
-        if self.should_show_background:
-            self.canvas.set_background_color(ColorRGB.Background)
-        elif self.should_show_classification:
-            self._show_contour(self.mpm_solver.classification_c)
-        elif self.should_show_temperature_c:
-            self._show_contour(self.mpm_solver.temperature_c)
+        for option in self.background_options:
+            if option.is_active:
+                option.call_draw()
 
         # Foreground.
-        if self.should_show_phase:
-            self._render_particles(per_vertex_color=self.mpm_solver.color_p)
-        elif self.should_show_temperature_p:
-            self._render_particles(per_vertex_color=self.mpm_solver.color_p)
-            # TODO: need to convert temperature to colormap first
-            # self._render_particles(per_vertex_color=self.mpm_solver.temperature_p_p)
+        for option in self.foreground_options:
+            if option.is_active:
+                option.call_draw()
 
         if self.should_write_to_disk and not self.is_paused and not self.is_showing_settings:
             self.video_manager.write_frame(self.window.get_image_buffer_as_numpy())
