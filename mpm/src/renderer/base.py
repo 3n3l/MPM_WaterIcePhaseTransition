@@ -30,7 +30,8 @@ class BaseRenderer:
         # State.
         self.is_paused = True
         self.should_write_to_disk = False
-        self.is_showing_settings = not self.is_paused
+        self.is_showing_settings = not self.is_paused  # wether the settings are showing
+        self.should_show_settings = True  # wether the settings should be shown
 
         # Create a parent directory, more directories will be created inside this
         # directory that contain newly created frames, videos and GIFs.

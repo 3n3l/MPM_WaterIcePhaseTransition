@@ -141,7 +141,7 @@ class GGUI(BaseRenderer):
         Show settings in a GGUI subwindow, this should be called once per generated frames
         and will only show these settings if the simulation is paused at the moment.
         """
-        if not self.is_paused:
+        if not self.is_paused or not self.should_show_settings:
             self.is_showing_settings = False
             return  # don't bother
 
@@ -159,6 +159,8 @@ class GGUI(BaseRenderer):
         if self.window.get_event(ti.ui.PRESS):
             if self.window.event.key == "r":
                 self.reset()
+            elif self.window.event.key in ["h"]:
+                self.should_show_settings = not self.should_show_settings
             elif self.window.event.key in [ti.GUI.BACKSPACE, "s"]:
                 self.should_write_to_disk = not self.should_write_to_disk
             elif self.window.event.key in [ti.GUI.SPACE, "p"]:
