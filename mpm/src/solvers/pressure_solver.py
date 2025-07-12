@@ -54,7 +54,8 @@ class PressureSolver:
 
             if self.is_interior(i, j):
                 # Build the right-hand side of the linear system:
-                # FIXME: this pushes the solids apart :(
+                # NOTE: JE_c goes to 1 for fluid cells, this term will go to zero
+                #       for cells where a lot of incompressible matrial has accumulated.
                 b[idx] = (1 - self.JE_c[i, j]) / (self.dt * self.JE_c[i, j])
 
                 # This uses a modified divergence, where the velocities of faces
@@ -70,7 +71,9 @@ class PressureSolver:
                     b[idx] += self.inv_dx * self.velocity_y[i, j]
 
                 # Build the left-hand side of the linear system:
-                # FIXME: this here breaks everything :(
+                # NOTE: lambda_c goes to infinity for fluid cells, this term will go to zero
+                #       for cells where a lot of incompressible material has accumulated.
+                #       Meaning that we end up with the usual pressure equation for fluids.
                 center += (self.JP_c[i, j] / (self.dt * self.JE_c[i, j])) * self.inv_lambda_c[i, j]
 
                 # We will apply a Neumann boundary condition on the colliding faces,

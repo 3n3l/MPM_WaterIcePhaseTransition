@@ -58,7 +58,7 @@ class State:
 # TODO: find good values for ice???
 # TODO: refactor this, maybe use variable values again???
 # FIXME: E = 1.4e3 -> collapse, E = 1.4e4 -> explosion
-ice_E = 1.4e6
+ice_E = 2.8e5
 ice_nu = 0.2
 
 # import numpy as np
