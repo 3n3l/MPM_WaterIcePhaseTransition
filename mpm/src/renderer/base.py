@@ -30,7 +30,8 @@ class BaseRenderer:
         # State.
         self.is_paused = True
         self.should_write_to_disk = False
-        self.is_showing_settings = not self.is_paused
+        self.is_showing_settings = not self.is_paused  # wether the settings are showing
+        self.should_show_settings = True  # wether the settings should be shown
 
         # Create a parent directory, more directories will be created inside this
         # directory that contain newly created frames, videos and GIFs.
@@ -147,8 +148,9 @@ class BaseRenderer:
         self.reset()
 
     def reset(self) -> None:
-        """Reset the simulation."""
-
+        """
+        Reset the simulation.
+        """
         # Reset the simulation:
         self.mpm_solver.state_p.fill(State.Hidden)
         self.mpm_solver.position_p.fill([42, 42])
@@ -163,7 +165,9 @@ class BaseRenderer:
             self.add_geometry(geometry)
 
     def dump_frames(self) -> None:
-        """Creates an output directory, a VideoManager in this directory and then dumps frames to this directory."""
+        """
+        Creates an output directory, a VideoManager in this directory and then dumps frames to this directory.
+        """
         date = datetime.now().strftime("%d%m%Y_%H%M%S")
         output_dir = f"{self.parent_dir}/{date}"
         os.makedirs(output_dir)
@@ -174,5 +178,7 @@ class BaseRenderer:
         )
 
     def create_video(self) -> None:
-        """Converts stored frames in the before created output directory to a video."""
+        """
+        Converts stored frames in the before created output directory to a video.
+        """
         self.video_manager.make_video(gif=True, mp4=True)
