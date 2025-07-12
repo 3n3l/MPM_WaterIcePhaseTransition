@@ -13,12 +13,14 @@ class Phase:
 
 
 class ColorHEX:
+    HeatMap = [0x323296, 0x5050AB, 0x7575BF, 0xDB7F85, 0xD64F58, 0xC73C45]
     Background = 0x007D79  # teal 60
     Water = 0x78A9FF  # blue 40
     Ice = 0xD0E2FF  # blue 20
 
 
 class ColorRGB:
+    HeatMap = [hex_to_rgb(color) for color in ColorHEX.HeatMap]
     Background = hex_to_rgb(ColorHEX.Background)
     Water = hex_to_rgb(ColorHEX.Water)
     Ice = hex_to_rgb(ColorHEX.Ice)

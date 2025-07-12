@@ -1,7 +1,7 @@
 from src.configurations import Configuration
 from src.samplers import PoissonDiskSampler
+from src.constants import ColorRGB, State
 from src.renderer import BaseRenderer
-from src.constants import ColorRGB
 from src.solvers import MPM_Solver
 
 from typing import Callable
@@ -15,9 +15,9 @@ class DrawingOption:
     """
 
     def __init__(self, name: str, is_active: bool, call_draw: Callable) -> None:
-        self.name = name
         self.is_active = is_active
-        self.call_draw = call_draw
+        self.draw = call_draw
+        self.name = name
 
 
 @ti.data_oriented
@@ -44,16 +44,30 @@ class GGUI(BaseRenderer):
         self.gui = self.window.get_gui()
         self.radius = 0.0015
 
-        # Foreground.
+        # Fields that hold certain colors, must be update in each draw call.
+        self.temperature_colors_p = ti.Vector.field(3, dtype=ti.f32, shape=self.mpm_solver.max_particles)
+        # TODO: also move the phase colors here, then only update the phase colors when drawing the phase?!
+
+        # Construct a vector field as a heat map:
+        self.heat_map_length = len(ColorRGB.HeatMap)
+        self.heat_map = ti.Vector.field(3, dtype=ti.f32, shape=self.heat_map_length)
+        for i, color in enumerate(ColorRGB.HeatMap):
+            self.heat_map[i] = color
+
+        # Values to control the drawing of the temperature:
+        # TODO: these should be moved somewhere else
+        self.should_normalize_temperature = False
+        self.min_temperature = -100  # TODO: this should be temperature boundary of simulation
+        self.max_temperature = 100  # TODO: this should be temperature boundary of simulation
+
+        # Foreground Options:
         self.foreground_options = [
-            # DrawOption("Temperature", False, lambda: self._show_contour(self.mpm_solver.temperature_p)),
-            # TODO: map temperature to colormap, draw the colormap
-            DrawingOption("Temperature", False, lambda: self.show_particles(self.mpm_solver.color_p)),
+            DrawingOption("Temperature", False, self.draw_temperature_p),
             DrawingOption("Nothing", False, lambda: None),
-            DrawingOption("Phase", True, lambda: self.show_particles(self.mpm_solver.color_p)),
+            DrawingOption("Phase", True, self.draw_phase_p),
         ]
 
-        # Background Options.
+        # Background Options:
         self.background_options = [
             DrawingOption("Classification", False, lambda: self.show_contour(self.mpm_solver.classification_c)),
             DrawingOption("Temperature", False, lambda: self.show_contour(self.mpm_solver.temperature_c)),
@@ -99,14 +113,13 @@ class GGUI(BaseRenderer):
                         _option.is_active = False
                     option.is_active = True
 
-
     def show_parameters(self) -> None:
         """
         Show all parameters in the subwindow, the user can then adjust these values
         with sliders which will update the correspoding value in the solver.
         """
         with self.gui.sub_window("Parameters", 0.01, 0.76, 0.98, 0.23) as subwindow:
-        # with self.gui.sub_window("Parameters", 0.01, 0.51, 0.98, 0.48) as subwindow:
+            # with self.gui.sub_window("Parameters", 0.01, 0.51, 0.98, 0.48) as subwindow:
             self.mpm_solver.theta_c[None] = subwindow.slider_float("theta_c", self.mpm_solver.theta_c[None], 1e-2, 10e-2)
             self.mpm_solver.theta_s[None] = subwindow.slider_float("theta_s", self.mpm_solver.theta_s[None], 1e-3, 10e-3)
             self.mpm_solver.zeta[None] = subwindow.slider_int("zeta", self.mpm_solver.zeta[None], 3, 20)
@@ -168,11 +181,55 @@ class GGUI(BaseRenderer):
             elif self.window.event.key in [ti.GUI.ESCAPE, ti.GUI.EXIT]:
                 self.window.running = False  # Stop the simulation
 
-    def show_particles(self, per_vertex_color) -> None:
+    @ti.kernel
+    def update_temperature_p(self):
+        max_temperature = self.max_temperature
+        min_temperature = self.min_temperature
+
+        # Get min, max values for normalization:
+        if self.should_normalize_temperature:
+            max_temperature, min_temperature = -1e32, 1e32
+            for p in self.temperature_colors_p:
+                if self.mpm_solver.state_p[p] == State.Hidden:
+                    continue  # ignore uninitialized particles
+                temperature = self.mpm_solver.temperature_p[p]
+                if temperature > max_temperature:
+                    max_temperature = temperature
+                elif temperature < min_temperature:
+                    min_temperature = temperature
+
+        # Affine combination of the colors based on min, max values and the temperature:
+        max_index, min_index = self.heat_map_length - 1, 0
+        factor = ti.cast(max_index, ti.f32)
+        for p in self.temperature_colors_p:
+            if self.mpm_solver.state_p[p] == State.Hidden:
+                continue  # ignore uninitialized particles
+            t = self.mpm_solver.temperature_p[p]
+            a = (t - min_temperature) / (max_temperature - min_temperature)
+            color1 = self.heat_map[ti.max(min_index, ti.floor(factor * a, ti.i8))]
+            color2 = self.heat_map[ti.min(max_index, ti.ceil(factor * a, ti.i8))]
+            self.temperature_colors_p[p] = ((1 - a) * color1) + (a * color2)
+
+    def draw_temperature_p(self) -> None:
         """
-        Show the particles in a given color.
+        Draw the temperature for each particle.
         """
-        self.canvas.circles(per_vertex_color=per_vertex_color, centers=self.mpm_solver.position_p, radius=self.radius)
+        self.update_temperature_p()
+        self.canvas.circles(
+            per_vertex_color=self.temperature_colors_p,
+            centers=self.mpm_solver.position_p,
+            radius=self.radius,
+        )
+
+    def draw_phase_p(self,) -> None:
+        """
+        Draw the phase for each particle.
+        """
+        self.canvas.circles(
+            per_vertex_color=self.mpm_solver.color_p,
+            centers=self.mpm_solver.position_p,
+            radius=self.radius,
+        )
 
     def show_contour(self, scalar_field) -> None:
         """
@@ -187,7 +244,7 @@ class GGUI(BaseRenderer):
         # Draw chosen foreground/brackground, NOTE: foreground must be drawn last.
         for option in self.background_options + self.foreground_options:
             if option.is_active:
-                option.call_draw()
+                option.draw()
 
         if self.should_write_to_disk and not self.is_paused and not self.is_showing_settings:
             self.video_manager.write_frame(self.window.get_image_buffer_as_numpy())
