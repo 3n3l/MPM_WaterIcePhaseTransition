@@ -140,6 +140,7 @@ class BaseRenderer:
         self.mpm_solver.lambda_0[None] = configuration.lambda_0
         self.mpm_solver.theta_c[None] = configuration.theta_c
         self.mpm_solver.theta_s[None] = configuration.theta_s
+        self.mpm_solver.gravity[None] = configuration.gravity
         self.mpm_solver.zeta[None] = configuration.zeta
         self.mpm_solver.mu_0[None] = configuration.mu_0
         self.mpm_solver.nu[None] = configuration.nu

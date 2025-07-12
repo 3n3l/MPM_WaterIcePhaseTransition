@@ -17,8 +17,6 @@ from src.parsing import should_use_b_i_computation
 
 import taichi as ti
 
-GRAVITY = -9.81
-
 
 @ti.data_oriented
 class MPM_Solver:
@@ -86,13 +84,14 @@ class MPM_Solver:
         self.ambient_temperature = ti.field(dtype=ti.f32, shape=())
 
         # Variables controlled from the GUI, stored in fields to be accessed from compiled kernels.
-        self.lambda_0 = ti.field(dtype=float, shape=())
+        self.lambda_0 = ti.field(dtype=ti.f32, shape=())
         self.theta_c = ti.field(dtype=ti.f32, shape=())
         self.theta_s = ti.field(dtype=ti.f32, shape=())
-        self.mu_0 = ti.field(dtype=float, shape=())
+        self.gravity = ti.field(dtype=ti.f32, shape=())
+        self.mu_0 = ti.field(dtype=ti.f32, shape=())
         self.zeta = ti.field(dtype=ti.i32, shape=())
-        self.nu = ti.field(dtype=float, shape=())
-        self.E = ti.field(dtype=float, shape=())
+        self.nu = ti.field(dtype=ti.f32, shape=())
+        self.E = ti.field(dtype=ti.f32, shape=())
 
         # Poisson solvers for pressure and heat.
         self.pressure_solver = PressureSolver(self)
@@ -326,7 +325,7 @@ class MPM_Solver:
         for i, j in self.velocity_y:
             if (mass_y := self.mass_y[i, j]) > 0:
                 self.velocity_y[i, j] /= mass_y
-                self.velocity_y[i, j] += GRAVITY * self.dt
+                self.velocity_y[i, j] += self.gravity[None] * self.dt
                 collision_top = j >= (self.n_grid - self.boundary_width) and self.velocity_y[i, j] > 0
                 collision_bottom = j <= self.boundary_width and self.velocity_y[i, j] < 0
                 if collision_top or collision_bottom:

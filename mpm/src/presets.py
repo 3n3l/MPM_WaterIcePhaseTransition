@@ -6,6 +6,21 @@ offset = 0.0234375
 
 configuration_list = [
     Configuration(
+        name="Floating Ice Cube [Ice -> Water]",
+        geometries=[
+            Rectangle(
+                phase=Phase.Ice, size=(0.15, 0.15), velocity=(0, 0), lower_left=(0.425, 0.425), temperature=-10.0
+            ),
+        ],
+        E=1.4e5,  # Young's modulus (1.4e5)
+        nu=0.2,  # Poisson's ratio (0.2)
+        zeta=10,  # Hardening coefficient (10)
+        theta_c=2.5e-2,  # Critical compression (2.5e-2)
+        theta_s=7.5e-3,  # Critical stretch (7.5e-3)
+        ambient_temperature=1000.0,
+        gravity=0.0,
+    ),
+    Configuration(
         name="Melting Ice Cube [Ice -> Water]",
         geometries=[
             Rectangle(
@@ -227,12 +242,14 @@ configuration_list = [
             Circle(
                 center=(0.25, 0.5),
                 velocity=(0, -3),
+                temperature=-100.0,
                 phase=Phase.Ice,
                 radius=0.1,
             ),
             Circle(
                 center=(0.75, 0.5),
                 velocity=(0, -3),
+                temperature=100.0,
                 phase=Phase.Water,
                 radius=0.1,
             ),
@@ -242,7 +259,7 @@ configuration_list = [
         zeta=10,  # Hardening coefficient (10)
         theta_c=2.5e-2,  # Critical compression (2.5e-2)
         theta_s=7.5e-3,  # Critical stretch (7.5e-3)
-        ambient_temperature=-20.0,
+        ambient_temperature=0.0,
     ),
 ]
 

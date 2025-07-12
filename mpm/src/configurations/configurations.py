@@ -11,6 +11,7 @@ class Configuration:
         self,
         name: str,
         geometries: list[Geometry],
+        gravity=-9.81,  # Gravity
         nu=0.2,  # Poisson's ratio (0.2)
         E=1.4e5,  # Young's modulus (1.4e5)
         zeta=10,  # Hardening coefficient (10)
@@ -24,6 +25,7 @@ class Configuration:
         self.zeta = zeta
         self.theta_c = theta_c
         self.theta_s = theta_s
+        self.gravity = gravity
         self.mu_0 = self.E / (2 * (1 + self.nu))
         self.lambda_0 = self.E * self.nu / ((1 + self.nu) * (1 - 2 * self.nu))
         self.ambient_temperature = ambient_temperature
