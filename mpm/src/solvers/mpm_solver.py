@@ -28,7 +28,7 @@ class MPM_Solver:
         self.n_cells = self.n_grid * self.n_grid
         self.dx = 1 / self.n_grid
         self.inv_dx = float(self.n_grid)
-        self.dt = 1e-3 / quality
+        self.dt = 1e-4 / quality
         self.vol_0_p = (self.dx * 0.5) ** 2
         self.n_dimensions = 2
 
@@ -209,11 +209,8 @@ class MPM_Solver:
                 D_inv = 3 * self.inv_dx * self.inv_dx  # Cubic interpolation
 
                 # Compute deviatoric Piola-Kirchhoff stress P(F), (JST16, Eqn. 52):
-                F_dev = (self.JE_p[p] ** (-1 / 2)) * self.FE_p[p]
-                # TODO: could just be this for d == 2?:
-                # F_dev = self.FE_p[p] / ti.sqrt(self.JE_p[p])
-                U_dev, _, V_dev = ti.svd(F_dev)  # TODO: can we just correct U?
-                piola_kirchhoff = 2 * mu * (F_dev - U_dev @ V_dev.transpose())
+                # NOTE: further corrections to FE are only needed for fluid particles.
+                piola_kirchhoff = 2 * mu * (self.FE_p[p] - U @ V.transpose())
                 piola_kirchhoff = piola_kirchhoff @ self.FE_p[p].transpose()  # pyright: ignore
 
                 # TODO: these should be the dilational part and is handled by the pressure projection?!

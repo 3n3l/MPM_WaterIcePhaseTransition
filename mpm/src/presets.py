@@ -261,6 +261,28 @@ configuration_list = [
         theta_s=7.5e-3,  # Critical stretch (7.5e-3)
         ambient_temperature=0.0,
     ),
+    Configuration(
+        name="Iceballs hitting each other [Ice]",
+        E=1.4e5,  # Young's modulus (1.4e5)
+        nu=0.2,  # Poisson's ratio (0.2)
+        zeta=5,  # Hardening coefficient (10)
+        theta_c=2.5e-2,  # Critical compression (2.5e-2)
+        theta_s=4.0e-3,  # Critical stretch (7.5e-3)
+        geometries=[
+            Circle(
+                center=(0.15, 0.55),
+                velocity=(5, 0),
+                phase=Phase.Ice,
+                radius=0.07,
+            ),
+            Circle(
+                center=(0.85, 0.5),
+                velocity=(-10, 0),
+                phase=Phase.Ice,
+                radius=0.07,
+            ),
+        ],
+    ),
 ]
 
 # Sort by length in descending order:
