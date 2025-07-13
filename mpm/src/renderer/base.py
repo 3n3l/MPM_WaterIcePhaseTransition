@@ -74,7 +74,7 @@ class BaseRenderer:
             self.mpm_solver.classify_cells()
             self.mpm_solver.compute_volumes()
             self.mpm_solver.pressure_solver.solve()
-            # self.mpm_solver.heat_solver.solve()
+            self.mpm_solver.heat_solver.solve()
             self.mpm_solver.grid_to_particle()
 
     @ti.func
