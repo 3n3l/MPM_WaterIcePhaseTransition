@@ -12,6 +12,7 @@ class HeatSolver:
         self.n_cells = mpm_solver.n_grid * mpm_solver.n_grid
         self.inv_dx = mpm_solver.inv_dx
         self.n_grid = mpm_solver.n_grid
+        self.mpm_solver = mpm_solver
         self.dx = mpm_solver.dx
         self.dt = mpm_solver.dt
 
@@ -67,26 +68,33 @@ class HeatSolver:
                     center -= self.dt * inv_mass_capacity * self.conductivity_x[i, j]
                     if self.is_interior(i - 1, j):
                         A[idx, idx - self.n_grid] += self.dt * inv_mass_capacity * self.conductivity_x[i, j]
+                else:  # Neumann (homogeneous)
+                    T[idx] = self.mpm_solver.ambient_temperature[None]
 
                 if not self.is_empty(i + 1, j):
                     center -= self.dt * inv_mass_capacity * self.conductivity_x[i + 1, j]
                     if self.is_interior(i + 1, j):
                         A[idx, idx + self.n_grid] += self.dt * inv_mass_capacity * self.conductivity_x[i + 1, j]
+                else:  # Neumann (homogeneous)
+                    T[idx] = self.mpm_solver.ambient_temperature[None]
 
                 if not self.is_empty(i, j - 1):
                     center -= self.dt * inv_mass_capacity * self.conductivity_y[i, j]
                     if self.is_interior(i, j - 1):
                         A[idx, idx - 1] += self.dt * inv_mass_capacity * self.conductivity_y[i, j]
+                else:  # Neumann (homogeneous)
+                    T[idx] = self.mpm_solver.ambient_temperature[None]
 
                 if not self.is_empty(i, j + 1):
                     center -= self.dt * inv_mass_capacity * self.conductivity_y[i, j + 1]
                     if self.is_interior(i, j + 1):
                         A[idx, idx + 1] += self.dt * inv_mass_capacity * self.conductivity_y[i, j + 1]
+                else:  # Neumann (homogeneous)
+                    T[idx] = self.mpm_solver.ambient_temperature[None]
 
                 A[idx, idx] += center
-            else:  # Dirichlet boundary condition (not homogeneous)
+            else:  # Dirichlet (not homogeneous)
                 A[idx, idx] += 1.0
-                center = 1.0
 
     @ti.kernel
     def fill_temperature_field(self, T: ti.types.ndarray()):  # pyright: ignore
@@ -110,9 +118,9 @@ class HeatSolver:
             solver.compute(A.build())
             T = solver.solve(b)
             # FIXME: remove this debugging statements or move to test file
-            solver_succeeded, temperature = solver.info(), T.to_numpy()
-            assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
-            assert not np.any(np.isnan(temperature)), "NAN VALUE IN NEW TEMPERATURE ARRAY!"
+            # solver_succeeded, temperature = solver.info(), T.to_numpy()
+            # assert solver_succeeded, "SOLVER DID NOT FIND A SOLUTION!"
+            # assert not np.any(np.isnan(temperature)), "NAN VALUE IN NEW TEMPERATURE ARRAY!"
         else:
             solver = SparseCG(A.build(), b, atol=1e-6, max_iter=500)
             T, _ = solver.solve()
