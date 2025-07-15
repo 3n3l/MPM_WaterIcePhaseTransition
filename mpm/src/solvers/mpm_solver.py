@@ -233,20 +233,21 @@ class MPM_Solver:
             # Lower left corner of the interpolation grid:
             base_x = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([1.0, 1.5])), dtype=ti.i32)
             base_y = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([1.5, 1.0])), dtype=ti.i32)
-            base_c = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([0.5, 0.5])), dtype=ti.i32)
+            base_c = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([1.5, 1.5])), dtype=ti.i32)
 
             # Distance between lower left corner and particle position:
             dist_x = self.position_p[p] * self.inv_dx - ti.cast(base_x, ti.f32) - ti.Vector([0.0, 0.5])
             dist_y = self.position_p[p] * self.inv_dx - ti.cast(base_y, ti.f32) - ti.Vector([0.5, 0.0])
             dist_c = self.position_p[p] * self.inv_dx - ti.cast(base_c, ti.f32)
 
-            # Cubic kernels (JST16 Eqn. 122 with x=fx, abs(fx-1), abs(fx-2), (and abs(fx-3) for faces).
-            # Based on https://www.bilibili.com/opus/662560355423092789
-            # FIXME: the weights might be wrong?
+            # Cubic kernels (JST16 Eqn. 122 with x=fx, x=|fx-1|, x=|fx-2|, x=|fx-3|, where fx is the distance
+            # between base node and particle position). Based on https://www.bilibili.com/opus/662560355423092789
+            # TODO: this could be shortened to x=fx, fx-1, fx-2, fx+1?!
             w_c = [
                 ((-0.166 * dist_c**3) + (dist_c**2) - (2 * dist_c) + 1.33),
                 ((0.5 * ti.abs(dist_c - 1.0) ** 3) - ((dist_c - 1.0) ** 2) + 0.66),
                 ((0.5 * ti.abs(dist_c - 2.0) ** 3) - ((dist_c - 2.0) ** 2) + 0.66),
+                ((-0.166 * ti.abs(dist_c - 3.0) ** 3) + ((dist_c - 3.0) ** 2) - (2 * ti.abs(dist_c - 3.0)) + 1.33),
             ]
             w_x = [
                 ((-0.166 * dist_x**3) + (dist_x**2) - (2 * dist_x) + 1.33),
@@ -261,50 +262,41 @@ class MPM_Solver:
                 ((-0.166 * ti.abs(dist_y - 3.0) ** 3) + ((dist_y - 3.0) ** 2) - (2 * ti.abs(dist_y - 3.0)) + 1.33),
             ]
 
-            for i, j in ti.static(ti.ndrange(3, 3)):
+            for i, j in ti.static(ti.ndrange(4, 4)):
                 offset = ti.Vector([i, j])
                 weight_c = w_c[i][0] * w_c[j][1]
 
-                # Rasterize temperature to cell centers.
+                # Rasterize to cell centers:
+                self.mass_c[base_c + offset] += weight_c * self.mass_p[p]
+
                 temperature = self.mass_p[p] * self.temperature_p[p]
                 self.temperature_c[base_c + offset] += weight_c * temperature
 
-                # Rasterize capacity to cell centers.
                 capacity = self.mass_p[p] * self.capacity_p[p]
                 self.capacity_c[base_c + offset] += weight_c * capacity
 
-                # Rasterize mass to cell centers.
-                self.mass_c[base_c + offset] += weight_c * self.mass_p[p]
-
-                # Rasterize lambda (inverse) to cell centers.
                 inv_lambda = self.mass_p[p] / la
                 self.inv_lambda_c[base_c + offset] += weight_c * inv_lambda
 
-                # TODO: remove this:We use JE^n, JP^n from the last timestep for the transfers, the updated
-                # values will be assigned to the corresponding field at the end of the loop.
                 self.JE_c[base_c + offset] += weight_c * self.mass_p[p] * self.JE_p[p]
                 self.JP_c[base_c + offset] += weight_c * self.mass_p[p] * self.JP_p[p]
                 # TODO: the paper wants to rasterize JE, J and then set JP = J / JE, but this makes no difference
                 # self.J_c[base_c + offset] += weight_c * self.mass_p[p] * self.J_p[p]
 
-            for i, j in ti.static(ti.ndrange(4, 4)):
-                offset = ti.Vector([i, j])
+                # Rasterize to faces:
                 weight_x = w_x[i][0] * w_x[j][1]
                 weight_y = w_y[i][0] * w_y[j][1]
                 dpos_x = ti.cast(offset - dist_x, ti.f32) * self.dx
                 dpos_y = ti.cast(offset - dist_y, ti.f32) * self.dx
 
-                # Rasterize mass to grid faces.
                 self.mass_x[base_x + offset] += weight_x * self.mass_p[p]
                 self.mass_y[base_y + offset] += weight_y * self.mass_p[p]
 
-                # Rasterize velocity to grid faces.
                 velocity_x = self.mass_p[p] * self.velocity_p[p][0] + affine_x @ dpos_x
                 velocity_y = self.mass_p[p] * self.velocity_p[p][1] + affine_y @ dpos_y
                 self.velocity_x[base_x + offset] += weight_x * velocity_x
                 self.velocity_y[base_y + offset] += weight_y * velocity_y
 
-                # Rasterize conductivity to grid faces.
                 conductivity = self.mass_p[p] * self.conductivity_p[p]
                 self.conductivity_x[base_x + offset] += weight_x * conductivity
                 self.conductivity_y[base_y + offset] += weight_y * conductivity
@@ -460,20 +452,20 @@ class MPM_Solver:
             next_temperature = 0.0
             for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
                 offset = ti.Vector([i, j])
-                c_weight = w_c[i][0] * w_c[j][1]
-                x_weight = w_x[i][0] * w_x[j][1]
-                y_weight = w_y[i][0] * w_y[j][1]
-                next_temperature += c_weight * self.temperature_c[base_c + offset]
-                x_velocity = x_weight * self.velocity_x[base_x + offset]
-                y_velocity = y_weight * self.velocity_y[base_y + offset]
-                next_velocity += [x_velocity, y_velocity]
+                weight_c = w_c[i][0] * w_c[j][1]
+                weight_x = w_x[i][0] * w_x[j][1]
+                weight_y = w_y[i][0] * w_y[j][1]
+                next_temperature += weight_c * self.temperature_c[base_c + offset]
+                velocity_x = weight_x * self.velocity_x[base_x + offset]
+                velocity_y = weight_y * self.velocity_y[base_y + offset]
+                next_velocity += [velocity_x, velocity_y]
 
                 if ti.static(should_use_b_i_computation):
                     # NOTE: Computing b_i and setting c_i <- D^{-1} * b_i
                     x_dpos = ti.cast(offset, ti.f32) - dist_x
                     y_dpos = ti.cast(offset, ti.f32) - dist_y
-                    b_x += x_velocity * x_dpos
-                    b_y += y_velocity * y_dpos
+                    b_x += velocity_x * x_dpos
+                    b_y += velocity_y * y_dpos
                 else:
                     # NOTE: Computing c_i directly:
                     grad_x = ti.Vector([g_x[i][0] * w_x[j][1], w_x[i][0] * g_x[j][1]])
