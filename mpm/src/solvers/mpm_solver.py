@@ -13,7 +13,6 @@ from src.constants import (
     Mu,
 )
 from src.solvers import PressureSolver, HeatSolver
-from src.parsing import should_use_b_i_computation
 
 import taichi as ti
 
@@ -499,16 +498,8 @@ class MPM_Solver:
             w_x = [0.5 * (1.5 - dist_x) ** 2, 0.75 - (dist_x - 1) ** 2, 0.5 * (dist_x - 0.5) ** 2]
             w_y = [0.5 * (1.5 - dist_y) ** 2, 0.75 - (dist_y - 1) ** 2, 0.5 * (dist_y - 0.5) ** 2]
 
-            # NOTE: Computing b_i and setting c_i <- D^{-1} * b_i
             b_x = ti.Vector.zero(ti.f32, 2)
             b_y = ti.Vector.zero(ti.f32, 2)
-
-            # NOTE: Computing c_i directly:
-            c_x = ti.Vector.zero(ti.f32, 2)
-            c_y = ti.Vector.zero(ti.f32, 2)
-            g_x = [dist_x - 1.5, (-2) * (dist_x - 1), dist_x - 0.5]
-            g_y = [dist_y - 1.5, (-2) * (dist_y - 1), dist_y - 0.5]
-
             next_velocity = ti.Vector.zero(ti.f32, 2)
             next_temperature = 0.0
             for i, j in ti.static(ti.ndrange(3, 3)):  # Loop over 3x3 grid node neighborhood
@@ -520,24 +511,13 @@ class MPM_Solver:
                 velocity_x = weight_x * self.velocity_x[base_x + offset]
                 velocity_y = weight_y * self.velocity_y[base_y + offset]
                 next_velocity += [velocity_x, velocity_y]
+                x_dpos = ti.cast(offset, ti.f32) - dist_x
+                y_dpos = ti.cast(offset, ti.f32) - dist_y
+                b_x += velocity_x * x_dpos
+                b_y += velocity_y * y_dpos
 
-                if ti.static(should_use_b_i_computation):
-                    # NOTE: Computing b_i and setting c_i <- D^{-1} * b_i
-                    x_dpos = ti.cast(offset, ti.f32) - dist_x
-                    y_dpos = ti.cast(offset, ti.f32) - dist_y
-                    b_x += velocity_x * x_dpos
-                    b_y += velocity_y * y_dpos
-                else:
-                    # NOTE: Computing c_i directly:
-                    grad_x = ti.Vector([g_x[i][0] * w_x[j][1], w_x[i][0] * g_x[j][1]])
-                    grad_y = ti.Vector([g_y[i][0] * w_y[j][1], w_y[i][0] * g_y[j][1]])
-                    c_x += self.velocity_x[base_x + offset] * grad_x
-                    c_y += self.velocity_y[base_y + offset] * grad_y
-
-            if ti.static(should_use_b_i_computation):
-                c_x = 3 * self.inv_dx * b_x  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
-                c_y = 3 * self.inv_dx * b_y  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
-
+            c_x = 3 * self.inv_dx * b_x  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
+            c_y = 3 * self.inv_dx * b_y  # C = B @ (D^(-1)), inv_dx cancelled out by dx in dpos
             self.C_p[p] = ti.Matrix([[c_x[0], c_y[0]], [c_x[1], c_y[1]]])  # pyright: ignore
             self.position_p[p] += self.dt * next_velocity
             self.velocity_p[p] = next_velocity

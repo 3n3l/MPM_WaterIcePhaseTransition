@@ -30,28 +30,31 @@ Keep in mind that the simulation starts paused, pause/unpause is toggled with sp
 <!-- if this is not available you can resort to `python mpm/main.py --gui=GUI` -->
 
 ```bash
--h, --help            show this help message and exit
--g [{GGUI,GUI}], --gui [{GGUI,GUI}]
-                      Use GGUI (depends on Vulkan) or GUI system for the simulation.
--c [CONFIGURATION], --configuration [CONFIGURATION]
-                      0: Melting Ice Cube
-                      1: Freezing Water Cube
-                      2: Waterspout Hits Body of Water
-                      3: Waterspout Hits Ice Cube
-                      4: Waterspout Hits Ice Cubes
-                      5: Stationary Pool of Water
-                      6: Dropping Ice Cubes Into Body of Water
-                      7: Freezing Lake
-                      8: Freezing Waterspout
-                      9: Simple Spout Source
-                      10: Simple Blob Source
-                      11: Spherefall [Water]
-                      12: Spherefall [Ice]
--s [{Direct,Iterative}], --solverType [{Direct,Iterative}]
-                      Choose whether to use a direct or iterative solver for the pressure and heat systems.
--q [QUALITY], --quality [QUALITY]
-                      Choose a quality multiplicator for the simulation (higher is better).
--a [{CPU,GPU,CUDA}], --arch [{CPU,GPU,CUDA}]
-                      Choose the Taichi architecture to run on.
--d, --debug           Turn on debugging.
+options:
+  -h, --help            show this help message and exit
+  -g [{GGUI,GUI}], --gui [{GGUI,GUI}]
+                        Use GGUI (depends on Vulkan) or GUI system for the simulation.
+  -c [CONFIGURATION], --configuration [CONFIGURATION]
+                        Available Configurations:
+                        [0] -> Dropping Ice Cubes Into Body of Water [Water, Ice]
+                        [1] -> Waterspout Hits Body of Water [Water]
+                        [2] -> Iceballs hitting each other [Ice]
+                        [3] -> Floating Ice Cube [Ice -> Water]
+                        [4] -> Floating Ice Ball [Ice -> Water]
+                        [5] -> Melting Ice Cube [Ice -> Water]
+                        [6] -> Double Spherefall [Water, Ice]
+                        [7] -> Freezing Lake [Water -> Ice]
+                        [8] -> Simple Spout Source [Water]
+                        [9] -> Simple Blob Source [Ice]
+                        [10] -> Stationary Pool [Water]
+                        [11] -> Spherefall [Water]
+                        [12] -> Dam Break [Water]
+                        [13] -> Spherefall [Ice]
+  -s [{Direct,Iterative}], --solverType [{Direct,Iterative}]
+                        Choose whether to use a direct or iterative solver for the pressure and heat systems.
+  -q [QUALITY], --quality [QUALITY]
+                        Choose a quality multiplicator for the simulation (higher is better).
+  -a [{CPU,GPU,CUDA}], --arch [{CPU,GPU,CUDA}]
+                        Choose the Taichi architecture to run on.
+  -d, --debug           Turn on debugging.
 ```
