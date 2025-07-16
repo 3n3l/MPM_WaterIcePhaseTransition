@@ -60,6 +60,11 @@ class MPM_Solver:
         self.JP_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
         self.J_c = ti.field(dtype=ti.f32, shape=(self.n_grid, self.n_grid))
 
+        # Count particles per cell:
+        # TODO: removed this if not helping
+        self.n_particles_c = ti.field(dtype=ti.i32, shape=(self.n_grid, self.n_grid))
+        self.p_threshold = 3
+
         # Properties on particles.
         self.conductivity_p = ti.field(dtype=ti.f32, shape=max_particles)
         self.temperature_p = ti.field(dtype=ti.f32, shape=max_particles)
@@ -141,6 +146,7 @@ class MPM_Solver:
             self.mass_y[i, j] = 0
 
         for i, j in self.classification_c:
+            self.n_particles_c[i, j] = 0  # TODO: remove this?
             self.temperature_c[i, j] = 0
             self.inv_lambda_c[i, j] = 0
             self.capacity_c[i, j] = 0
@@ -262,8 +268,42 @@ class MPM_Solver:
                 ((-0.166 * ti.abs(dist_y - 3.0) ** 3) + ((dist_y - 3.0) ** 2) - (2 * ti.abs(dist_y - 3.0)) + 1.33),
             ]
 
+            # # NOTE: alternative with using offset - 1
+            # base_x = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([0.0, 0.5])), dtype=ti.i32)
+            # base_y = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([0.5, 0.0])), dtype=ti.i32)
+            # base_c = ti.floor((self.position_p[p] * self.inv_dx - ti.Vector([0.5, 0.5])), dtype=ti.i32)
+
+            # # Distance between lower left corner and particle position:
+            # dist_x = self.position_p[p] * self.inv_dx - ti.cast(base_x, ti.f32) - ti.Vector([0.0, 0.5])
+            # dist_y = self.position_p[p] * self.inv_dx - ti.cast(base_y, ti.f32) - ti.Vector([0.5, 0.0])
+            # dist_c = self.position_p[p] * self.inv_dx - ti.cast(base_c, ti.f32)
+
+            # w_x = [
+            #     1.0 / 6.0 * (2.0 - (dist_x + 1)) ** 3,
+            #     0.5 * dist_x**3 - dist_x**2 + 2.0 / 3.0,
+            #     0.5 * (-(dist_x - 1.0)) ** 3 - (-(dist_x - 1.0)) ** 2 + 2.0 / 3.0,
+            #     1.0 / 6.0 * (2.0 + (dist_x - 2.0)) ** 3,
+            # ]
+            # w_y = [
+            #     1.0 / 6.0 * (2.0 - (dist_y + 1)) ** 3,
+            #     0.5 * dist_y**3 - dist_y**2 + 2.0 / 3.0,
+            #     0.5 * (-(dist_y - 1.0)) ** 3 - (-(dist_y - 1.0)) ** 2 + 2.0 / 3.0,
+            #     1.0 / 6.0 * (2.0 + (dist_y - 2.0)) ** 3,
+            # ]
+            # w_c = [
+            #     1.0 / 6.0 * (2.0 - (dist_c + 1)) ** 3,
+            #     0.5 * dist_c**3 - dist_c**2 + 2.0 / 3.0,
+            #     0.5 * (-(dist_c - 1.0)) ** 3 - (-(dist_c - 1.0)) ** 2 + 2.0 / 3.0,
+            #     1.0 / 6.0 * (2.0 + (dist_c - 2.0)) ** 3,
+            # ]
+
+            self.n_particles_c[base_c + 2] += 1  # TODO: remove if unneeded
+
             for i, j in ti.static(ti.ndrange(4, 4)):
+                # NOTE: alternative with using offset - 1
+                # offset = ti.Vector([i, j]) - 1
                 offset = ti.Vector([i, j])
+
                 weight_c = w_c[i][0] * w_c[j][1]
 
                 # Rasterize to cell centers:
@@ -332,6 +372,25 @@ class MPM_Solver:
                 # self.JP_c[i, j] = self.J_c[i, j] / self.JE_c[i, j]
 
     @ti.kernel
+    def _classify_cells(self):
+        for i, j in self.classification_c:
+            # Reset all the cells that don't belong to the colliding boundary:
+            if not self.is_colliding(i, j):
+                self.classification_c[i, j] = Classification.Empty
+
+        for p in ti.ndrange(self.n_particles[None]):
+            # We ignore uninitialized particles:
+            if self.state_p[p] == State.Hidden:
+                continue
+
+            # Find the nearest cell and set it to interior:
+            # FIXME: melting here only works with rounding, but this introduces asymmetry
+            # i, j = ti.round(self.position_p[p] * self.inv_dx, dtype=ti.i32)  # pyright: ignore
+            i, j = ti.floor(self.position_p[p] * self.inv_dx, dtype=ti.i32)  # pyright: ignore
+            if not self.is_colliding(i, j):  # pyright: ignore
+                self.classification_c[i, j] = Classification.Interior
+
+    @ti.kernel
     def classify_cells(self):
         # TODO: is it even needed to classify faces?
         # for i, j in self.classification_x:
@@ -390,7 +449,9 @@ class MPM_Solver:
             #     continue
 
             # A cell is interior if the cell and all of its surrounding faces have mass.
-            cell_is_interior = self.mass_c[i, j] > 0
+            # TODO: why is this only working with the particle threshold?
+            # FIXME: this introduces asymmetry
+            cell_is_interior = self.mass_c[i, j] > 0 and self.n_particles_c[i, j] > self.p_threshold
             cell_is_interior &= self.mass_x[i, j] > 0 and self.mass_x[i + 1, j] > 0
             cell_is_interior &= self.mass_y[i, j] > 0 and self.mass_y[i, j + 1] > 0
             if cell_is_interior:

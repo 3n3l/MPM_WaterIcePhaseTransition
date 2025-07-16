@@ -94,35 +94,77 @@ def compute_cubic_weight(x: float) -> float:
 def particle_to_grid(position_p: ti.template(), should_use_cubic: bool):  # pyright: ignore
     if should_use_cubic:
         # Lower left corner of the interpolation grid:
-        base_x = ti.floor((position_p * inv_dx - ti.Vector([1.0, 1.5])), dtype=ti.i32)
-        base_y = ti.floor((position_p * inv_dx - ti.Vector([1.5, 1.0])), dtype=ti.i32)
-        base_c = ti.floor((position_p * inv_dx - ti.Vector([1.5, 1.5])), dtype=ti.i32)
+        # base_x = ti.floor((position_p * inv_dx - ti.Vector([1.0, 1.5])), dtype=ti.i32)
+        # base_y = ti.floor((position_p * inv_dx - ti.Vector([1.5, 1.0])), dtype=ti.i32)
+        # base_c = ti.floor((position_p * inv_dx - ti.Vector([1.5, 1.5])), dtype=ti.i32)
+
+        base_x = ti.floor((position_p * inv_dx - ti.Vector([0.0, 0.5])), dtype=ti.i32)
+        base_y = ti.floor((position_p * inv_dx - ti.Vector([0.5, 0.0])), dtype=ti.i32)
+        base_c = ti.floor((position_p * inv_dx - ti.Vector([0.0, 0.0])), dtype=ti.i32)
 
         # Distance between lower left corner and particle position:
         dist_x = position_p * inv_dx - ti.cast(base_x, ti.f32) - ti.Vector([0.0, 0.5])
         dist_y = position_p * inv_dx - ti.cast(base_y, ti.f32) - ti.Vector([0.5, 0.0])
         dist_c = position_p * inv_dx - ti.cast(base_c, ti.f32)
 
-        # Cubic kernels (JST16 Eqn. 122 with x=fx, x=|fx-1|, x=|fx-2|, x=|fx-3|, where fx is the distance
-        # between base node and particle position). Based on https://www.bilibili.com/opus/662560355423092789
-        # TODO: this could be shortened to x=fx, fx-1, fx-2, fx+1?!
-        w_c = [
-            ((-0.166 * dist_c**3) + (dist_c**2) - (2 * dist_c) + 1.33),
-            ((0.5 * ti.abs(dist_c - 1.0) ** 3) - ((dist_c - 1.0) ** 2) + 0.66),
-            ((0.5 * ti.abs(dist_c - 2.0) ** 3) - ((dist_c - 2.0) ** 2) + 0.66),
-            ((-0.166 * ti.abs(dist_c - 3.0) ** 3) + ((dist_c - 3.0) ** 2) - (2 * ti.abs(dist_c - 3.0)) + 1.33),
-        ]
+        # # Cubic kernels (JST16 Eqn. 122 with x=fx, x=|fx-1|, x=|fx-2|, x=|fx-3|, where fx is the distance
+        # # between base node and particle position). Based on https://www.bilibili.com/opus/662560355423092789
+        # # TODO: this could be shortened to x=fx, fx-1, fx-2, fx+1?!
+        # w_c = [
+        #     ((-0.166 * dist_c**3) + (dist_c**2) - (2 * dist_c) + 1.33),
+        #     ((0.5 * ti.abs(dist_c - 1.0) ** 3) - ((dist_c - 1.0) ** 2) + 0.66),
+        #     ((0.5 * ti.abs(dist_c - 2.0) ** 3) - ((dist_c - 2.0) ** 2) + 0.66),
+        #     ((-0.166 * ti.abs(dist_c - 3.0) ** 3) + ((dist_c - 3.0) ** 2) - (2 * ti.abs(dist_c - 3.0)) + 1.33),
+        # ]
+        # w_x = [
+        #     ((-0.166 * dist_x**3) + (dist_x**2) - (2 * dist_x) + 1.33),
+        #     ((0.5 * ti.abs(dist_x - 1.0) ** 3) - ((dist_x - 1.0) ** 2) + 0.66),
+        #     ((0.5 * ti.abs(dist_x - 2.0) ** 3) - ((dist_x - 2.0) ** 2) + 0.66),
+        #     ((-0.166 * ti.abs(dist_x - 3.0) ** 3) + ((dist_x - 3.0) ** 2) - (2 * ti.abs(dist_x - 3.0)) + 1.33),
+        # ]
+        # w_y = [
+        #     ((-0.166 * dist_y**3) + (dist_y**2) - (2 * dist_y) + 1.33),
+        #     ((0.5 * ti.abs(dist_y - 1.0) ** 3) - ((dist_y - 1.0) ** 2) + 0.66),
+        #     ((0.5 * ti.abs(dist_y - 2.0) ** 3) - ((dist_y - 2.0) ** 2) + 0.66),
+        #     ((-0.166 * ti.abs(dist_y - 3.0) ** 3) + ((dist_y - 3.0) ** 2) - (2 * ti.abs(dist_y - 3.0)) + 1.33),
+        # ]
+
+        # w_x = [
+        #     1.0 / 6.0 * (2.0 - (dist_x + 1)) ** 3,
+        #     0.5 * dist_x**3 - dist_x**2 + 2.0 / 3.0,
+        #     0.5 * (-(dist_x - 1.0)) ** 3 - (-(dist_x - 1.0)) ** 2 + 2.0 / 3.0,
+        #     1.0 / 6.0 * (2.0 + (dist_x - 2.0)) ** 3,
+        # ]
+        # w_y = [
+        #     1.0 / 6.0 * (2.0 - (dist_y + 1)) ** 3,
+        #     0.5 * dist_y**3 - dist_y**2 + 2.0 / 3.0,
+        #     0.5 * (-(dist_y - 1.0)) ** 3 - (-(dist_y - 1.0)) ** 2 + 2.0 / 3.0,
+        #     1.0 / 6.0 * (2.0 + (dist_y - 2.0)) ** 3,
+        # ]
+        # w_c = [
+        #     1.0 / 6.0 * (2.0 - (dist_c + 1)) ** 3,
+        #     0.5 * dist_c**3 - dist_c**2 + 2.0 / 3.0,
+        #     0.5 * (-(dist_c - 1.0)) ** 3 - (-(dist_c - 1.0)) ** 2 + 2.0 / 3.0,
+        #     1.0 / 6.0 * (2.0 + (dist_c - 2.0)) ** 3,
+        # ]
+
         w_x = [
-            ((-0.166 * dist_x**3) + (dist_x**2) - (2 * dist_x) + 1.33),
+            ((-0.166 * (dist_x + 1)**3) + ((dist_x + 1)**2) - (2 * (dist_x + 1)) + 1.33),
+            ((0.5 * dist_x ** 3) - (dist_x**2) + 0.66),
             ((0.5 * ti.abs(dist_x - 1.0) ** 3) - ((dist_x - 1.0) ** 2) + 0.66),
-            ((0.5 * ti.abs(dist_x - 2.0) ** 3) - ((dist_x - 2.0) ** 2) + 0.66),
-            ((-0.166 * ti.abs(dist_x - 3.0) ** 3) + ((dist_x - 3.0) ** 2) - (2 * ti.abs(dist_x - 3.0)) + 1.33),
+            ((-0.166 * ti.abs(dist_x - 2.0) ** 3) + ((dist_x - 2.0) ** 2) - (2 * ti.abs(dist_x - 2.0)) + 1.33),
         ]
         w_y = [
-            ((-0.166 * dist_y**3) + (dist_y**2) - (2 * dist_y) + 1.33),
+            ((-0.166 * (dist_y + 1)**3) + ((dist_y + 1)**2) - (2 * (dist_y + 1)) + 1.33),
+            ((0.5 * dist_y ** 3) - (dist_y**2) + 0.66),
             ((0.5 * ti.abs(dist_y - 1.0) ** 3) - ((dist_y - 1.0) ** 2) + 0.66),
-            ((0.5 * ti.abs(dist_y - 2.0) ** 3) - ((dist_y - 2.0) ** 2) + 0.66),
-            ((-0.166 * ti.abs(dist_y - 3.0) ** 3) + ((dist_y - 3.0) ** 2) - (2 * ti.abs(dist_y - 3.0)) + 1.33),
+            ((-0.166 * ti.abs(dist_y - 2.0) ** 3) + ((dist_y - 2.0) ** 2) - (2 * ti.abs(dist_y - 2.0)) + 1.33),
+        ]
+        w_c = [
+            ((-0.166 * (dist_c + 1)**3) + ((dist_c + 1)**2) - (2 * (dist_c + 1)) + 1.33),
+            ((0.5 * dist_c ** 3) - (dist_c**2) + 0.66),
+            ((0.5 * ti.abs(dist_c - 1.0) ** 3) - ((dist_c - 1.0) ** 2) + 0.66),
+            ((-0.166 * ti.abs(dist_c - 2.0) ** 3) + ((dist_c - 2.0) ** 2) - (2 * ti.abs(dist_c - 2.0)) + 1.33),
         ]
 
         # print(f"base_c = {base_c}")
@@ -147,8 +189,9 @@ def particle_to_grid(position_p: ti.template(), should_use_cubic: bool):  # pyri
         # print(f"dist_y - 2 = {ti.abs(dist_y - 2)}")
         # print(f"dist_y - 3 = {ti.abs(dist_y - 3)}")
 
+        # for i, j in ti.static(ti.ndrange((-1, 3), (-1, 3))):
         for i, j in ti.static(ti.ndrange(4, 4)):
-            offset = ti.Vector([i, j])
+            offset = ti.Vector([i, j]) - 1
             weight_x = w_x[i][0] * w_x[j][1]
             weight_y = w_y[i][0] * w_y[j][1]
             weight_c = w_c[i][0] * w_c[j][1]
@@ -172,24 +215,17 @@ def particle_to_grid(position_p: ti.template(), should_use_cubic: bool):  # pyri
             # mass_y[base_y + offset] += _weight_y * mass_p
             # mass_c[base_c + offset] += _weight_c * mass_p
     else:
-        # NOTE: the quadratic kernels here yield symmetric results
-        x_stagger = ti.Vector([0.5, 1.0])
-        y_stagger = ti.Vector([1.0, 0.5])
-        c_stagger = ti.Vector([0.5, 0.5])
-        x_offset = ti.Vector([0.0, 0.5])
-        y_offset = ti.Vector([0.5, 0.0])
+        base_x = ti.floor((position_p * inv_dx - ti.Vector([1.0, 0.5])), dtype=ti.i32)
+        base_y = ti.floor((position_p * inv_dx - ti.Vector([0.5, 0.5])), dtype=ti.i32)
+        base_c = ti.floor((position_p * inv_dx - ti.Vector([0.5, 0.5])), dtype=ti.i32)
 
-        base_c = ti.floor((position_p * inv_dx - c_stagger), dtype=ti.i32)
-        base_x = ti.floor((position_p * inv_dx - x_stagger), dtype=ti.i32)
-        base_y = ti.floor((position_p * inv_dx - y_stagger), dtype=ti.i32)
-
+        dist_x = position_p * inv_dx - ti.cast(base_x, ti.f32) - ti.Vector([0.0, 0.5])
+        dist_y = position_p * inv_dx - ti.cast(base_y, ti.f32) - ti.Vector([0.5, 0.0])
         dist_c = position_p * inv_dx - ti.cast(base_c, ti.f32)
-        dist_x = position_p * inv_dx - ti.cast(base_x, ti.f32) - x_offset
-        dist_y = position_p * inv_dx - ti.cast(base_y, ti.f32) - y_offset
 
-        w_c = [0.5 * (1.5 - dist_c) ** 2, 0.75 - (dist_c - 1) ** 2, 0.5 * (dist_c - 0.5) ** 2]
         w_x = [0.5 * (1.5 - dist_x) ** 2, 0.75 - (dist_x - 1) ** 2, 0.5 * (dist_x - 0.5) ** 2]
         w_y = [0.5 * (1.5 - dist_y) ** 2, 0.75 - (dist_y - 1) ** 2, 0.5 * (dist_y - 0.5) ** 2]
+        w_c = [0.5 * (1.5 - dist_c) ** 2, 0.75 - (dist_c - 1) ** 2, 0.5 * (dist_c - 0.5) ** 2]
 
         # TODO: should this be unified with an if-statement?
         #       this might be more efficient, but ugly
@@ -308,28 +344,15 @@ def classify_cells():
         # All remaining cells are empty.
         classification_c[i, j] = Classification.Empty
 
-        # The ambient air temperature is recorded for empty cells.
-        # temperature_c[i, j] = ambient_temperature[None]
-
 
 @ti.kernel
 def grid_to_particle(position_p: ti.template()):  # pyright: ignore
-    # Additional stagger for the grid and additional 0.5 to force flooring, used for the weight computations.
-    x_stagger = ti.Vector([0.5, 1.0])
-    y_stagger = ti.Vector([1.0, 0.5])
-    c_stagger = ti.Vector([0.5, 0.5])
+    base_x = ti.floor((position_p * inv_dx - ti.Vector([0.5, 1.0])), dtype=ti.i32)
+    base_y = ti.floor((position_p * inv_dx - ti.Vector([1.0, 0.5])), dtype=ti.i32)
+    base_c = ti.floor((position_p * inv_dx - ti.Vector([0.5, 0.5])), dtype=ti.i32)
 
-    # NOTE: when further offsetting the stagger values, the distance offsets have to be adjusted as well
-    #       otherwise the interpolation yields negative values?!
-    x_offset = ti.Vector([0.0, 0.5])
-    y_offset = ti.Vector([0.5, 0.0])
-
-    base_x = ti.floor((position_p * inv_dx - x_stagger), dtype=ti.i32)
-    base_y = ti.floor((position_p * inv_dx - y_stagger), dtype=ti.i32)
-    base_c = ti.floor((position_p * inv_dx - c_stagger), dtype=ti.i32)
-
-    dist_x = position_p * inv_dx - ti.cast(base_x, ti.f32) - x_offset
-    dist_y = position_p * inv_dx - ti.cast(base_y, ti.f32) - y_offset
+    dist_x = position_p * inv_dx - ti.cast(base_x, ti.f32) - ti.Vector([0.0, 0.5])
+    dist_y = position_p * inv_dx - ti.cast(base_y, ti.f32) - ti.Vector([0.5, 0.0])
     dist_c = position_p * inv_dx - ti.cast(base_c, ti.f32)
 
     # Quadratic kernels (JST16, Eqn. 123, with x=fx, fx-1, fx-2)
@@ -352,7 +375,8 @@ def main():
     # positions = [(0.32, 0.52), (0.52, 0.32), (0.52, 0.52)]
     # positions = [(0.52, 0.52)]
     # positions = [(0.48, 0.48)]
-    positions = [(0.5, 0.5)]
+    # positions = [(0.5, 0.5)]
+    positions = [(0.5, 0.5), (0.52, 0.52), (0.48, 0.48)]
 
     for x, y in positions:
         position_p = ti.Vector([x, y])
@@ -377,15 +401,15 @@ def main():
         # NOTE: ndarrays must also be transposed to represent what they would look like on the screen.
         # TODO: surely both operations can be replaced with one that does both?
         print("~" * 100)
-        print("--------- CUBIC:")
-        print("CELL:")
-        print("\nMASS:")
+        print(f"-> CUBIC @ {position_p}:")
+        # print("CELL:")
+        # print("\nMASS:")
         print_mass(np.flip(mass_c.to_numpy().T, 0))
-        print("\nCLASSIFICATION:")
-        print_classification(np.flip(classification_c.to_numpy().T, 0))
-        print("\nCONTRIBUTION G2P:")
-        print_mass(np.flip(contributed_c.to_numpy().T, 0))
-        print()
+        # print("\nCLASSIFICATION:")
+        # print_classification(np.flip(classification_c.to_numpy().T, 0))
+        # print("\nCONTRIBUTION G2P:")
+        # print_mass(np.flip(contributed_c.to_numpy().T, 0))
+        # print()
 
         # print("~" * 100)
         # print("X-FACE:")
@@ -424,15 +448,15 @@ def main():
         classify_cells()
         grid_to_particle(position_p)
 
-        print("~" * 100)
-        print("--------- QUADRATIC:")
-        print("CELL:")
-        print("\nMASS:")
+        # print("~" * 100)
+        print(f"-> QUADRATIC @ {position_p}:")
+        # print("CELL:")
+        # print("\nMASS:")
         print_mass(np.flip(mass_c.to_numpy().T, 0))
-        print("\nCLASSIFICATION:")
-        print_classification(np.flip(classification_c.to_numpy().T, 0))
-        print("\nCONTRIBUTION G2P:")
-        print_mass(np.flip(contributed_c.to_numpy().T, 0))
+        # print("\nCLASSIFICATION:")
+        # print_classification(np.flip(classification_c.to_numpy().T, 0))
+        # print("\nCONTRIBUTION G2P:")
+        # print_mass(np.flip(contributed_c.to_numpy().T, 0))
         print()
 
 
