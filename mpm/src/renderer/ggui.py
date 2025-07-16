@@ -72,6 +72,7 @@ class GGUI(BaseRenderer):
             DrawingOption("Classification", False, lambda: self.show_contour(self.mpm_solver.classification_c)),
             DrawingOption("Temperature", False, lambda: self.show_contour(self.mpm_solver.temperature_c)),
             DrawingOption("Background", True, lambda: self.canvas.set_background_color(ColorRGB.Background)),
+            DrawingOption("Mass", False, lambda: self.show_contour(self.mpm_solver.mass_c)),
         ]
 
     def show_configurations(self) -> None:
